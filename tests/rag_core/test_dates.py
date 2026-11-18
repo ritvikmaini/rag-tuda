@@ -6,7 +6,15 @@ from datetime import date, datetime
 
 import pytest
 
-from rag_core.domain.dates import asks_for_event, format_date, shown_as_coming, written_dates
+from rag_core.domain.dates import (
+    asks_for_event,
+    format_date,
+    parse_term,
+    shown_as_coming,
+    term_start,
+    terms_written,
+    written_dates,
+)
 
 DAYS = ("Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag")
 FORMAT = "%A, der %d.%m.%Y %H:%M:%S"
@@ -137,3 +145,15 @@ def test_bold_dates_and_several_sentences_are_read_in_order() -> None:
         (date(2026, 7, 2), "Donnerstag, 2. Juli"),
         (date(2026, 8, 4), "04.08.2026"),
     ]
+
+
+def test_semester_notation_parsed() -> None:
+    text = "seit WiSe 2019/20, im SoSe 2027 und ab WS 26/27, nicht WiSe 2019/22, nicht SoSe 2027/28"
+    assert [(t, text[a:b]) for a, b, t in terms_written(text)] == [
+        ((2019, 1), "WiSe 2019/20"),
+        ((2027, 0), "SoSe 2027"),
+        ((2026, 1), "WS 26/27"),
+    ]
+    assert parse_term("Wintersemester 2023") == (2023, 1) and parse_term("Sommersemester 2024") == (2024, 0)
+    assert parse_term("WiSe 2023/2024") == (2023, 1) and parse_term("kein Semester") is None
+    assert term_start((2026, 1)) == date(2026, 10, 1) and term_start((2027, 0)) == date(2027, 4, 1)

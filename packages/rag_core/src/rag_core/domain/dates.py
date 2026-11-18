@@ -1,7 +1,7 @@
 """The prompt's date, formatted "%A, der %d.%m.%Y %H:%M:%S"; the weekday's name comes from the profile, so no process-wide
 locale is needed and the image carries none. The time zone is the container's (TZ=Europe/Berlin).
-Also the dates a text writes out, the questions that ask for the next or a coming event, and the past dates an answer writes as
-if they were still to come."""
+Also the dates a text writes out, the semesters it names ("WiSe 2026/27", "SoSe 2027"), the questions that ask for the next or
+a coming event, and the past dates an answer writes as if they were still to come."""
 
 import re
 from collections.abc import Sequence
@@ -23,6 +23,10 @@ NUMERIC_DATE = re.compile(
 )
 # 23. Juli 2026, 1. Okt. 2025, 9_ Oktober 2026 and 02.Januar 2015 (OCR), Donnerstag, 2. Juli (only after a weekday)
 NAMED_DATE = re.compile(_WEEKDAY + r"(?<![\d.])(\d{1,2})[._]?\s*(" + _MONTH + r")(?:\s+(\d{4}))?(?!\d)", re.IGNORECASE)
+# "WiSe 2026/27", "WiSe 2026", "WS 26/27", "Wintersemester 2023/2024", "SoSe 2027", "SS 27"
+TERM_NOTATION = re.compile(
+    r"\b(wise|ws|wintersemester|sose|ss|sommersemester)\s?(\d{4}|\d{2})(?:\s?/\s?(\d{4}|\d{2}))?(?!\d)", re.IGNORECASE
+)
 # "ab nächster Woche krankgeschrieben": the asker's own time, not an event
 _OWN_TIME = r"(?!\s+(?:woche|monat|jahr|tag)\b)"
 # the next or a coming event; deadlines and validity ("bis wann", "seit wann", "ab wann") are not events
@@ -45,6 +49,37 @@ SENTENCE = re.compile(r"(?:(?<=[^\d\s][.!?])|(?<=\d{4}[.!?]))\s+(?=[A-ZÄÖÜ])|
 def format_date(now: datetime, date_format: str, day_names: Sequence[str]) -> str:
     """now in date_format, %A replaced by the name of now's weekday (day_names: Monday first; no % in a name)."""
     return now.strftime(date_format.replace("%A", day_names[now.weekday()]))
+
+
+Term = tuple[int, int]  # (year, 1 for a winter term and 0 for a summer term): the order of the terms
+
+
+def _term(match: re.Match[str]) -> Term | None:
+    """The term a TERM_NOTATION match writes; None for a winter term whose second year is not the next one and for a summer
+    term with a second year."""
+    year = int(match[2]) + (2000 if len(match[2]) == 2 else 0)
+    winter = match[1].lower() in ("wise", "ws", "wintersemester")
+    if match[3]:
+        after = int(match[3]) % 100
+        if not winter or after != (year + 1) % 100:
+            return None
+    return (year, int(winter)) if year >= 1900 else None
+
+
+def terms_written(text: str) -> list[tuple[int, int, Term]]:
+    """(start, end, term) of each semester the text names, in order."""
+    return [(m.start(), m.end(), t) for m in TERM_NOTATION.finditer(text) if (t := _term(m))]
+
+
+def parse_term(text: str) -> Term | None:
+    """The first semester the text names, else None."""
+    found = terms_written(text)
+    return found[0][2] if found else None
+
+
+def term_start(term: Term) -> date:
+    """The first day of the term: 1 October of a winter term, 1 April of a summer term."""
+    return date(term[0], 10 if term[1] else 4, 1)
 
 
 def asks_for_event(question: str) -> bool:
