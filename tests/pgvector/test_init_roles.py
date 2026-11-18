@@ -212,3 +212,23 @@ def test_the_init_roles_script_runs_again_without_error_and_logs_no_password(clu
     assert control.returncode == 0 and "already exists" in control.stderr
     logs = docker("logs", cluster, check=False)
     assert "yyyy-control" in logs.stdout + logs.stderr  # without the SET the server logs the failing statement
+
+
+@pytest.mark.parametrize("role", ["rag_indexer", "rag_app", "rag_migrator"])
+def test_a_missing_password_file_stops_the_script_and_is_named(cluster, role):
+    path = "/run/secrets/%s_password" % role
+    docker("exec", cluster, "mv", path, path + ".away")
+    try:
+        result = docker(
+            "exec",
+            cluster,
+            *PSQL,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-f",
+            "/docker-entrypoint-initdb.d/01-init-roles.sql",
+            check=False,
+        )
+    finally:
+        docker("exec", cluster, "mv", path + ".away", path)
+    assert result.returncode != 0 and "init-roles: %s is missing" % path in result.stderr

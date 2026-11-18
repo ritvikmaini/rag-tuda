@@ -11,10 +11,19 @@
 \set pw_indexer `cat /run/secrets/rag_indexer_password`
 \set pw_app `cat /run/secrets/rag_app_password`
 \set pw_migrator `cat /run/secrets/rag_migrator_password`
-SELECT length(:'pw_indexer') >= 32 AND length(:'pw_app') >= 32 AND length(:'pw_migrator') >= 32 AS passwords_present \gset
-\if :passwords_present
+SELECT length(:'pw_indexer') >= 32 AS ok_indexer, length(:'pw_app') >= 32 AS ok_app,
+       length(:'pw_migrator') >= 32 AS ok_migrator \gset
+\if :ok_indexer
 \else
-DO $$ BEGIN RAISE EXCEPTION 'init-roles: a role password file under /run/secrets is missing or shorter than 32 characters'; END $$;
+DO $$ BEGIN RAISE EXCEPTION 'init-roles: /run/secrets/rag_indexer_password is missing or shorter than 32 characters'; END $$;
+\endif
+\if :ok_app
+\else
+DO $$ BEGIN RAISE EXCEPTION 'init-roles: /run/secrets/rag_app_password is missing or shorter than 32 characters'; END $$;
+\endif
+\if :ok_migrator
+\else
+DO $$ BEGIN RAISE EXCEPTION 'init-roles: /run/secrets/rag_migrator_password is missing or shorter than 32 characters'; END $$;
 \endif
 SET log_min_error_statement = 'panic';
 SET log_statement = 'none';

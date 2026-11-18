@@ -116,6 +116,12 @@ def test_the_init_script_creates_the_roles_from_the_secret_files_without_superus
     assert sql.index("\\set ON_ERROR_STOP on") < sql.index("CREATE ROLE")
 
 
+def test_the_init_script_names_the_password_file_it_misses():
+    sql = text("deploy/pgvector/init/01-init-roles.sql")
+    for role in ("rag_indexer", "rag_app", "rag_migrator"):
+        assert "RAISE EXCEPTION 'init-roles: /run/secrets/%s_password is missing" % role in sql, role
+
+
 def test_the_init_script_never_logs_a_password_and_can_run_twice():
     sql = text("deploy/pgvector/init/01-init-roles.sql")
     first = sql.index("CREATE ROLE")
