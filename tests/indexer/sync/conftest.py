@@ -61,6 +61,7 @@ class FakeContext:
     paths: Mapping[str, str] = field(default_factory=dict)
     limit: int | None = None
     reuse: bool = False
+    options: Mapping[str, Any] = field(default_factory=dict)
 
 
 @pytest.fixture

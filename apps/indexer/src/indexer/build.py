@@ -85,13 +85,14 @@ def build_corpus(
     reuse_inputs: bool = False,
     *,
     embedding: Any,
+    options: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Collect every source in profile order, extract its PDFs, chunk and gate; the Parents go back under "units". Refuses
     before any download on a corrupt stats file or connector state and on an embedding server that serves another model.
-    Builds with limit are never published and therefore not gated."""
+    Builds with limit are never published and therefore not gated. `options` go to every source's context."""
     started = time.monotonic()
     previous = gates.previous_stats(settings.overlay.paths.state_dir)
-    contexts = {name: context(settings, name, limit, reuse_inputs) for name in sources}
+    contexts = {name: context(settings, name, limit, reuse_inputs, options) for name in sources}
     for name, source in sources.items():
         for state_file in source.state_files:
             contexts[name].state.load(state_file)

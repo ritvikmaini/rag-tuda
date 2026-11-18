@@ -54,6 +54,12 @@ class SourceContext(Protocol):
     def limit(self) -> int | None: ...
     @property
     def reuse(self) -> bool: ...  # frozen inputs: nothing is fetched
+    @property
+    def options(
+        self,
+    ) -> Mapping[str, Any]: ...  # sources ("core" or "full"), resume (bool), contact (str or None, the crawl
+
+    # contact of the user's environment), profile_dir (the folder of the profile files)
 
 
 class DocumentSource(Protocol):

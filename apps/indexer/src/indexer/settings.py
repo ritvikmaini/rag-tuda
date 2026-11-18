@@ -6,6 +6,7 @@ import json
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -35,6 +36,13 @@ class ConnectorsSection(OverlaySection):
     model_config = ConfigDict(extra="allow", frozen=True)
 
 
+class CrawlSection(OverlaySection):
+    """How the crawler introduces itself. The contact is the user's own (RAG__CRAWL__CONTACT, never a file of the repo);
+    without one the user agent says "student research prototype"."""
+
+    contact: str | None = None
+
+
 class PathsSection(OverlaySection):
     """The folders the indexer reads and writes; the defaults are the compose container's."""
 
@@ -55,6 +63,7 @@ class Overlay(OverlaySection):
     model_servers: ModelServersSection = ModelServersSection()
     connectors: ConnectorsSection = ConnectorsSection()
     paths: PathsSection = PathsSection()
+    crawl: CrawlSection = CrawlSection()
 
 
 @dataclass(frozen=True)
@@ -62,6 +71,7 @@ class Settings:
     profile: Profile
     overlay: Overlay
     endpoints: Mapping[str, Endpoint]  # every source of the profile, in its order
+    profile_dir: Path  # the folder of the profile file, where sources.yaml and roles.yaml are
 
     @property
     def collection(self) -> str:
@@ -69,7 +79,9 @@ class Settings:
 
     def config_hash(self) -> str:
         """sha-256 of the effective settings as canonical JSON, secrets left out (index_generations.config_hash)."""
-        overlay = self.overlay.model_dump(mode="json", exclude={**SECRET_KEYS, "connectors": True, "paths": True})  # type: ignore[arg-type]
+        overlay = self.overlay.model_dump(
+            mode="json", exclude={**SECRET_KEYS, "connectors": True, "paths": True, "crawl": True}
+        )  # type: ignore[arg-type]
         data = {
             "profile": self.profile.model_dump(mode="json"),
             "overlay": overlay,
@@ -100,7 +112,7 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | No
             endpoints[name] = Endpoint.model_validate(entries.get(name) or {})
         except ValidationError as exc:
             raise SettingsError(f"connectors.{name}: {exc.errors()[0]['msg']} (overlay)") from None
-    return Settings(profile, overlay, endpoints)
+    return Settings(profile, overlay, endpoints, Path(profile_path).parent)
 
 
 @dataclass(frozen=True)

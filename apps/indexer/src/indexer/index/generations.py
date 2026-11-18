@@ -732,7 +732,7 @@ def compare_lines(report, a, b):
 # --- the CLI ---------------------------------------------------------------------------------------------------
 
 
-USAGE = "usage: indexer build | status | housekeep [--stale] | rollback | compare <a> <b> | publish <n>"
+USAGE = "usage: indexer build [--sources core|full] [--resume] | status | housekeep [--stale] | rollback | compare <a> <b> | publish <n>"
 
 
 def main(argv, *, target, connect_fn, out=print):

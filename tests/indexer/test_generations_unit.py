@@ -102,7 +102,8 @@ def test_the_cli_prints_its_usage_without_touching_the_database():
         assert gen.main(argv, target=target, connect_fn=None, out=lines.append) == 2
         assert lines == [gen.USAGE]
     assert gen.USAGE == (
-        "usage: indexer build | status | housekeep [--stale] | rollback | compare <a> <b> | publish <n>"
+        "usage: indexer build [--sources core|full] [--resume] | status | housekeep [--stale] | rollback | "
+        "compare <a> <b> | publish <n>"
     )
 
 

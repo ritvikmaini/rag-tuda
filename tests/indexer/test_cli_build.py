@@ -56,7 +56,8 @@ def run(db_settings, fakes, monkeypatch):
     monkeypatch.setattr(Lock, "stats", fakes.stats, raising=False)
     published = []
 
-    def build_corpus(settings, sources, limit, reuse_inputs, *, embedding):
+    def build_corpus(settings, sources, limit, reuse_inputs, *, embedding, options=None):
+        call.options.append(options)
         if call.error:
             raise call.error
         return BUILT
@@ -76,10 +77,10 @@ def run(db_settings, fakes, monkeypatch):
     monkeypatch.setattr(build, "build_corpus", build_corpus)
     monkeypatch.setattr(build, "write_and_publish", write_and_publish)
 
-    def call():
+    def call(*flags):
         lines = []
         code = cli.main(
-            ["build"],
+            ["build", *flags],
             settings=db_settings,
             connect_fn=lambda application_name: Conn(),
             embedding=fakes.Embedding(),
@@ -88,7 +89,7 @@ def run(db_settings, fakes, monkeypatch):
         )
         return code, lines
 
-    call.error, call.published, call.stats = None, published, fakes.stats
+    call.error, call.published, call.stats, call.options = None, published, fakes.stats, []
     return call
 
 
@@ -127,6 +128,30 @@ def test_a_database_that_is_down_is_a_failed_line_not_a_traceback(run):
 def test_the_stats_are_written_before_the_lock_is_released(run):
     assert run()[0] == 0
     assert Lock.at_release == [True]
+
+
+def test_the_core_set_and_a_fresh_crawl_are_the_defaults(run):
+    assert run()[0] == 0
+    assert run.options == [{"sources": "core", "resume": False}]
+
+
+@pytest.mark.parametrize(
+    "flags, options",
+    [
+        (("--sources", "full"), {"sources": "full", "resume": False}),
+        (("--sources=full", "--resume"), {"sources": "full", "resume": True}),
+        (("--resume", "--sources", "core"), {"sources": "core", "resume": True}),
+    ],
+)
+def test_the_source_set_and_resume_come_from_the_command_line(run, flags, options):
+    assert run(*flags)[0] == 0
+    assert run.options == [options]
+
+
+@pytest.mark.parametrize("flags", [("--sources",), ("--sources", "all"), ("--sources=",), ("--again",), ("core",)])
+def test_a_bad_build_flag_prints_the_usage_and_builds_nothing(run, flags):
+    assert run(*flags) == (2, [cli.USAGE])
+    assert run.options == [] and run.published == []
 
 
 def test_help_lists_the_commands_without_settings(monkeypatch):

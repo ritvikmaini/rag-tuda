@@ -82,9 +82,14 @@ class Context:
     cache_dir: Path
     limit: int | None
     reuse: bool
+    options: Mapping[str, Any]  # see SourceContext.options
 
 
-def context(settings: Settings, name: str, limit: int | None, reuse: bool) -> Context:
+def context(
+    settings: Settings, name: str, limit: int | None, reuse: bool, options: Mapping[str, Any] | None = None
+) -> Context:
+    """The context of one source. `options` are the build's (`sources`: core or full, `resume`); the crawl contact and the
+    profile's folder come from the settings."""
     endpoint = settings.endpoints[name]
     paths = settings.overlay.paths
     url = endpoint.url or endpoint.manifest_url
@@ -98,6 +103,13 @@ def context(settings: Settings, name: str, limit: int | None, reuse: bool) -> Co
         cache_dir=Path(paths.extracted_dir),
         limit=limit,
         reuse=reuse,
+        options={
+            "sources": "core",
+            "resume": False,
+            **(options or {}),
+            "contact": settings.overlay.crawl.contact or None,
+            "profile_dir": str(settings.profile_dir),
+        },
     )
 
 

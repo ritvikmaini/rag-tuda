@@ -20,8 +20,33 @@ from indexer.sources import discover
 USAGE = gen.USAGE
 
 
+SOURCE_SETS = ("core", "full")
+
+
+def build_options(args: list[str]) -> dict[str, Any] | None:
+    """The options of `indexer build [--sources core|full] [--resume]`; None for anything else. The core set is the default,
+    a fresh crawl the other."""
+    options: dict[str, Any] = {"sources": "core", "resume": False}
+    rest = iter(args)
+    for arg in rest:
+        if arg == "--resume":
+            options["resume"] = True
+        elif arg == "--sources" or arg.startswith("--sources="):
+            chosen = arg.partition("=")[2] if "=" in arg else next(rest, "")
+            if chosen not in SOURCE_SETS:
+                return None
+            options["sources"] = chosen
+        else:
+            return None
+    return options
+
+
 def build_index(
-    wiring: Wiring, embedding: Any, sources: Mapping[str, DocumentSource], out: Callable[[str], None]
+    wiring: Wiring,
+    embedding: Any,
+    sources: Mapping[str, DocumentSource],
+    out: Callable[[str], None],
+    options: Mapping[str, Any] | None = None,
 ) -> int:
     """One build of every source the profile lists: collect, extract, chunk, gate, embed, write, verify, swap the live views
     to the new generation and housekeep, then the stats file (still under the lock) and the counts per source; a held
@@ -30,7 +55,7 @@ def build_index(
     lock = gen.BuildLock(target, "cli build", connect)
     try:
         lock.acquire()
-        built = build.build_corpus(settings, sources, None, False, embedding=embedding)
+        built = build.build_corpus(settings, sources, None, False, embedding=embedding, options=options)
         published = asyncio.run(
             build.write_and_publish(
                 settings,
@@ -147,7 +172,11 @@ def _dispatch(
     out: Callable[[str], None],
 ) -> int:
     wiring = wire(settings, connect_fn)
-    if args == ["build"]:
+    if args[:1] == ["build"]:
+        options = build_options(args[1:])
+        if options is None:
+            out(USAGE)
+            return 2
         try:
             embedding = embedding or EmbeddingClient(
                 wiring.settings.overlay.model_servers.embedding_url,
@@ -157,7 +186,7 @@ def _dispatch(
         except Exception as exc:  # a missing connector or an unreadable setting
             out(f"failed: {type(exc).__name__}: {exc}")
             return 1
-        return build_index(wiring, embedding, sources, out)
+        return build_index(wiring, embedding, sources, out, options)
     if args[:1] == ["publish"]:
         if len(args) != 2 or not args[1].isdigit():
             out(USAGE)
