@@ -41,6 +41,45 @@ def build_options(args: list[str]) -> dict[str, Any] | None:
     return options
 
 
+LISTED = 20  # lines of one kind the summary prints before it counts the rest
+
+
+def _capped(level: str, name: str, lines: list[str], more: str) -> list[str]:
+    shown = [f"{level}: {name}: {line}" for line in lines[:LISTED]]
+    return shown + ([f"{level}: {name}: {len(lines) - LISTED} more {more}"] if len(lines) > LISTED else [])
+
+
+def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
+    """What a source's report names for the build summary: pages whose content could not be found (the site may have
+    changed), documents not indexed for lacking required metadata, hub copies skipped, and URLs not fetched with the reason."""
+    return [
+        *_capped(
+            "warning",
+            name,
+            [f"empty page {p['url']} ({p['problem']})" for p in report.get("empty_pages", ())],
+            "empty pages",
+        ),
+        *_capped(
+            "warning",
+            name,
+            [f"not indexed, lacks {', '.join(d['missing'])}: {d['url']}" for d in report.get("not_indexed", ())],
+            "not indexed",
+        ),
+        *_capped(
+            "note",
+            name,
+            [f"copy skipped, its original is indexed: {url}" for url in report.get("copies", ())],
+            "copies skipped",
+        ),
+        *_capped(
+            "note",
+            name,
+            [f"not fetched ({s['reason']}): {s['url']}" for s in report.get("skipped", ())],
+            "not fetched",
+        ),
+    ]
+
+
 def build_index(
     wiring: Wiring,
     embedding: Any,
@@ -77,6 +116,9 @@ def build_index(
         out(f"busy: {exc}")
         return 1
     except build.BuildRefused as exc:
+        for name, report in exc.reports.items():
+            for line in summary_lines(name, report):
+                out(line)
         out(f"refused: {exc}")
         return 1
     except Exception as exc:
@@ -87,6 +129,8 @@ def build_index(
         lock.release()
     for name, count in documents.items():
         out(f"source {name}: {count} documents")
+        for line in summary_lines(name, built["sources"][name]):
+            out(line)
     counts, embeddings, changes = published["index_counts"], published["embeddings"], published["changes"]
     out(
         f"generation {published['generation']} published (previous {published['previous_generation'] or 'none'}): "

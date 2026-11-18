@@ -60,7 +60,7 @@ def run(db_settings, fakes, monkeypatch):
         call.options.append(options)
         if call.error:
             raise call.error
-        return BUILT
+        return {**BUILT, "sources": call.report} if call.report else BUILT
 
     async def write_and_publish(settings, target, connect, embedding, parents, *, swap, build_minutes, prov):
         published.append({"parents": parents, "swap": swap, "build_minutes": build_minutes})
@@ -89,7 +89,7 @@ def run(db_settings, fakes, monkeypatch):
         )
         return code, lines
 
-    call.error, call.published, call.stats, call.options = None, published, fakes.stats, []
+    call.error, call.published, call.stats, call.options, call.report = None, published, fakes.stats, [], None
     return call
 
 
@@ -128,6 +128,40 @@ def test_a_database_that_is_down_is_a_failed_line_not_a_traceback(run):
 def test_the_stats_are_written_before_the_lock_is_released(run):
     assert run()[0] == 0
     assert Lock.at_release == [True]
+
+
+REPORT = {
+    "empty_pages": [{"url": "https://x.example/hub", "problem": "main content selector '.main' matched nothing"}],
+    "not_indexed": [{"url": "https://x.example/mhb.pdf", "missing": ["programme", "po_version"]}],
+    "copies": ["https://x.example/copy/apb.pdf"],
+    "skipped": [{"url": "https://x.example/down", "reason": "unreachable"}],
+}
+LINES = [
+    "warning: web: empty page https://x.example/hub (main content selector '.main' matched nothing)",
+    "warning: web: not indexed, lacks programme, po_version: https://x.example/mhb.pdf",
+    "note: web: copy skipped, its original is indexed: https://x.example/copy/apb.pdf",
+    "note: web: not fetched (unreachable): https://x.example/down",
+]
+
+
+def test_the_summary_names_the_pages_a_source_reports(run):
+    run.report = {"web": {"documents": 3, **REPORT}}
+    code, lines = run()
+    assert code == 0 and lines[:5] == ["source web: 3 documents", *LINES]
+
+
+def test_a_refused_build_still_names_the_pages_before_the_refusal(run):
+    run.error = build.BuildRefused("corpus shrank to 3 parents (last build 9); swap refused", {"web": REPORT})
+    assert run() == (1, [*LINES, "refused: corpus shrank to 3 parents (last build 9); swap refused"])
+
+
+def test_the_summary_lists_at_most_twenty_pages_of_a_kind(run):
+    many = [{"url": f"https://x.example/{i}", "reason": "http 503"} for i in range(23)]
+    run.report = {"web": {"documents": 1, "skipped": many}}
+    lines = run()[1]
+    assert lines[1:22] == [f"note: web: not fetched (http 503): https://x.example/{i}" for i in range(20)] + [
+        "note: web: 3 more not fetched"
+    ]
 
 
 def test_the_core_set_and_a_fresh_crawl_are_the_defaults(run):

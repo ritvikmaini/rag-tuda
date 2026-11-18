@@ -33,7 +33,13 @@ TIMINGS = ("write_s", "verify_s", "publish_s")  # the timings write_and_publish 
 
 
 class BuildRefused(RuntimeError):
-    """A gate or the embedding check refused the build (`indexer build` prints "refused"; any other error "failed")."""
+    """A gate or the embedding check refused the build (`indexer build` prints "refused"; any other error "failed").
+    `reports` are the sources' reports so far, which the command still prints: they name the pages behind a build
+    that got less than the last one."""
+
+    def __init__(self, message: str, reports: Mapping[str, Mapping[str, Any]] | None = None) -> None:
+        super().__init__(message)
+        self.reports = reports or {}
 
 
 class EmbeddingMismatch(BuildRefused):
@@ -158,7 +164,7 @@ def build_corpus(
     checks["size"] = gates.size_gate(len(parents), previous, ingest.collections[settings.collection].min_build_ratio)
     refused = None if limit else gates.refusal(checks)
     if refused:
-        raise BuildRefused(refused)
+        raise BuildRefused(refused, reports)
     result = {
         "status": "success",
         "reused": reuse_inputs,
