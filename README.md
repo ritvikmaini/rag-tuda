@@ -6,7 +6,7 @@ question's language, and shapes an answer as a table, a checklist, a chart or a 
 Everything runs on your own hardware; no cloud service sees a question.
 
 Today the repository holds the engine, a single-page chat client and one profile, `profiles/example`: ten German federal
-labour laws, indexed by the `example.fixture` connector. A profile holds everything specific to one document collection.
+labour laws, indexed by the `folder` connector. A profile holds everything specific to one document collection.
 
 ## Architecture at a glance
 
@@ -31,7 +31,7 @@ everything is reached on the compose network or with `docker exec`.
 |---|---|
 | `src/rag_tuda/` | the command line (`doctor`, `ask`, `add`) and the `.rag/` state (`python -m rag_tuda.state init` writes the token and the database role passwords); standard library only |
 | `apps/` | `assistant_api` (the backend: FastAPI app and runtime, settings, the LangGraph graph, its own image); `indexer` (settings, connectors found by entry point, generations, the one-shot `indexer build` command and its status, housekeep, rollback and compare commands); `evals` (probe runner, gate, stats, compare, rescore, smoke; its own job image) |
-| `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes; never in a service image), workspace members; `example_profile` (the example connector) |
+| `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes; never in a service image), workspace members |
 | `profiles/` | `example/`: `profile.yaml`, `messages.de.yaml`, `prompts/`, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/` |
 | `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
 | `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
@@ -86,8 +86,7 @@ A profile holds what is specific to one deployment.
 - `gate.yaml` holds the probe sets and thresholds `evals` measures a change against, and the fixed probes of `evals smoke`.
 - `deploy/env/<env>.yaml` holds the technical values of one environment (endpoints, hosts, paths); the assistant's own technical
   values are `RAG__…` entries in the backend's compose environment (`deploy/compose.yaml`).
-- A source is a connector registered under the entry point group `rag_core.connectors` (today `example.fixture` in
-  `packages/example_profile`) and named in the profile with `connector:`.
+- A source is a connector registered under the entry point group `rag_core.connectors` (today `folder`, in the indexer: Markdown,
+  text and PDF files of a directory) and named in the profile with `connector:`.
 - A new profile is a folder beside `profiles/example` under `profiles/`, built into the indexer, assistant and evals images with
-  `--build-arg PROFILE=<folder>` (the other images carry no profile); a connector package is added with
-  `--build-arg CONNECTORS=<package>` (indexer).
+  `--build-arg PROFILE=<folder>` (the other images carry no profile).

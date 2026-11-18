@@ -1,5 +1,5 @@
 """The example profile's leg: the real indexer and assistant images, built with
-PROFILE=example, index the ten law texts of profiles/example/documents through the example.fixture connector into the collection
+PROFILE=example, index the ten law texts of profiles/example/documents through the folder connector into the collection
 `rag` and answer from them. rag_app reads the new collection through the grants of its first publish alone."""
 
 import json
@@ -11,7 +11,7 @@ from psycopg import errors
 from rag_testing import harness, index_view
 
 BASE = "https://www.gesetze-im-internet.de/"
-LEAVE_LAW = BASE + "burlg/"
+LEAVE_LAW = BASE + "burlg"
 LEAVE = "Wie viele Werktage Urlaub stehen Beschäftigten mindestens zu?"
 CITE_ALL = {
     "purpose": "answer",
@@ -40,7 +40,7 @@ def test_every_section_is_the_fixture_connectors_public_and_undated(built: str, 
         "SELECT collection, source, audience, count(DISTINCT document_id), "
         "count(*) FILTER (WHERE year IS NOT NULL OR date IS NOT NULL) FROM rag_sections GROUP BY 1, 2, 3"
     ).fetchall()
-    assert rows == [("rag", "example.fixture", "public", 10, 0)]
+    assert rows == [("rag", "folder", "public", 10, 0)]
     urls = {r[0] for r in db.execute("SELECT DISTINCT url FROM rag_sections").fetchall()}
     assert len(urls) == 10 and all(u.startswith(BASE) for u in urls) and LEAVE_LAW in urls
 

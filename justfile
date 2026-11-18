@@ -96,7 +96,7 @@ images:
     docker build -f apps/evals/Dockerfile --build-arg PROFILE=example -t rag-tuda-evals${RAG_CI_TAG:-:dev} .
     docker build -f deploy/fakes/Dockerfile -t rag-ci-fakes$RAG_CI_TAG .
     docker build -f apps/assistant_api/Dockerfile --build-arg PROFILE=example -t rag-ci-backend-example$RAG_CI_TAG .
-    docker build -f apps/indexer/Dockerfile --build-arg PROFILE=example --build-arg CONNECTORS=example-profile -t rag-ci-indexer-example$RAG_CI_TAG .
+    docker build -f apps/indexer/Dockerfile --build-arg PROFILE=example -t rag-ci-indexer-example$RAG_CI_TAG .
 
 # the database tests (RUN_DOCKER_TESTS=1): the pgvector service of deploy/compose.ci.yaml under the CI project, with the secrets
 # `state init` writes, the migrations run as in the harness, then the tests that need a migrated database, then teardown. Tests that

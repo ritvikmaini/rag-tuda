@@ -381,7 +381,7 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
             },
             (Child("Rathaus: Montag"), Child("Rathaus: Montag"), Child("Rathaus: Dienstag")),
             "Rathaus: ",
-            "example.fixture",
+            "folder",
         ),
         Parent(
             "§ 1 Geltung",
@@ -441,7 +441,7 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
         "b",
     ]
     typed = app.execute("SELECT source, audience, year, page, header FROM c29_sections").fetchall()
-    assert sorted(typed) == sorted([("example.fixture", "public", None, None, "Rathaus: "),
+    assert sorted(typed) == sorted([("folder", "public", None, None, "Rathaus: "),
                                     ("example.pdfs", "internal", 2024, 2, "DA · § 1: "),
                                     ("example.maps", "public", None, None, None)])  # fmt: skip
     assert (

@@ -19,7 +19,7 @@ build-backend = "uv_build"
 module-name = "rag_tuda"
 
 [tool.uv.workspace]
-members = ["packages/rag_core", "packages/rag_testing", "packages/example_profile", "apps/evals", "apps/indexer", "apps/assistant_api"]
+members = ["packages/rag_core", "packages/rag_testing", "apps/evals", "apps/indexer", "apps/assistant_api"]
 # the GPU model servers are their own uv projects with their own locks
 exclude = ["model_servers/*"]
 

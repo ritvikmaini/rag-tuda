@@ -1,5 +1,5 @@
 # The example profile: ten German federal laws (amtliche Werke, § 5 UrhG) in the
-# collection `rag`, read by the example.fixture connector. The harness's example leg bakes it into the indexer and assistant
+# collection `rag`, read by the folder connector. The harness's example leg bakes it into the indexer and assistant
 # images (PROFILE=example).
 collections:
   - {name: rag, audiences: [public]}
@@ -29,7 +29,7 @@ ingest:
   scope: {groups: {}, areas: [], compilations: []}
   # in build order; a source not listed is not built
   sources:
-    gesetze: {connector: example.fixture, audience: public, min_documents: 10,
+    gesetze: {connector: folder, audience: public, min_documents: 10, doc_type: Gesetz,
               base_url: "https://www.gesetze-im-internet.de/"}
 
 # --- the assistant: its effective values (tests/assistant_api/test_settings.py) -----------------------------------------

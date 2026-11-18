@@ -18,7 +18,6 @@ supported-markers = [
 members = [
     "assistant-api",
     "evals",
-    "example-profile",
     "indexer",
     "rag-core",
     "rag-testing",
@@ -717,17 +716,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "rag-core", extras = ["assistant"], editable = "packages/rag_core" },
 ]
-
-[[package]]
-name = "example-profile"
-version = "0.1.0"
-source = { editable = "packages/example_profile" }
-dependencies = [
-    { name = "rag-core" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "rag-core", editable = "packages/rag_core" }]
 
 [[package]]
 name = "faker"

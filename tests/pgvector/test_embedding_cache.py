@@ -55,14 +55,14 @@ def items(extra=""):
             web,
             (Child("Rathaus: Montag"), Child("Rathaus: Dienstag" + extra)),
             "Rathaus: ",
-            "example.fixture",
+            "folder",
         ),
         Parent(
             "§ 1 Geltung",
             pdf,
             (Child("DA · § 1: Geltung"), Child("Rathaus: Montag")),
             "DA · § 1: ",
-            "example.fixture",
+            "folder",
         ),
     ]
 

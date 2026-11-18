@@ -12,10 +12,6 @@ COPY pyproject.toml uv.lock ./
 COPY packages/ packages/
 COPY apps/ apps/
 RUN uv sync --frozen --no-default-groups --no-editable --package indexer
-# The profile's connector package (deploy/compose.ci.example.yaml passes example-profile); the heavy layer above
-# is shared by builds of different packages.
-ARG CONNECTORS=example-profile
-RUN uv sync --frozen --no-default-groups --no-editable --package indexer --package ${CONNECTORS}
 
 FROM ${PYTHON_IMAGE}
 # the compilers and -dev packages may not be needed by the runtime (unverified)

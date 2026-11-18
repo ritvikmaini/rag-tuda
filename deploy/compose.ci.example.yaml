@@ -1,5 +1,5 @@
 # The example profile's leg: merged over compose.ci.yaml by `just harness example`.
-# Only the baked profile, the indexer's connector package and its inputs differ; every service, port, secret and fake is
+# Only the baked profile and the indexer's inputs differ; every service, port, secret and fake is
 # the base file's.
 services:
   backend:
@@ -8,7 +8,7 @@ services:
   migrate:   # the migration runs the example backend image
     image: rag-ci-backend-example${RAG_CI_TAG:-}
   indexer:
-    build: {args: {PROFILE: example, CONNECTORS: example-profile}}
+    build: {args: {PROFILE: example}}
     image: rag-ci-indexer-example${RAG_CI_TAG:-}
     volumes:
       - ./env/ci-example.yaml:/app/overlay.yaml:ro

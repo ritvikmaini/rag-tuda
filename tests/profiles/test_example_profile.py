@@ -34,11 +34,11 @@ def test_the_profile_loads_and_names_one_public_collection_and_one_source():
     ((name, source),) = profile.ingest.sources.items()
     assert (name, source.connector, source.audience, source.min_documents) == (
         "gesetze",
-        "example.fixture",
+        "folder",
         "public",
         10,
     )
-    assert source.model_extra == {"base_url": "https://www.gesetze-im-internet.de/"}
+    assert source.model_extra == {"base_url": "https://www.gesetze-im-internet.de/", "doc_type": "Gesetz"}
 
 
 def test_the_messages_load_and_label_the_law_texts():

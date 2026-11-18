@@ -13,7 +13,6 @@ WORKDIR /src
 COPY pyproject.toml uv.lock ./
 COPY packages/rag_core/pyproject.toml packages/rag_core/
 COPY packages/rag_testing/pyproject.toml packages/rag_testing/
-COPY packages/example_profile/pyproject.toml packages/example_profile/
 COPY apps/evals/pyproject.toml apps/evals/
 COPY apps/indexer/pyproject.toml apps/indexer/
 COPY apps/assistant_api/pyproject.toml apps/assistant_api/

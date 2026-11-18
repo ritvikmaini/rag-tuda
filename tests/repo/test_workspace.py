@@ -79,7 +79,6 @@ def test_the_root_is_the_dependency_free_cli_project_and_the_workspace_root():
     members = [
         "packages/rag_core",
         "packages/rag_testing",
-        "packages/example_profile",
         "apps/evals",
         "apps/indexer",
         "apps/assistant_api",
@@ -115,7 +114,6 @@ def test_every_package_the_box_images_install_is_pinned_at_its_installed_version
 def test_no_group_or_testing_package_reaches_a_member():
     for member in (
         "packages/rag_core",
-        "packages/example_profile",
         "apps/evals",
         "apps/indexer",
         "apps/assistant_api",
