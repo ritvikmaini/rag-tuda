@@ -22,7 +22,7 @@ from rag_core.domain.query_analysis import analysis_schema
 from rag_core.domain.resilience import dispose_engines
 from rag_core.services.prompts import PromptService
 from rag_core.services.retrieval import RetrievalService
-from rag_core.settings.card import Endpoint
+from rag_core.settings.card import REMOTE_PROVIDERS, Endpoint
 
 from assistant_api.graph.build import build_graph
 from assistant_api.graph.state import GraphDeps
@@ -282,15 +282,23 @@ async def _report(url: str, expected: tuple[str, str] | None) -> str:
 
 
 async def model_reports(rt: Runtime) -> dict[str, str]:
-    """The model servers' /info and vLLM's /v1/models, reported, never gated on."""
-    servers, retrieval = rt.settings.overlay.model_servers, rt.settings.profile.retrieval
-    return {
+    """The model servers' /info and the local LLM server's /v1/models, reported, never gated on. A remote endpoint (Groq)
+    is never called from a readiness check: a remote answer is reported as not probed and the local analysis endpoint
+    is probed in its place."""
+    servers, retrieval, card = rt.settings.overlay.model_servers, rt.settings.profile.retrieval, rt.settings.card
+    reports = {
         "embedding": await _report(
             f"{servers.embedding_url}/info", (retrieval.embedding.model, retrieval.embedding.revision)
         ),
         "reranker": await _report(f"{servers.reranker_url}/info", (retrieval.rerank.model, retrieval.rerank.revision)),
-        "llm": await _report(f"{rt.settings.card.answer.url}/models", None),
     }
+    if card.answer.provider not in REMOTE_PROVIDERS:
+        reports["llm"] = await _report(f"{card.answer.url}/models", None)
+    else:
+        reports["llm"] = "remote, not probed"
+        if card.analysis_endpoint.provider not in REMOTE_PROVIDERS:
+            reports["analysis_llm"] = await _report(f"{card.analysis_endpoint.url}/models", None)
+    return reports
 
 
 async def readiness(rt: Any) -> dict[str, Any]:

@@ -440,3 +440,21 @@ def test_a_quiet_reload_attempt_logs_nothing_when_it_fails(monkeypatch, caplog) 
         assert caplog.records == []
         assert asyncio.run(rt_module.try_reload(runtime())) is False
     assert [r.levelno for r in caplog.records] == [logging.WARNING]
+
+
+def test_readiness_never_calls_a_remote_endpoint(tmp_path, monkeypatch) -> None:
+    probed = []
+
+    async def report(url, expected):
+        probed.append(url)
+        return "ok"
+
+    monkeypatch.setattr(rt_module, "_report", report)
+    _, hosted = runtime_of("l-groq-gpt-oss-120b", tmp_path, monkeypatch)
+    reports = asyncio.run(rt_module.model_reports(hosted))
+    assert reports["llm"] == "remote, not probed" and reports["analysis_llm"] == "ok"
+    assert not any("groq" in url for url in probed) and "http://127.0.0.1:11434/v1/models" in probed
+    probed.clear()
+    _, local = runtime_of("s-qwen3-4b-instruct-2507", tmp_path, monkeypatch)
+    assert set(asyncio.run(rt_module.model_reports(local))) == {"embedding", "reranker", "llm"}
+    assert "http://127.0.0.1:11434/v1/models" in probed
