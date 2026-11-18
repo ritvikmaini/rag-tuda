@@ -49,6 +49,12 @@ def test_hash_unchanged_skips_download(make_ctx, pdf_dir):
     assert registry(ctx)[url(2)] == "h2-new"
 
 
+def test_the_pdf_folder_defaults_to_the_contexts_paths(make_ctx, pdf_dir):
+    ctx = make_ctx(served(1), paths={"pdf_dir": str(pdf_dir)})
+    sync_pdfs([entry(1)], ctx)
+    assert local_path(url(1), pdf_dir).read_bytes() == body(1)
+
+
 def test_an_entry_without_a_hash_is_fetched_every_run_and_registered_by_its_file_hash(make_ctx, pdf_dir):
     ctx = make_ctx(served(1))
     plain = PdfEntry(url(1), "Doc 1", None, {})

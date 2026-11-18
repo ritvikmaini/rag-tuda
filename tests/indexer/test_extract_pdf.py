@@ -36,7 +36,10 @@ def test_the_ocr_budget_and_the_page_limit_come_from_the_profile(tmp_path, monke
     monkeypatch.setattr(pdf, "_assess_cached_entry", lambda *args: budgets.append(args[3]) or 0)
     (tmp_path / "cached.json").write_text("{}", encoding="utf-8")
     pdf.extract_pdfs(
-        inventory=[_entry(tmp_path, "cached")], extraction=_extraction(ocr_pages_per_run=7), extracted_dir=str(tmp_path)
+        inventory=[_entry(tmp_path, "cached")],
+        extraction=_extraction(ocr_pages_per_run=7),
+        extracted_dir=str(tmp_path),
+        skipped_log=str(tmp_path / "skipped.json"),
     )
     assert budgets == [7]
 
@@ -46,9 +49,11 @@ def test_the_ocr_budget_and_the_page_limit_come_from_the_profile(tmp_path, monke
     for _ in range(3):
         document.new_page(200, 200)  # no text: the fast reader finds nothing and the Docling OCR is tried
     document.save(str(tmp_path / "big.pdf"))
-    monkeypatch.setattr(pdf, "SKIPPED_PDFS_LOG", str(tmp_path / "skipped.json"))
     result = pdf.extract_pdfs(
-        inventory=[_entry(tmp_path, "big")], extraction=_extraction(max_ocr_pages=2), extracted_dir=str(tmp_path)
+        inventory=[_entry(tmp_path, "big")],
+        extraction=_extraction(max_ocr_pages=2),
+        extracted_dir=str(tmp_path),
+        skipped_log=str(tmp_path / "skipped.json"),
     )
     assert result["skipped_page_limit"] == 1 and result["failed"] == 0
     assert json.loads((tmp_path / "skipped.json").read_text(encoding="utf-8"))["max_ocr_pages"] == 2
@@ -60,7 +65,10 @@ def test_a_cached_entry_is_counted_and_not_extracted_again(tmp_path, monkeypatch
     monkeypatch.setattr(pdf, "_extract_text_with_pypdfium2", lambda path: (_ for _ in ()).throw(AssertionError(path)))
     (tmp_path / "done.json").write_text("{}", encoding="utf-8")
     result = pdf.extract_pdfs(
-        inventory=[_entry(tmp_path, "done")], extraction=_extraction(), extracted_dir=str(tmp_path)
+        inventory=[_entry(tmp_path, "done")],
+        extraction=_extraction(),
+        extracted_dir=str(tmp_path),
+        skipped_log=str(tmp_path / "skipped.json"),
     )
     assert (result["cached"], result["processed"]) == (1, 0)
     assert result["files"][0]["status"] == "cached"

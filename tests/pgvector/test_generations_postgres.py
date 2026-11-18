@@ -187,19 +187,18 @@ def test_cli_publish_puts_a_staging_generation_live_and_keeps_the_other_staging(
     """Two staging builds, then publish one; nothing is housekept."""
     from indexer import cli, gates
 
-    monkeypatch.setattr(gates, "STATS_FILE", str(tmp_path / "stats.json"))
     conn, target = connect(), gen.Target("c11")
     first = build_v2(conn, target)
     a, b = build_v2(conn, target, publish=False), build_v2(conn, target, ("x", "y"), publish=False)
     lines = []
-    assert cli.publish(target, b, connect, lines.append) == 0
+    assert cli.publish(target, b, connect, lines.append, str(tmp_path)) == 0
     assert statuses(conn, target) == {first: "previous", a: "staging", b: "live"}
     assert gen.typed_view_tables(conn, target)["c11_chunks"] == target.tables(b)["children"]
     assert gen.relkind(conn, target.tables(a)["children"]) == "r"
     assert lines[0].startswith(f"published generation {b} (previous {first}) in ")
     assert len(lines) == 1
-    assert json.loads((tmp_path / "stats.json").read_text())["parents"] == 2
-    assert cli.publish(target, b, connect, lines.append) == 1
+    assert json.loads((tmp_path / gates.STATS_NAME).read_text())["parents"] == 2
+    assert cli.publish(target, b, connect, lines.append, str(tmp_path)) == 1
     assert lines[-1] == f"refused: generation {b} is live, not staging"
 
 

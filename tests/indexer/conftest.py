@@ -8,7 +8,7 @@ import pytest
 import yaml
 from rag_core.domain.sources import SourceResult
 
-from indexer import build
+from indexer import gates
 from indexer.settings import load_settings
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -33,12 +33,27 @@ def profile(tmp_path):
 
 
 @pytest.fixture
-def settings(tmp_path, profile):
-    return load_settings({"RAG_PROFILE": profile, "RAG_OVERLAY": CI}, secrets_dir=str(tmp_path / "secrets"))
+def moved(tmp_path):
+    """Every folder of the settings under tmp_path, as {key: path}."""
+    names = {
+        "crawl_dir": "crawl",
+        "manifest_dir": "state/documents",
+        "state_dir": "state",
+        "extracted_dir": "extracted",
+        "pdf_dir": "pdfs",
+        "skipped_pdfs_log": "skipped.json",
+    }
+    return {key: str(tmp_path / name) for key, name in names.items()}
 
 
 @pytest.fixture
-def db_settings(tmp_path, profile):
+def settings(tmp_path, profile, moved):
+    environ = {"RAG_PROFILE": profile, "RAG_OVERLAY": CI} | {f"RAG__PATHS__{k.upper()}": v for k, v in moved.items()}
+    return load_settings(environ, secrets_dir=str(tmp_path / "secrets"))
+
+
+@pytest.fixture
+def db_settings(tmp_path, profile, moved):
     """The same settings with the database secrets set."""
     environ = {
         "RAG_PROFILE": profile,
@@ -46,7 +61,7 @@ def db_settings(tmp_path, profile):
         "RAG__DATABASE__NAME": "vector_db",
         "RAG__DATABASE__USER": "rag_indexer",
         "RAG__DATABASE__PASSWORD": "pw",
-    }
+    } | {f"RAG__PATHS__{k.upper()}": v for k, v in moved.items()}
     return load_settings(environ, secrets_dir=str(tmp_path / "secrets"))
 
 
@@ -74,8 +89,8 @@ class FakeEmbedding:
 
 
 @pytest.fixture
-def fakes(tmp_path, monkeypatch):
-    """The build's stats file moved to tmp_path: absent until a test writes it."""
-    stats = tmp_path / "corpus_build_stats.json"
-    monkeypatch.setattr(build.gates, "STATS_FILE", str(stats))
+def fakes(tmp_path):
+    """The build's stats file is in the settings' state folder: absent until a test writes it."""
+    stats = tmp_path / "state" / gates.STATS_NAME
+    stats.parent.mkdir()
     return SimpleNamespace(Source=FakeSource, Embedding=FakeEmbedding, stats=stats)

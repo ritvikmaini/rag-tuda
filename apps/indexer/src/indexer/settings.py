@@ -1,5 +1,5 @@
 """The indexer's settings: the profile baked into the image (RAG_PROFILE), the overlay mounted read-only (RAG_OVERLAY),
-RAG__<SECTION>__<KEY> variables and secret files."""
+RAG__<SECTION>__<KEY> variables and secret files (in RAG_SECRETS_DIR, default /run/secrets)."""
 
 import hashlib
 import json
@@ -36,8 +36,14 @@ class ConnectorsSection(OverlaySection):
 
 
 class PathsSection(OverlaySection):
+    """The folders the indexer reads and writes; the defaults are the compose container's."""
+
     crawl_dir: str = "/app/data/crawl"
     manifest_dir: str = "/app/data/vector_database_contents/documents"
+    state_dir: str = "/app/data/vector_database_contents"  # the registry, the list state and the build stats
+    extracted_dir: str = "/app/data/extracted"  # the PDF extraction cache
+    pdf_dir: str = "/app/data/pdfs"
+    skipped_pdfs_log: str = "/app/data/skipped_pdfs_page_limit.json"
 
 
 class Overlay(OverlaySection):
@@ -63,7 +69,7 @@ class Settings:
 
     def config_hash(self) -> str:
         """sha-256 of the effective settings as canonical JSON, secrets left out (index_generations.config_hash)."""
-        overlay = self.overlay.model_dump(mode="json", exclude={**SECRET_KEYS, "connectors": True})  # type: ignore[arg-type]
+        overlay = self.overlay.model_dump(mode="json", exclude={**SECRET_KEYS, "connectors": True, "paths": True})  # type: ignore[arg-type]
         data = {
             "profile": self.profile.model_dump(mode="json"),
             "overlay": overlay,
@@ -72,7 +78,7 @@ class Settings:
         return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str = "/run/secrets") -> Settings:
+def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | None = None) -> Settings:
     profile_path = environ.get("RAG_PROFILE")
     if not profile_path:
         raise SettingsError("RAG_PROFILE: not set (the image sets it to its baked profile)")

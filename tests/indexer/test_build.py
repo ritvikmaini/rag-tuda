@@ -10,12 +10,14 @@ from rag_core.domain.sources import PageItem, PdfItem
 from indexer import build, gates
 
 
-def test_a_failing_stats_write_does_not_fail_the_swapped_build(tmp_path, monkeypatch):
+def test_a_failing_stats_write_does_not_fail_the_swapped_build(tmp_path):
     # After a successful swap, a stats write error must not turn the reply into a 500.
-    monkeypatch.setattr(gates, "STATS_FILE", str(tmp_path / "missing-dir" / "corpus_build_stats.json"))
-    assert gates.record_build_stats({"parents": 1, "children": 2, "documents": 1}) is False
-    monkeypatch.setattr(gates, "STATS_FILE", str(tmp_path / "corpus_build_stats.json"))
-    assert gates.record_build_stats({"parents": 1, "children": 2, "documents": 1}) is True
+    blocker = tmp_path / "file"
+    blocker.write_text("", encoding="utf-8")
+    assert gates.record_build_stats(str(blocker / "state"), {"parents": 1, "children": 2, "documents": 1}) is False
+    assert (
+        gates.record_build_stats(str(tmp_path / "new" / "state"), {"parents": 1, "children": 2, "documents": 1}) is True
+    )
 
 
 def page(url):
@@ -39,11 +41,11 @@ def stub_pdfs(monkeypatch, documents=True):
     """extract_pdfs records its call; pdf_documents gives one page per item (none with documents=False), one missing."""
     calls = {}
 
-    def extract(*, inventory, extraction):
+    def extract(*, inventory, extraction, extracted_dir, skipped_log):
         calls.update(inventory=inventory, extraction=extraction)
         return EXTRACTED
 
-    def pdf_documents(items, seen_hashes, clean):
+    def pdf_documents(items, seen_hashes, extracted_dir, clean):
         calls["clean"] = clean
         docs = [{"page_content": "PDF", "metadata": {"file_hash": i.file_hash, "url": "pdf"}} for i in items]
         return (docs if documents else []), 1

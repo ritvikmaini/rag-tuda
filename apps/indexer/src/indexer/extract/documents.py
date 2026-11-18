@@ -6,7 +6,6 @@ import re
 from collections import Counter
 from collections.abc import Sequence
 
-from indexer.extract.pdf import EXTRACTED_DIR
 from indexer.extract.quality import clean_docling_markup
 from rag_core.domain.sources import PdfItem
 from rag_core.domain.text import clean_text, extract_year
@@ -107,7 +106,7 @@ def _pdf_meta_title(path):
         return ""
 
 
-def pdf_documents(items: Sequence[PdfItem], seen_hashes, extracted_dir=EXTRACTED_DIR, clean=True):
+def pdf_documents(items: Sequence[PdfItem], seen_hashes, extracted_dir, clean=True):
     """Page documents for PDF items from the extraction cache, deduplicated by file hash across calls (the first
     item with a hash wins: items are processed in list order). clean: Docling markup cleanup (no
     picture placeholders, no table padding)."""

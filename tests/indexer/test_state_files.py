@@ -2,36 +2,31 @@
 be read refuses the build instead of being read as empty. The registry's store is tested in tests/indexer/test_sources.py,
 the PDF list state with the connectors."""
 
-import dataclasses
 import json
 
 import pytest
 from rag_core.domain.sources import CorruptStateError
 
 from indexer import build, gates
-from indexer.sources import JsonStateStore
 
 
-def test_missing_stats_mean_no_size_gate(tmp_path, monkeypatch):
-    monkeypatch.setattr(gates, "STATS_FILE", str(tmp_path / "corpus_build_stats.json"))
-    assert gates.previous_stats() == {}
+def test_missing_stats_mean_no_size_gate(tmp_path):
+    assert gates.previous_stats(str(tmp_path)) == {}
 
 
-def test_corrupt_stats_refuse(tmp_path, monkeypatch):
+def test_corrupt_stats_refuse(tmp_path):
     path = tmp_path / "corpus_build_stats.json"
-    monkeypatch.setattr(gates, "STATS_FILE", str(path))
     path.write_text("nope", encoding="utf-8")
     with pytest.raises(CorruptStateError, match="corpus_build_stats.json"):
-        gates.previous_stats()
+        gates.previous_stats(str(tmp_path))
     path.write_text("[1]", encoding="utf-8")
     with pytest.raises(CorruptStateError, match="JSON object"):
-        gates.previous_stats()
+        gates.previous_stats(str(tmp_path))
 
 
-def test_stats_are_written_atomically(tmp_path, monkeypatch):
+def test_stats_are_written_atomically(tmp_path):
     path = tmp_path / "corpus_build_stats.json"
-    monkeypatch.setattr(gates, "STATS_FILE", str(path))
-    assert gates.record_build_stats({"parents": 3, "children": 9, "documents": {"web_pages": 1}}) is True
+    assert gates.record_build_stats(str(tmp_path), {"parents": 3, "children": 9, "documents": {"web_pages": 1}}) is True
     stats = json.loads(path.read_text(encoding="utf-8"))
     assert stats["parents"] == 3 and stats["children"] == 9 and "built_at" in stats
     assert sorted(p.name for p in tmp_path.iterdir()) == ["corpus_build_stats.json"]
@@ -45,14 +40,8 @@ def test_build_corpus_refuses_before_any_download_when_the_stats_file_is_corrupt
     assert source.asked == [] and embedding.calls == 0
 
 
-def test_build_corpus_refuses_before_any_download_when_the_registry_is_corrupt(settings, fakes, tmp_path, monkeypatch):
-    state = tmp_path / "vector_database_contents"
-    state.mkdir()
-    (state / "pdf_downloaded_urls.json").write_text("{broken", encoding="utf-8")
-    context = build.context
-    monkeypatch.setattr(
-        build, "context", lambda *args: dataclasses.replace(context(*args), state=JsonStateStore(state))
-    )
+def test_build_corpus_refuses_before_any_download_when_the_registry_is_corrupt(settings, fakes):
+    (fakes.stats.parent / "pdf_downloaded_urls.json").write_text("{broken", encoding="utf-8")
     web, pdfs = fakes.Source(), fakes.Source(state_files=["pdf_downloaded_urls.json"])
     with pytest.raises(
         CorruptStateError,

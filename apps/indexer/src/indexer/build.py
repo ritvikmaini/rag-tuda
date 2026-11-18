@@ -90,7 +90,7 @@ def build_corpus(
     before any download on a corrupt stats file or connector state and on an embedding server that serves another model.
     Builds with limit are never published and therefore not gated."""
     started = time.monotonic()
-    previous = gates.previous_stats()
+    previous = gates.previous_stats(settings.overlay.paths.state_dir)
     contexts = {name: context(settings, name, limit, reuse_inputs) for name in sources}
     for name, source in sources.items():
         for state_file in source.state_files:
@@ -116,8 +116,16 @@ def build_corpus(
         count, kind = len(pages), "documents"
         if pdfs:
             t = time.monotonic()
-            extracted = extract_pdfs(inventory=[inventory_entry(i) for i in pdfs], extraction=ingest.extraction)
-            pdf_docs, missing = pdf_documents(pdfs, seen_hashes, clean=ingest.extraction.clean_markup)
+            paths = settings.overlay.paths
+            extracted = extract_pdfs(
+                inventory=[inventory_entry(i) for i in pdfs],
+                extraction=ingest.extraction,
+                extracted_dir=paths.extracted_dir,
+                skipped_log=paths.skipped_pdfs_log,
+            )
+            pdf_docs, missing = pdf_documents(
+                pdfs, seen_hashes, extracted_dir=paths.extracted_dir, clean=ingest.extraction.clean_markup
+            )
             minutes["extract"] += time.monotonic() - t
             hashes = {d["metadata"]["file_hash"] for d in pdf_docs}
             count, kind = sum(1 for i in pdfs if i.file_hash in hashes), "pdfs"

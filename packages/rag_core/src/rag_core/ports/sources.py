@@ -47,7 +47,7 @@ class SourceContext(Protocol):
     @property
     def settings(self) -> Mapping[str, Any]: ...  # the source's profile entry (ingest.sources.<name>)
     @property
-    def paths(self) -> Mapping[str, str]: ...  # overlay paths (crawl_dir, manifest_dir)
+    def paths(self) -> Mapping[str, str]: ...  # overlay paths (crawl_dir, state_dir, pdf_dir, ...)
     @property
     def cache_dir(self) -> Path: ...  # the indexer's extraction cache (a changed PDF's entry is deleted)
     @property

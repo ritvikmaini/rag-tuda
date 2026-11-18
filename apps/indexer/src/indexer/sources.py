@@ -1,5 +1,5 @@
 """What the indexer gives each connector: the context, a fetcher that holds data-derived downloads to the overlay's
-allowed hosts, an atomic JSON state store under STATE_DIR, and discovery of the profile's connectors by entry point (the app imports no connector package)."""
+allowed hosts, an atomic JSON state store under the settings' state_dir, and discovery of the profile's connectors by entry point (the app imports no connector package)."""
 
 import json
 import logging
@@ -16,11 +16,9 @@ from rag_core.ports.sources import DocumentSource, Timeout
 from rag_core.settings import SettingsError
 from rag_core.settings.profile import Profile
 
-from indexer.extract.pdf import EXTRACTED_DIR
 from indexer.extract.quality import write_json_atomic
 from indexer.settings import Settings
 
-STATE_DIR = "/app/data/vector_database_contents"  # the registry, the list state and the build stats live here
 GROUP = "rag_core.connectors"
 
 
@@ -47,7 +45,7 @@ class HttpFetcher:
 class JsonStateStore:
     """load(): an absent file is None; an unreadable one or one that is not a JSON object raises CorruptStateError."""
 
-    def __init__(self, root: str | Path = STATE_DIR) -> None:
+    def __init__(self, root: str | Path) -> None:
         self.root = Path(root)
 
     def path(self, name: str) -> Path:
@@ -88,15 +86,16 @@ class Context:
 
 def context(settings: Settings, name: str, limit: int | None, reuse: bool) -> Context:
     endpoint = settings.endpoints[name]
+    paths = settings.overlay.paths
     url = endpoint.url or endpoint.manifest_url
     return Context(
         fetch=HttpFetcher(url, endpoint.allowed_hosts),
-        state=JsonStateStore(),
+        state=JsonStateStore(paths.state_dir),
         data_dir=Path(endpoint.dir) if endpoint.dir else None,
         endpoint=url,
         settings=settings.profile.ingest.sources[name].model_dump(),
-        paths=settings.overlay.paths.model_dump(),
-        cache_dir=Path(EXTRACTED_DIR),
+        paths=paths.model_dump(),
+        cache_dir=Path(paths.extracted_dir),
         limit=limit,
         reuse=reuse,
     )

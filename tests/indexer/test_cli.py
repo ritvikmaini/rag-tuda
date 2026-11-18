@@ -36,14 +36,13 @@ def run(db_settings, monkeypatch, tmp_path):
     """run(*argv) -> (exit code, printed lines)."""
     monkeypatch.setattr(gen, "BuildLock", Lock)
     monkeypatch.setattr(Lock, "busy", False)
-    monkeypatch.setattr(gates, "STATS_FILE", str(tmp_path / "corpus_build_stats.json"))
 
     def call(*argv):
         lines = []
         code = cli.main(list(argv), settings=db_settings, connect_fn=lambda application_name: Conn(), out=lines.append)
         return code, lines
 
-    call.stats = tmp_path / "corpus_build_stats.json"
+    call.stats = tmp_path / "state" / gates.STATS_NAME
     return call
 
 

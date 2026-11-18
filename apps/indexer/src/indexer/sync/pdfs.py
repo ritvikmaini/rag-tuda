@@ -13,10 +13,10 @@ from rag_core.domain.sources import CorruptStateError
 from rag_core.ports.sources import Fetcher, SourceContext
 
 from indexer.sync import registry as reg
-from indexer.sync.registry import PDF_DIR, PdfEntry, file_hash, local_path
+from indexer.sync.registry import PdfEntry, file_hash, local_path
 from indexer.sync.safeguard import LIST_STATE, Safeguard
 
-__all__ = ["PDF_DIR", "PDF_DOWNLOAD_TIMEOUT", "PdfEntry", "Safeguard", "SyncResult", "sync_pdfs"]
+__all__ = ["PDF_DOWNLOAD_TIMEOUT", "PdfEntry", "Safeguard", "SyncResult", "sync_pdfs"]
 
 PDF_DOWNLOAD_TIMEOUT = 300
 
@@ -50,13 +50,14 @@ class SyncResult:
         return self._count("missing")
 
 
-def sync_pdfs(entries: list[PdfEntry], ctx: SourceContext, *, pdf_dir: str | Path = PDF_DIR) -> SyncResult:
-    """Sync `entries` into pdf_dir. ctx.reuse (frozen inputs): nothing is fetched, a PDF whose file is missing counts as
-    missing, the registry is not written and the safeguard runs dry. ctx.limit: only the first N entries, and no
-    safeguard. A corrupt registry raises CorruptStateError; a corrupt list state is reported in `check` (corrupt) with
+def sync_pdfs(entries: list[PdfEntry], ctx: SourceContext, *, pdf_dir: str | Path | None = None) -> SyncResult:
+    """Sync `entries` into pdf_dir (default: the context's paths.pdf_dir). ctx.reuse (frozen inputs): nothing is fetched,
+    a PDF whose file is missing counts as missing, the registry is not written and the safeguard runs dry. ctx.limit: only
+    the first N entries, and no safeguard. A corrupt registry raises CorruptStateError; a corrupt list state is reported in `check` (corrupt) with
     every missing PDF kept. An empty list raises ValueError: it is a failed crawl, not a list."""
     if not entries:
         raise ValueError("no PDF entries to sync")
+    pdf_dir = pdf_dir or ctx.paths["pdf_dir"]
     registry = reg.load(ctx.state)
     selected = entries[: ctx.limit] if ctx.limit is not None else entries
     Path(pdf_dir).mkdir(parents=True, exist_ok=True)

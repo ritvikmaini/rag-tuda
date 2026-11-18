@@ -11,7 +11,6 @@ from urllib.parse import unquote, urlparse
 
 from rag_core.ports.sources import StateStore
 
-PDF_DIR = "/app/data/pdfs"
 REGISTRY = "pdf_downloaded_urls.json"  # in the state store
 
 
@@ -34,7 +33,7 @@ def file_hash(path: str | Path) -> str:
     return h.hexdigest()
 
 
-def local_path(url: str, pdf_dir: str | Path = PDF_DIR) -> Path:
+def local_path(url: str, pdf_dir: str | Path) -> Path:
     """Where the PDF of a URL lives: its cleaned file name plus a digest of the whole URL, so equal names never collide."""
     raw_name = Path(unquote(urlparse(url).path)).name or "document.pdf"
     cleaned = re.sub(r"\s+", "_", re.sub(r"[^\w.\- ]+", "_", raw_name, flags=re.ASCII).strip())

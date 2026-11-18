@@ -4,7 +4,8 @@ Technical sections are OverlaySection models (extra keys forbidden, frozen) and 
 reads, each layer overriding the one before:
   1. the overlay file, when one is named (YAML: {section: {key: value}});
   2. environment variables RAG__<SECTION>__<KEY>;
-  3. secret files: a field declared with secret("<name>") reads <secrets_dir>/<name> (trailing line breaks stripped).
+  3. secret files: a field declared with secret("<name>") reads <secrets_dir>/<name> (trailing line breaks stripped);
+     secrets_dir is the argument, else RAG_SECRETS_DIR, else /run/secrets.
 An unknown section or key, in the overlay or the environment, raises SettingsError naming the key and its source; so does a
 value that does not validate, and a key the environment sets twice (names that differ only in case). Secret fields are
 SecretStr: their values never appear in a message or a repr; a blank secret (empty or whitespace only) counts as unset. The
@@ -150,11 +151,12 @@ def load(
     *,
     overlay: str | Path | None = None,
     environ: Mapping[str, str] = os.environ,
-    secrets_dir: str | Path = "/run/secrets",
+    secrets_dir: str | Path | None = None,
     profile_sections: Collection[str] = (),
 ) -> SettingsModel:
     """The settings model filled from its layers (module docstring)."""
     sections = _sections(model)
+    secrets_dir = secrets_dir or environ.get("RAG_SECRETS_DIR") or "/run/secrets"
     merged: Layer = {}
     layers = (
         _overlay_layer(overlay) if overlay else {},

@@ -25,6 +25,12 @@ def test_the_token_comes_from_the_backend_token_secret_file(tmp_path):
     assert token is not None and token.get_secret_value() == "tok"
 
 
+def test_the_secrets_folder_is_set_by_the_environment(tmp_path):
+    (tmp_path / "backend_token").write_text("tok\n", encoding="utf-8")
+    token = load_settings(environ={"RAG_SECRETS_DIR": str(tmp_path)}).evals.token
+    assert token is not None and token.get_secret_value() == "tok"
+
+
 def test_the_environment_is_the_fallback_for_the_token_and_the_mac(tmp_path):
     s = load_settings(
         environ={"RAG__EVALS__TOKEN": "t", "RAG__EVALS__OUT_DIR": "data/eval_runs"}, secrets_dir=str(tmp_path)

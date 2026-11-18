@@ -15,17 +15,12 @@ def test_a_source_passes_at_its_minimum_and_fails_below():
     }
 
 
-def test_no_stats_file_means_no_size_gate(tmp_path, monkeypatch):
-    monkeypatch.setattr(gates, "STATS_FILE", str(tmp_path / "none.json"))
-    assert gates.size_gate(1, gates.previous_stats(), 0.7)["passed"]
+def test_no_stats_file_means_no_size_gate(tmp_path):
+    assert gates.size_gate(1, gates.previous_stats(str(tmp_path)), 0.7)["passed"]
     assert (
         gates.size_gate(70, {"parents": 100}, 0.7)["passed"]
         and not gates.size_gate(69, {"parents": 100}, 0.7)["passed"]
     )
-
-
-def test_the_stats_file_is_the_one_an_older_image_reads():
-    assert gates.STATS_FILE == "/app/data/vector_database_contents/corpus_build_stats.json"
 
 
 def test_the_first_failed_gate_names_itself_and_says_swap_refused():

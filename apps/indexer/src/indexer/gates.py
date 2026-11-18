@@ -10,33 +10,34 @@ from typing import Any
 from rag_core.domain.sources import CorruptStateError
 
 from indexer.extract.quality import write_json_atomic
-from indexer.state import LOCAL_DATA_FOLDER
 
-STATS_FILE = os.path.join(LOCAL_DATA_FOLDER, "vector_database_contents", "corpus_build_stats.json")
+STATS_NAME = "corpus_build_stats.json"  # in the state folder
 
 
-def previous_stats():
+def previous_stats(state_dir: str):
     """The last swapped build's counts, the size gate's reference. No file: no gate. A file that exists but is not a
     JSON object raises CorruptStateError: the build is refused instead of running without its gate."""
-    if not os.path.exists(STATS_FILE):
+    stats_file = os.path.join(state_dir, STATS_NAME)
+    if not os.path.exists(stats_file):
         return {}
     try:
-        with open(STATS_FILE, encoding="utf-8") as fh:
+        with open(stats_file, encoding="utf-8") as fh:
             stats = json.load(fh)
     except (OSError, ValueError) as exc:
-        raise CorruptStateError(f"{STATS_FILE} cannot be read ({exc}); fix or delete it before the next build") from exc
+        raise CorruptStateError(f"{stats_file} cannot be read ({exc}); fix or delete it before the next build") from exc
     if not isinstance(stats, dict):
-        raise CorruptStateError(f"{STATS_FILE} does not hold a JSON object; fix or delete it before the next build")
+        raise CorruptStateError(f"{stats_file} does not hold a JSON object; fix or delete it before the next build")
     return stats
 
 
-def record_build_stats(result):
+def record_build_stats(state_dir: str, result):
     """Called after a successful swap; the next build is compared against these counts.
     Returns False (and logs) when the file cannot be written: the swap has happened, so
     the reply must not fail because of the stats file."""
     try:
+        os.makedirs(state_dir, exist_ok=True)  # a native first build starts without the folder
         write_json_atomic(
-            STATS_FILE,
+            os.path.join(state_dir, STATS_NAME),
             {k: result[k] for k in ("parents", "children", "documents") if k in result}
             | {"built_at": datetime.now().isoformat()},
         )

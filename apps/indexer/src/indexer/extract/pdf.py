@@ -15,9 +15,6 @@ from indexer.extract.quality import (
     write_json_atomic,
 )
 
-EXTRACTED_DIR = "/app/data/extracted"
-SKIPPED_PDFS_LOG = os.path.join("/app/data", "skipped_pdfs_page_limit.json")
-
 
 class PageLimitExceededError(RuntimeError):
     """Raised when a PDF has more pages than MAX_OCR_PAGES allows for full Docling OCR."""
@@ -202,7 +199,7 @@ def _assess_cached_entry(cache_path: str, pdf_path: str, filename: str, ocr_budg
         return 0
 
 
-def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir: str = EXTRACTED_DIR) -> dict:
+def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir: str, skipped_log: str) -> dict:
     """
     Extract text from PDFs in pdf_dir, cache results in extracted_dir.
 
@@ -329,7 +326,7 @@ def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir
             + ", ".join(f"{f['file']} ({f['pages']} pages)" for f in skipped_page_limit_files)
         )
         try:
-            with open(SKIPPED_PDFS_LOG, "w", encoding="utf-8") as f:
+            with open(skipped_log, "w", encoding="utf-8") as f:
                 json.dump(
                     {
                         "run_at": datetime.now().isoformat(),
@@ -340,8 +337,8 @@ def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir
                     ensure_ascii=False,
                     indent=2,
                 )
-            logging.info(f"Wrote skipped-PDF summary to {SKIPPED_PDFS_LOG}")
+            logging.info(f"Wrote skipped-PDF summary to {skipped_log}")
         except Exception as exc:
-            logging.error(f"Failed to write skipped-PDF summary to {SKIPPED_PDFS_LOG}: {exc}")
+            logging.error(f"Failed to write skipped-PDF summary to {skipped_log}: {exc}")
 
     return results

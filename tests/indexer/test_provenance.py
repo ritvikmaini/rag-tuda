@@ -10,7 +10,6 @@ from indexer import build
 
 
 def run(settings, info, monkeypatch, tmp_path):
-    monkeypatch.setattr(build.gates, "STATS_FILE", str(tmp_path / "stats.json"))
     asked = []
 
     class Source:

@@ -56,7 +56,10 @@ def build_index(
     finally:
         lock.release()
     documents = {name: report["documents"] for name, report in built["sources"].items()}
-    gates.record_build_stats({"parents": built["parents"], "children": built["children"], "documents": documents})
+    gates.record_build_stats(
+        settings.overlay.paths.state_dir,
+        {"parents": built["parents"], "children": built["children"], "documents": documents},
+    )
     for name, count in documents.items():
         out(f"source {name}: {count} documents")
     counts, embeddings, changes = published["index_counts"], published["embeddings"], published["changes"]
@@ -71,7 +74,9 @@ def build_index(
     return 0
 
 
-def publish(target: gen.Target, n: int, connect_fn: Callable[..., Any], out: Callable[[str], None]) -> int:
+def publish(
+    target: gen.Target, n: int, connect_fn: Callable[..., Any], out: Callable[[str], None], state_dir: str
+) -> int:
     """A staging generation goes live: verify again, publish, annotate, record the stats. No housekeeping here; the next
     build housekeeps."""
     lock = gen.BuildLock(target, f"cli publish {n}", connect_fn)
@@ -104,7 +109,7 @@ def publish(target: gen.Target, n: int, connect_fn: Callable[..., Any], out: Cal
         return 1
     finally:
         lock.release()
-    gates.record_build_stats({"parents": counts["parents"], "children": counts["children"]})
+    gates.record_build_stats(state_dir, {"parents": counts["parents"], "children": counts["children"]})
     out(f"published generation {n} (previous {previous}) in {seconds} s")
     return 0
 
@@ -142,5 +147,5 @@ def main(
         if len(args) != 2 or not args[1].isdigit():
             out(USAGE)
             return 2
-        return publish(wiring.target, int(args[1]), wiring.connect, out)
+        return publish(wiring.target, int(args[1]), wiring.connect, out, wiring.settings.overlay.paths.state_dir)
     return gen.main(args, target=wiring.target, connect_fn=wiring.connect, out=out)
