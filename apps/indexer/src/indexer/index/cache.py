@@ -39,7 +39,7 @@ def seed(conn, cache_key: tuple[str, str, str, str]) -> int:
         return 0
     row = conn.execute(
         "SELECT generation, tables ->> 'children' FROM index_generations WHERE collection = %s AND status = 'live' "
-        "AND layout = 'v2' AND embedding_model = %s AND embedding_revision = %s",
+        "AND embedding_model = %s AND embedding_revision = %s",
         (collection, model, revision),
     ).fetchone()
     if row is None:

@@ -43,8 +43,7 @@ _ISO_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 def _id(*parts) -> str:
-    """The first 32 hex characters of the SHA-256 of the parts joined by NUL. Postgres reads 32
-    hex characters as a uuid too, so contract_reverse.sql's chunk_id::uuid still works."""
+    """The first 32 hex characters of the SHA-256 of the parts joined by NUL."""
     return hashlib.sha256("\0".join(str(p) for p in parts).encode("utf-8")).hexdigest()[:32]
 
 

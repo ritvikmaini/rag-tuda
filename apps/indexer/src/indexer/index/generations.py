@@ -38,7 +38,7 @@ DDL = (
     "CREATE TABLE IF NOT EXISTS index_generations ("
     " collection text NOT NULL, generation integer NOT NULL,"
     " status text NOT NULL CHECK (status IN ('staging', 'live', 'previous', 'failed', 'dropped')),"
-    " layout text NOT NULL CHECK (layout IN ('legacy', 'v2')),"
+    " layout text NOT NULL CHECK (layout = 'v2'),"
     " tables jsonb NOT NULL,"
     " created_at timestamptz NOT NULL DEFAULT now(), published_at timestamptz,"
     " git_commit text, config_hash text, embedding_model text, embedding_revision text,"
