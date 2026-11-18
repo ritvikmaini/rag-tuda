@@ -317,7 +317,7 @@ def report(f: Facts, cls: SizeClass) -> str:
         f"Class: {cls.name} ({cls.rule}); usable memory {classes.usable_gb(f):.1f} GB",
         f"Default card: {cls.default_card or 'none (pick one with --card)'}",
         "Models:",
-        f"  answer (Ollama): {cls.ollama_tag + f' ({cls.download_gb:g} GB, {cls.context_k}k context)' if cls.ollama_tag else 'none defined for this class'}",
+        f"  answer (Ollama): {cls.ollama_tag + f' ({cls.download_gb:g} GB, {cls.window_tokens // 1000}k context)' if cls.ollama_tag else 'none defined for this class'}",
         f"  answer (vLLM, NVIDIA, opt-in): {cls.vllm_model}",
     ]
     lines += [f"  {m.name} ({m.gb:g} GB)" for m in classes.FIXED_MODELS]

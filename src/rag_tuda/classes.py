@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from rag_tuda import cards
+
 if TYPE_CHECKING:
     from rag_tuda.doctor import Facts
 
@@ -17,7 +19,7 @@ class SizeClass:
     default_card: str | None  # the card `rag up` runs when the hardware picks this class
     ollama_tag: str | None
     download_gb: float | None
-    context_k: int
+    window_tokens: int
     vllm_model: str
     use_case: str
 
@@ -28,46 +30,53 @@ class Model:
     gb: float
 
 
+def size_class(name: str, rule: str, card_name: str, use_case: str, *, local: bool, hf_model: str = "") -> SizeClass:
+    """A class described by its representative card: the Ollama tag, the download size, the window and the served model name
+    come from the card. Only a local Ollama card has no vLLM name of its own, so the Hugging Face id of its model is given."""
+    card = cards.named(card_name)
+    answer = card["answer"]
+    return SizeClass(
+        name,
+        rule,
+        card_name if local else None,
+        answer["model"] if answer["provider"] == "ollama" else None,
+        card.get("download_gb"),
+        cards.window(card),
+        hf_model or answer["model"],
+        use_case,
+    )
+
+
 CLASSES = (
-    SizeClass(
+    size_class(
         "S",
         f"< {M_FROM_GB:g} GB usable memory, or no GPU / AMD / Intel",
         "s-qwen3-4b-instruct-2507",
-        "qwen3:4b-instruct-2507-q4_K_M",
-        2.5,
-        8,
-        "Qwen/Qwen3-4B-Instruct-2507",
         "short cited answers on a laptop: a small model, an 8K window, no iterative retrieval",
+        local=True,
+        hf_model="Qwen/Qwen3-4B-Instruct-2507",
     ),
-    SizeClass(
+    size_class(
         "M",
         f">= {M_FROM_GB:g} GB usable memory",
         "m-qwen3.6-35b-a3b",
-        "qwen3.6:35b-a3b",
-        22.6,
-        16,
-        "Qwen/Qwen3.6-35B-A3B",
         "the full experience: a 16K window, iterative retrieval, the version table",
+        local=True,
+        hf_model="Qwen/Qwen3.6-35B-A3B",
     ),
-    SizeClass(
+    size_class(
         "L",
         "a hosted open model (Groq free tier), chosen with --card",
-        None,
-        None,
-        None,
-        8,
-        "openai/gpt-oss-120b",
+        "l-groq-gpt-oss-120b",
         "a stronger model at the provider's 8K window, with a local analysis model",
+        local=False,
     ),
-    SizeClass(
+    size_class(
         "XL",
         "large open models on vLLM, chosen with --card",
-        None,
-        None,
-        None,
-        64,
-        "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+        "xl-vllm-example",
         "long windows and every gated step on a GPU server (documented, untested)",
+        local=False,
     ),
 )
 

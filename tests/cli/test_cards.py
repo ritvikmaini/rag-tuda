@@ -42,3 +42,24 @@ def test_fixture_cards_cover_each_remote_and_local_shape():
     loaded = {p.stem: cards.load(p) for p in FILES}
     assert loaded["l-test-groq"]["limits"]["tpm"] == 8000 and "analysis" in loaded["l-test-groq"]
     assert loaded["m-test-35b"]["gated"] == {"iterative_retrieval": True, "version_table": True}
+
+
+def test_a_malformed_card_names_its_file(tmp_path):
+    (tmp_path / "bad.toml").write_text("name = ", encoding="utf-8")
+    with pytest.raises(ValueError, match="bad.toml"):
+        cards.class_of_model("x", tmp_path)
+
+
+def test_window_is_the_smallest_of_budget_model_and_tokens_per_minute():
+    card = cards.load(CARDS / "l-test-groq.toml")
+    assert cards.window(card) == 8000
+    assert cards.window({"budget": {"window_tokens": 16000}, "answer": {"context_window": 4096}}) == 4096
+
+
+def test_the_command_line_computes_the_window_the_backend_does():
+    from rag_core.settings.card import effective_window, load_card
+
+    shipped = sorted(cards.CARDS_DIR.glob("*.toml"))
+    assert len(shipped) == 10
+    for path in shipped:
+        assert cards.window(cards.load(path)) == effective_window(load_card(path))

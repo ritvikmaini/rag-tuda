@@ -3,7 +3,7 @@ import re
 
 import pytest
 
-from rag_tuda import classes
+from rag_tuda import cards, classes
 from rag_tuda.doctor import Facts, Docker, Ollama
 
 
@@ -61,11 +61,26 @@ def test_class_table_data():
     assert list(c) == ["S", "M", "L", "XL"]
     assert c["S"].ollama_tag == "qwen3:4b-instruct-2507-q4_K_M" and c["S"].download_gb == 2.5
     assert c["M"].ollama_tag == "qwen3.6:35b-a3b" and c["M"].download_gb == 22.6
-    assert (c["S"].context_k, c["M"].context_k, c["L"].context_k, c["XL"].context_k) == (8, 16, 8, 64)
+    assert (c["S"].window_tokens, c["M"].window_tokens, c["L"].window_tokens, c["XL"].window_tokens) == (
+        8000,
+        16000,
+        8000,
+        64000,
+    )
     assert c["L"].ollama_tag is None and c["XL"].ollama_tag is None
     assert c["XL"].vllm_model == "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8" and "untested" in c["XL"].use_case
     for x in classes.CLASSES:
         assert x.use_case
+
+
+def test_the_class_table_reads_the_shipped_cards():
+    c = {x.name: x for x in classes.CLASSES}
+    assert c["L"].vllm_model == "openai/gpt-oss-120b"  # the Groq model id of the L card
+    assert c["S"].vllm_model == "Qwen/Qwen3-4B-Instruct-2507"  # the Ollama card has a tag only: the id is given
+    for x in classes.CLASSES:
+        card = cards.named(x.default_card or {"L": "l-groq-gpt-oss-120b", "XL": "xl-vllm-example"}[x.name])
+        assert x.window_tokens == cards.window(card)
+        assert x.download_gb == card.get("download_gb")
 
 
 def test_default_cards_are_named_in_one_place():

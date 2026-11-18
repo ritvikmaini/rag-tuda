@@ -51,7 +51,7 @@ def resolve(
     flavour = flavour or ("openai" if llm_url else "ollama" if cls.ollama_tag else "vllm")
     if flavour not in FLAVOURS:
         raise ValueError(f"flavour must be one of {FLAVOURS}: {flavour!r}")
-    ctx = context_window if context_window is not None else cls.context_k * 1024
+    ctx = context_window if context_window is not None else cls.window_tokens
     if ctx <= 0:
         raise ValueError("the context window must be positive")
     if flavour == "ollama":

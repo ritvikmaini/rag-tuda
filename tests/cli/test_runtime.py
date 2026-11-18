@@ -18,7 +18,7 @@ def test_native_m():
         "RAG__LLM__URL": "http://127.0.0.1:11434/v1",
         "RAG__LLM__MODEL": "lcr-m",
         "RAG__LLM__ANALYSIS_MODEL": "lcr-m",
-        "RAG__LLM__CONTEXT_WINDOW": "16384",
+        "RAG__LLM__CONTEXT_WINDOW": "16000",
         "RAG__LLM__FLAVOUR": "ollama",
         "RAG__DATABASE__HOST": "127.0.0.1",
         "RAG__DATABASE__PORT": "55432",
@@ -39,7 +39,7 @@ def test_compose_m_uses_service_names():
 
 
 @pytest.mark.parametrize("mode", ["native", "compose"])
-@pytest.mark.parametrize("cls,name,ctx", [(S, "lcr-s", "8192"), (M, "lcr-m", "16384")])
+@pytest.mark.parametrize("cls,name,ctx", [(S, "lcr-s", "8000"), (M, "lcr-m", "16000")])
 def test_ollama_classes(cls, name, ctx, mode):
     e = env(cls, mode)
     assert (e["RAG__LLM__MODEL"], e["RAG__LLM__ANALYSIS_MODEL"], e["RAG__LLM__CONTEXT_WINDOW"]) == (name, name, ctx)
@@ -57,7 +57,7 @@ def test_xl_is_vllm_only():
     assert e["RAG__LLM__MODEL"] == "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8"
     assert e["RAG__LLM__ANALYSIS_MODEL"] == e["RAG__LLM__MODEL"]
     assert e["RAG__LLM__URL"] == "http://vllm:8000/v1"
-    assert e["RAG__LLM__CONTEXT_WINDOW"] == "65536"
+    assert e["RAG__LLM__CONTEXT_WINDOW"] == "64000"
     assert runtime.derived_model_body(runtime.resolve(XL, "compose")) is None
     with pytest.raises(ValueError, match="vLLM"):
         runtime.resolve(XL, "compose", flavour="ollama")
@@ -116,8 +116,8 @@ def test_bad_arguments():
 @pytest.mark.parametrize(
     "cls,name,tag,ctx",
     [
-        (S, "lcr-s", "qwen3:4b-instruct-2507-q4_K_M", 8192),
-        (M, "lcr-m", "qwen3.6:35b-a3b", 16384),
+        (S, "lcr-s", "qwen3:4b-instruct-2507-q4_K_M", 8000),
+        (M, "lcr-m", "qwen3.6:35b-a3b", 16000),
     ],
 )
 def test_derived_model_body(cls, name, tag, ctx):
@@ -130,7 +130,7 @@ def test_derived_model_body(cls, name, tag, ctx):
 
 def test_derived_model_body_values_are_passed_in():
     body = runtime.derived_model_body(runtime.resolve(M, "native"), top_k=20, repeat_penalty=1.1)
-    assert body["parameters"] == {"num_ctx": 16384, "top_k": 20, "repeat_penalty": 1.1}
+    assert body["parameters"] == {"num_ctx": 16000, "top_k": 20, "repeat_penalty": 1.1}
 
 
 def test_derived_model_is_the_same_in_both_modes():
