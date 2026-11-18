@@ -24,6 +24,18 @@ def test_the_command_line_computes_the_window_the_backend_does():
         assert cards.window(cards.load(path)) == effective_window(load_card(path))
 
 
+def test_the_command_line_knows_the_class_windows_and_reads_a_card_that_leaves_its_window_out(tmp_path):
+    from rag_core.settings.card import CLASS_DEFAULTS, effective_window, load_card
+
+    assert cards.CLASS_WINDOW_TOKENS == {name: d["budget"]["window_tokens"] for name, d in CLASS_DEFAULTS.items()}
+    for path in sorted(cards.CARDS_DIR.glob("*.toml")):
+        text = re.sub(r"^window_tokens = .*\n", "", path.read_text(encoding="utf-8"), flags=re.M)
+        assert "window_tokens =" not in text
+        bare = tmp_path / path.name
+        bare.write_text(text, encoding="utf-8")
+        assert cards.window(cards.load(bare)) == effective_window(load_card(bare)), path.name
+
+
 def test_the_sampling_defaults_are_the_backends():
     from rag_core.settings.card import Sampling
 

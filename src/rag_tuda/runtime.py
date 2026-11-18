@@ -96,9 +96,7 @@ def resolve(card: dict, mode: str, *, model: str | None = None, llm_url: str | N
         ollama_api=ollama["url"].removesuffix("/v1") if ollama and mode == "native" and not llm_url else None,
         analysis_derived=f"rag-{name}-analysis" if own_analysis else None,
         analysis_base=analysis["model"] if own_analysis and analysis else None,
-        analysis_window=min(analysis["context_window"], card["budget"]["window_tokens"])
-        if own_analysis and analysis
-        else 0,
+        analysis_window=min(analysis["context_window"], cards.window_tokens(card)) if own_analysis and analysis else 0,
     )
 
 

@@ -56,6 +56,12 @@ def test_window_is_the_smallest_of_budget_model_and_tokens_per_minute():
     assert cards.window({"budget": {"window_tokens": 16000}, "answer": {"context_window": 4096}}) == 4096
 
 
+def test_a_card_without_a_window_gets_its_classs():
+    answer = {"context_window": 262144}
+    assert cards.window({"class": "M", "answer": answer}) == 16000
+    assert cards.window({"class": "S", "budget": {"answer_tokens": 700}, "answer": answer}) == 8000
+
+
 def test_a_named_card_wins_and_a_model_finds_the_card_that_serves_it(scenario):
     m1 = scenario("m1max64")
     assert cards.choose("s-gemma4-e4b", None, m1) == (cards.named("s-gemma4-e4b"), None)

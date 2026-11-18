@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from rag_tuda.doctor import Facts
 
 CARDS_DIR = Path(__file__).resolve().parents[2] / "models" / "cards"
+# the request window a card gets from its class when it leaves budget.window_tokens out (rag_core's class defaults)
+CLASS_WINDOW_TOKENS = {"S": 8000, "M": 16000, "L": 8000, "XL": 64000}
 
 
 def load(path: Path) -> dict:
@@ -23,9 +25,14 @@ def named(name: str, cards_dir: Path = CARDS_DIR) -> dict:
     return load(cards_dir / f"{name}.toml")
 
 
+def window_tokens(card: dict) -> int:
+    """The card's request window: its own budget.window_tokens, else its class's."""
+    return card.get("budget", {}).get("window_tokens") or CLASS_WINDOW_TOKENS[card["class"]]
+
+
 def window(card: dict) -> int:
     """min(budget.window_tokens, the model's window, tokens per minute when limited): rag_core's effective_window."""
-    sizes = [card["budget"]["window_tokens"], card["answer"]["context_window"]]
+    sizes = [window_tokens(card), card["answer"]["context_window"]]
     if tpm := card.get("limits", {}).get("tpm"):
         sizes.append(tpm)
     return min(sizes)
