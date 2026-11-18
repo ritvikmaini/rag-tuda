@@ -11,7 +11,6 @@ from rag_core.ports.chat import ChatModel, TokenCounter
 from rag_core.services.prompts import PromptService
 from rag_core.settings.card import Card
 from rag_core.settings.profile import Profile
-from rag_core.settings.sections import Timeouts
 
 from assistant_api.settings import Messages
 
@@ -64,4 +63,3 @@ class GraphDeps:
     answer_llm: Any  # ChatOpenAI: the generate node awaits it, so LangChain's callbacks stream the answer
     counter: TokenCounter
     retrieval: Retriever  # a Protocol, not the concrete RetrievalService
-    timeouts: Timeouts

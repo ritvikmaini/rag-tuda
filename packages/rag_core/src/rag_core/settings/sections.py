@@ -25,19 +25,18 @@ class ModelServersSection(OverlaySection):
 # indexer's.
 
 
+# The model's own limits (pipeline slots, the request deadline and silence limit, the model read and analysis timeouts) are
+# the card's.
+
+
 class Compute(OverlaySection):
-    slots: int = Field(ge=1)  # one GPU pipeline slot
     slot_wait_s: float = Field(gt=0)  # then the busy message
 
 
 class Timeouts(OverlaySection):
-    request_deadline_s: float = Field(gt=0)
-    request_idle_s: float = Field(gt=0)
-    analysis_s: float = Field(gt=0)
     retrieval_s: float = Field(gt=0)
     parent_lookup_s: float = Field(gt=0)
     reranker_s: float = Field(gt=0)
-    llm_read_s: float = Field(gt=0)
 
 
 class Http(OverlaySection):

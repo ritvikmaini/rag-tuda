@@ -32,11 +32,11 @@ def runtime() -> types.SimpleNamespace:
         ),
         overlay=types.SimpleNamespace(
             database=None,
-            timeouts=types.SimpleNamespace(request_deadline_s=0),
+            timeouts=types.SimpleNamespace(),
             model_servers=types.SimpleNamespace(reranker_url="http://reranker_service:8003"),
         ),
         messages=None,
-        card=None,
+        card=types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=0)),
     )
     return types.SimpleNamespace(
         settings=settings,
@@ -223,36 +223,74 @@ def test_run_info_names_what_a_turn_ran_with() -> None:
     assert make(profile, other).config_hash != rt.config_hash  # the model card is part of the configuration
 
 
-def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) -> None:
-    from rag_core.settings.card import effective_window
+ENV = {
+    "RAG_PROFILE": str(PROFILE),
+    "RAG_CARDS_DIR": str(PROFILE.parents[2] / "models" / "cards"),
+    "RAG__COMPUTE__SLOT_WAIT_S": "3",
+    "RAG__TIMEOUTS__RETRIEVAL_S": "10",
+    "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
+    "RAG__TIMEOUTS__RERANKER_S": "15",
+    "RAG__HTTP__CORS_DOMAIN": "example.org",
+    "RAG__TRACING__URL": "",
+}
+
+
+def runtime_of(card: str, tmp_path, monkeypatch):
     from assistant_api.settings import load_settings
 
-    root = PROFILE.parents[2]
-    env = {
-        "RAG_PROFILE": str(PROFILE),
-        "RAG__CARD": "l-groq-gpt-oss-120b",
-        "RAG_CARDS_DIR": str(root / "models" / "cards"),
-        "RAG__COMPUTE__SLOTS": "1",
-        "RAG__COMPUTE__SLOT_WAIT_S": "3",
-        "RAG__TIMEOUTS__REQUEST_DEADLINE_S": "25",
-        "RAG__TIMEOUTS__REQUEST_IDLE_S": "5",
-        "RAG__TIMEOUTS__ANALYSIS_S": "20",
-        "RAG__TIMEOUTS__RETRIEVAL_S": "10",
-        "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
-        "RAG__TIMEOUTS__RERANKER_S": "15",
-        "RAG__TIMEOUTS__LLM_READ_S": "60",
-        "RAG__HTTP__CORS_DOMAIN": "example.org",
-        "RAG__TRACING__URL": "",
-    }
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
-    settings = load_settings(env, secrets_dir=tmp_path)
-    rt = rt_module.build_runtime(settings, None, False)
+    settings = load_settings({**ENV, "RAG__CARD": card}, secrets_dir=tmp_path)
+    return settings, rt_module.build_runtime(settings, None, False)
+
+
+def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) -> None:
+    from rag_core.settings.card import effective_window
+
+    settings, rt = runtime_of("l-groq-gpt-oss-120b", tmp_path, monkeypatch)
     assert rt.answer_llm.model_name == "openai/gpt-oss-120b"
     assert str(rt.answer_llm.openai_api_base) == "https://api.groq.com/openai/v1"
     assert rt.analysis.runnable.bound.model_name == "qwen3:4b-instruct-2507-q4_K_M"  # the card's own analysis block
     assert str(rt.analysis.runnable.bound.openai_api_base) == "http://127.0.0.1:11434/v1"
     assert effective_window(settings.card) == 8000 == rt.counter.max_model_len
-    assert rt.counter.url == "https://api.groq.com/openai/tokenize"
+    assert not rt.counter.exact and rt.counter.chars_per_token == settings.card.chars_per_token  # no /tokenize at Groq
+    # the options each provider accepts: Groq the reasoning level, Ollama (the analysis) its own, neither the vLLM extras
+    assert rt.answer_llm.extra_body == {"reasoning_effort": "low"}
+    assert rt.analysis.runnable.bound.extra_body == {"reasoning_effort": "low"}
+
+
+def test_timeouts_come_from_card(tmp_path, monkeypatch) -> None:
+    settings, rt = runtime_of("xl-vllm-example", tmp_path, monkeypatch)
+    card = settings.card
+    assert card.slots == 4 and rt.slot._value == 4  # vLLM batches: the card's slots, not a setting of the stack
+    assert rt.answer_llm.request_timeout.read == card.timeouts.llm_read_s
+    assert rt.analysis.runnable.bound.request_timeout.read == card.timeouts.llm_read_s
+    assert rt.answer_llm.max_tokens == card.budget.answer_tokens  # the answer's tokens are the card's
+    assert rt.answer_llm.max_retries == rt.analysis.runnable.bound.max_retries == card.timeouts.retries
+    assert rt.answer_llm.temperature == card.sampling.temperature and rt.answer_llm.top_p == card.sampling.top_p
+    assert rt.answer_llm.extra_body["chat_template_kwargs"] == {"enable_thinking": False}
+    assert rt.counter.url == card.answer.url.removesuffix("/v1") + "/tokenize"  # /tokenize at vLLM
+    # the guard's deadline and silence limit are the card's
+    short = card.model_copy(update={"timeouts": card.timeouts.model_copy(update={"deadline_s": 41, "idle_s": 17})})
+    seen = {}
+
+    async def fake_guard(*args, **kwargs):
+        seen.update(kwargs)
+        yield ""
+
+    from assistant_api.api import chat as chat_route
+    from assistant_api.app import create_app
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(chat_route, "guard", fake_guard)
+    app = create_app()
+    app.dependency_overrides[chat_route.verify_token] = lambda: None
+    rt.settings = types.SimpleNamespace(
+        card=short, profile=settings.profile, overlay=settings.overlay, messages=settings.messages
+    )
+    rt.handler, rt.turns = None, None
+    app.state.runtime = rt
+    TestClient(app).get("/api/chat", params={"question": "Frage", "conversation_id": "c-1"})
+    assert (seen["deadline_s"], seen["idle_s"]) == (41, 17)
 
 
 class Langfuse:

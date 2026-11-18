@@ -18,13 +18,9 @@ from rag_core.settings.sections import Timeouts
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
 TIMEOUTS = Timeouts(
-    request_deadline_s=120,
-    request_idle_s=45,
-    analysis_s=20,
     retrieval_s=10,
     parent_lookup_s=5,
     reranker_s=15,
-    llm_read_s=60,
 )
 
 

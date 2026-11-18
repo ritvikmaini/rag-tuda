@@ -10,6 +10,8 @@ import pytest
 
 from rag_core.adapters import vllm_tokenize
 from rag_core.adapters.vllm_tokenize import VllmTokenCounter
+from rag_core.domain.context_budget import MESSAGE_OVERHEAD_TOKENS, CharsPerTokenCounter
+from rag_core.settings.card import Card
 
 
 def counter(monkeypatch, handler, base_url: str = "http://vllm.test/v1") -> VllmTokenCounter:
@@ -70,3 +72,47 @@ def test_the_servers_window_can_lower_the_configured_one_but_never_raise_it(monk
     tokens = counter(monkeypatch, handle)
     asyncio.run(tokens.count_text("Hallo"))
     assert tokens.max_model_len == 8192
+
+
+def test_token_counter_from_card(monkeypatch) -> None:
+    posted = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        posted.append(request)
+        return httpx.Response(200, json={"count": 7})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    monkeypatch.setattr(vllm_tokenize, "get_http_client", lambda: client)
+
+    def card(provider: str, url: str):
+        return Card.model_validate(
+            {
+                "name": "t",
+                "class": "M",
+                "structured_output": "json_schema",
+                "chars_per_token": 4.0,
+                "prompt_overlay": "large",
+                "slots": 1,
+                "answer": {"provider": provider, "url": url, "model": "m", "context_window": 8192},
+                "analysis": {
+                    "provider": "ollama",
+                    "url": "http://127.0.0.1:11434/v1",
+                    "model": "a",
+                    "context_window": 8192,
+                },
+                "budget": {"window_tokens": 6000, "answer_tokens": 500},
+                "gated": {"iterative_retrieval": True, "version_table": True},
+            }
+        )
+
+    vllm = vllm_tokenize.token_counter(card("vllm", "http://vllm.test/v1"))
+    assert isinstance(vllm, VllmTokenCounter) and vllm.max_model_len == 6000
+    assert asyncio.run(vllm.count_text("abcdefgh")) == 7 and len(posted) == 1  # /tokenize answered
+
+    for provider, url in (("ollama", "http://127.0.0.1:11434/v1"), ("groq", "https://api.groq.com/openai/v1")):
+        estimate = vllm_tokenize.token_counter(card(provider, url))
+        assert isinstance(estimate, CharsPerTokenCounter) and estimate.max_model_len == 6000 and not estimate.exact
+        assert asyncio.run(estimate.count_text("abcdefghi")) == 3  # ceil(9 / 4.0)
+        chat = [{"role": "user", "content": "abcdefgh"}]
+        assert asyncio.run(estimate.count_chat(chat)) == 2 + MESSAGE_OVERHEAD_TOKENS + MESSAGE_OVERHEAD_TOKENS
+    assert len(posted) == 1  # nothing was posted to the other providers

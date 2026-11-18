@@ -4,13 +4,15 @@ Context budget guard for the generation step.
 
 Fits the conversation history and the retrieved sources into the model's
 context window before the LLM call, so that no request is rejected for being
-too long. Token counts come from vLLM's /tokenize endpoint; when that call
-fails, a conservative estimate of 2 characters per token (the worst ratio
-measured on German source text) is used, which can only under-fill.
+too long. Token counts come from vLLM's /tokenize endpoint; for every other
+provider they are estimated from the card's characters per token. When the
+/tokenize call fails, a conservative estimate of 2 characters per token (the
+worst ratio measured on German source text) is used, which can only under-fill.
 """
 
 import asyncio
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol, Sequence, Tuple
@@ -99,7 +101,8 @@ def to_chat_dicts(messages: Sequence[Message]) -> List[Dict[str, str]]:
 
 
 class TokenCounter(Protocol):
-    """What fit_context needs from the token counter (vLLM's /tokenize behind rag_core.adapters.vllm_tokenize)."""
+    """What fit_context needs from the token counter (vLLM's /tokenize behind rag_core.adapters.vllm_tokenize, or the
+    estimate of CharsPerTokenCounter)."""
 
     max_model_len: int
     exact: bool
@@ -109,9 +112,29 @@ class TokenCounter(Protocol):
     async def count_chat(self, messages: List[Dict[str, str]]) -> int: ...
 
 
+class CharsPerTokenCounter:
+    """The token count of a provider with no tokenizer endpoint: the characters divided by the card's characters per token,
+    rounded up."""
+
+    exact = False
+
+    def __init__(self, chars_per_token: float, window: int) -> None:
+        self.chars_per_token = chars_per_token
+        self.max_model_len = window
+
+    async def count_text(self, text: str) -> int:
+        return math.ceil(len(text) / self.chars_per_token)
+
+    async def count_chat(self, messages: List[Dict[str, str]]) -> int:
+        return (
+            sum(math.ceil(len(m["content"]) / self.chars_per_token) + MESSAGE_OVERHEAD_TOKENS for m in messages)
+            + MESSAGE_OVERHEAD_TOKENS
+        )
+
+
 @dataclass(frozen=True)
 class ContextBudget:
-    reserve: int  # generation.max_tokens: the answer's tokens
+    reserve: int  # budget.answer_tokens: the answer's tokens
     margin: int  # guard.safety_margin
     window_chars: int  # guard.source_window_chars
     full_sources: int  # guard.full_sources

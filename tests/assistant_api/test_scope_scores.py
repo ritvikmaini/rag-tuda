@@ -90,7 +90,6 @@ def make_deps() -> GraphDeps:
         answer_llm=None,
         counter=None,  # type: ignore[arg-type]
         retrieval=Retrieval(),
-        timeouts=SimpleNamespace(analysis_s=20),  # type: ignore[arg-type]
     )
 
 

@@ -36,7 +36,7 @@ async def main(
     token: None = Depends(verify_token),
 ) -> StreamingResponse:
     rt = request.app.state.runtime
-    timeouts = rt.settings.overlay.timeouts
+    timeouts = rt.settings.card.timeouts
     principal = ANONYMOUS  # the route is where a deployment names its principal
     # stream format 1: meta (the first frame) names the turn and the trace; a variant or a version switch belongs to the turn
     # it changes (variant_of), a question to its own id (the page's, else a new one)
@@ -73,8 +73,8 @@ async def main(
                 principal=principal,
                 record=record,
             ),
-            deadline_s=timeouts.request_deadline_s,
-            idle_s=timeouts.request_idle_s,
+            deadline_s=timeouts.deadline_s,
+            idle_s=timeouts.idle_s,
             meta=frames.meta(turn, trace),
             messages=rt.messages,
             on_end=on_end,

@@ -37,15 +37,10 @@ services:
       - RAG__CARD=xl-vllm-example
       - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
       - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
-      - RAG__COMPUTE__SLOTS=1
       - RAG__COMPUTE__SLOT_WAIT_S=30
-      - RAG__TIMEOUTS__REQUEST_DEADLINE_S=120
-      - RAG__TIMEOUTS__REQUEST_IDLE_S=45
-      - RAG__TIMEOUTS__ANALYSIS_S=20
       - RAG__TIMEOUTS__RETRIEVAL_S=10
       - RAG__TIMEOUTS__PARENT_LOOKUP_S=5
       - RAG__TIMEOUTS__RERANKER_S=15
-      - RAG__TIMEOUTS__LLM_READ_S=60
       - RAG__HTTP__CORS_DOMAIN=example.org
       - RAG__TRACING__URL=   # empty: tracing is off (Langfuse needs this URL and its key files)
     secrets:

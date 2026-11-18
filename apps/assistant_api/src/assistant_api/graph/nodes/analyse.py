@@ -23,7 +23,7 @@ def make_analyse(deps: GraphDeps):
             identity=deps.profile.identity,
             prompts=deps.prompts,
             model=deps.analysis,
-            timeout_s=deps.timeouts.analysis_s,
+            timeout_s=deps.card.timeouts.analysis_s,
             max_queries=deps.profile.retrieval.max_queries,
             first_turn=not prior,
         )

@@ -1,5 +1,6 @@
 # The harness's model card: the fake LLM of deploy/compose.ci.yaml, which answers as the vLLM server it replaces. The window is
-# the one the fake reports from /tokenize; the foreign-script strip is on so the harness covers it.
+# the one the fake reports from /tokenize; the foreign-script strip is on so the harness covers it; the request deadline and
+# silence limit are short so the guard tests finish in seconds.
 name = "ci-fake"
 class = "M"
 structured_output = "json_object"
@@ -16,6 +17,12 @@ context_window = 8192
 [budget]
 window_tokens = 8192
 answer_tokens = 900
+
+[timeouts]
+deadline_s = 25
+idle_s = 5
+llm_read_s = 60
+analysis_s = 20
 
 [quirks]
 strip_cjk = true

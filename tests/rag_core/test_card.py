@@ -122,25 +122,21 @@ def test_logit_bias_only_from_card_quirks() -> None:
     with pytest.raises(ValueError, match="1024"):
         card(quirks={"logit_bias": {i: -100.0 for i in range(1025)}})
     assert len(card(quirks={"logit_bias": {i: -100.0 for i in range(1024)}}).quirks.logit_bias) == 1024
-    # the profile no longer carries any of them
-    base = {"temperature": 0.1, "analysis_temperature": 0, "max_tokens": 900, "analysis_max_tokens": 400}
-    sampling = {
-        "top_k": None,
-        "top_p": None,
-        "repetition_penalty": None,
-        "frequency_penalty": None,
-        "presence_penalty": None,
-    }
-    assert Generation.model_validate({**base, "sampling": sampling})
+    # the profile no longer carries any of them, nor the answer's sampling and tokens (the card's)
+    base = {"analysis_temperature": 0, "analysis_max_tokens": 400}
+    assert Generation.model_validate(base)
     for key, value in (
         ("model", "m"),
         ("analysis_model", "m"),
         ("disable_thinking", True),
         ("logit_bias", {1: 1.0}),
         ("bad_words", ["x"]),
+        ("max_tokens", 900),
+        ("temperature", 0.1),
+        ("sampling", {"top_k": 50}),
     ):
         with pytest.raises(ValueError):
-            Generation.model_validate({**base, "sampling": sampling, key: value})
+            Generation.model_validate({**base, key: value})
 
 
 def test_the_ten_shipped_cards_load_with_tomllib_and_the_model() -> None:

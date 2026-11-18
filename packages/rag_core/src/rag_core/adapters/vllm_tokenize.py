@@ -1,11 +1,18 @@
-"""vLLM's /tokenize for the context budget. The window is the card's effective window; the server's max_model_len can only lower it."""
+"""The token counter of the context budget, by the card's answer provider: vLLM's /tokenize, else the card's characters per
+token. The window is the card's effective window; the server's max_model_len can only lower it."""
 
 import logging
 import time
 from typing import Any, Dict, List, Optional
 
 from rag_core.adapters.http import get_http_client
-from rag_core.domain.context_budget import CHARS_PER_TOKEN_FALLBACK, MESSAGE_OVERHEAD_TOKENS
+from rag_core.domain.context_budget import (
+    CHARS_PER_TOKEN_FALLBACK,
+    MESSAGE_OVERHEAD_TOKENS,
+    CharsPerTokenCounter,
+    TokenCounter,
+)
+from rag_core.settings.card import Card, effective_window
 
 logger = logging.getLogger(__name__)
 
@@ -53,3 +60,12 @@ class VllmTokenCounter:
             sum(int(len(m["content"]) / CHARS_PER_TOKEN_FALLBACK) + MESSAGE_OVERHEAD_TOKENS for m in messages)
             + MESSAGE_OVERHEAD_TOKENS
         )
+
+
+def token_counter(card: Card) -> TokenCounter:
+    """/tokenize for a vLLM answer model; the card's chars_per_token for every other provider (no prompt leaves for a
+    tokenizer endpoint the provider does not have)."""
+    window = effective_window(card)
+    if card.answer.provider == "vllm":
+        return VllmTokenCounter(card.answer.url, card.answer.model, window)
+    return CharsPerTokenCounter(card.chars_per_token, window)

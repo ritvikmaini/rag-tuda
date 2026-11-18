@@ -15,12 +15,13 @@ from rag_core.adapters.embedding_http import EmbeddingClient
 from rag_core.adapters.http import get_http_client
 from rag_core.adapters.pg_index import IndexHandles, open_index
 from rag_core.adapters.reranker_http import RerankerHttp
-from rag_core.adapters.vllm_tokenize import VllmTokenCounter
+from rag_core.adapters.vllm_tokenize import token_counter
 from rag_core.domain.access import AllowAll
+from rag_core.domain.context_budget import TokenCounter
 from rag_core.domain.resilience import dispose_engines
 from rag_core.services.prompts import PromptService
 from rag_core.services.retrieval import RetrievalService
-from rag_core.settings.card import Endpoint, effective_window
+from rag_core.settings.card import Endpoint
 
 from assistant_api.graph.build import build_graph
 from assistant_api.graph.state import GraphDeps
@@ -39,7 +40,7 @@ class Runtime:
     prompts: PromptService
     answer_llm: Any
     analysis: ChatOpenAIModel
-    counter: VllmTokenCounter
+    counter: TokenCounter
     embedder: EmbeddingClient
     slot: asyncio.Semaphore
     turns: Any = None  # the TurnStore the lifespan sets (Any: no chat import here, no None check per use)
@@ -85,15 +86,18 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
     profile, card, overlay = settings.profile, settings.card, settings.overlay
     g = profile.generation
 
-    def chat(endpoint: Endpoint, reasoning: str, temperature: float) -> Any:
+    def chat(endpoint: Endpoint, reasoning: str, temperature: float, max_tokens: int, retries: int) -> Any:
         return build_chat_openai(
+            provider=endpoint.provider,
             model=endpoint.model,
-            temperature=temperature,
             base_url=endpoint.url,
-            max_tokens=g.max_tokens,
-            read_timeout_s=overlay.timeouts.llm_read_s,
-            disable_thinking=reasoning == "off" and endpoint.provider == "vllm",  # chat_template_kwargs: vLLM only
-            sampling=g.sampling.model_dump(),
+            temperature=temperature,
+            top_p=card.sampling.top_p,
+            max_tokens=max_tokens,
+            read_timeout_s=card.timeouts.llm_read_s,
+            reasoning=reasoning,
+            extras=card.sampling.extras,
+            max_retries=retries,
         )
 
     embedding = profile.retrieval.embedding
@@ -102,17 +106,30 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
         langfuse=langfuse,
         handler=make_handler(authenticated),
         prompts=PromptService(settings.prompts),
-        answer_llm=chat(card.answer, card.reasoning.answer, g.temperature),
-        analysis=ChatOpenAIModel(
-            chat(card.analysis_endpoint, card.reasoning.analysis, g.analysis_temperature), g.analysis_max_tokens
+        answer_llm=chat(
+            card.answer,
+            card.reasoning.answer,
+            card.sampling.temperature,
+            card.budget.answer_tokens,
+            card.timeouts.retries,
         ),
-        counter=VllmTokenCounter(card.answer.url, card.answer.model, effective_window(card)),
+        analysis=ChatOpenAIModel(
+            chat(
+                card.analysis_endpoint,
+                card.reasoning.analysis,
+                g.analysis_temperature,
+                g.analysis_max_tokens,
+                card.timeouts.retries,
+            ),
+            g.analysis_max_tokens,
+        ),
+        counter=token_counter(card),
         embedder=EmbeddingClient(
             overlay.model_servers.embedding_url,
             query_prefix=embedding.query_prefix,
             passage_prefix=embedding.passage_prefix,
         ),
-        slot=asyncio.Semaphore(overlay.compute.slots),
+        slot=asyncio.Semaphore(card.slots),
     )
 
 
@@ -127,7 +144,6 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
         analysis=rt.analysis,
         answer_llm=rt.answer_llm,
         counter=rt.counter,
-        timeouts=overlay.timeouts,
         retrieval=RetrievalService(
             rt.embedder,
             index.vector,
@@ -152,7 +168,6 @@ async def reload(rt: Runtime) -> None:
     logging.info(f"Successfully loaded retriever with FTS for collection: {rt.collection}")
     logging.info(f"Successfully loaded PostgreSQL parent lookup for collection: {rt.collection}")
     rt.index = index
-    overlay = rt.settings.overlay
     try:
         rt.generation = await rt.turns.live_generation(rt.collection) if rt.turns is not None else None
         logging.info(f"[Turns] live index generation {rt.generation}")
@@ -165,7 +180,7 @@ async def reload(rt: Runtime) -> None:
         raise
     logging.info("LangGraph chain has been re-created with new data.")
     if old is not None:
-        retire(rt, old.engines, overlay.timeouts.request_deadline_s)
+        retire(rt, old.engines, rt.settings.card.timeouts.deadline_s)
 
 
 def retire(rt: Runtime, engines: tuple[Any, ...], grace_s: float) -> None:

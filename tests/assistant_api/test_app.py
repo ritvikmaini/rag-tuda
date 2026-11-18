@@ -114,7 +114,7 @@ def test_the_chat_route_makes_a_turn_record_for_a_question_and_ends_it_through_t
     client, rt = app_with()
     rt.turns, rt.handler, rt.messages = Turns(), None, {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.overlay.timeouts = types.SimpleNamespace(request_deadline_s=5, request_idle_s=5)
+    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
     ask = {"conversation_id": "c-1"}
 
     def get(**params):
@@ -143,7 +143,7 @@ def chat_client(monkeypatch):
     client, rt = app_with()
     rt.turns, rt.handler, rt.messages = Turns(), None, {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.overlay.timeouts = types.SimpleNamespace(request_deadline_s=5, request_idle_s=5)
+    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
     return client
 
 
@@ -225,7 +225,7 @@ def test_the_route_s_principal_reaches_the_turn_record_and_the_service(monkeypat
     client, rt = app_with()
     rt.turns, rt.handler, rt.messages = None, None, {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.overlay.timeouts = types.SimpleNamespace(request_deadline_s=5, request_idle_s=5)
+    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
     params = {"question": "Frage", "conversation_id": "c-2"}
     assert client.get("/api/chat", params=params, headers={"Authorization": "Bearer t0k"}).status_code == 200
     assert seen[0][0] is principal and seen[0][1].principal == "amt-32"

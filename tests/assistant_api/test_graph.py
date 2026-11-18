@@ -27,7 +27,6 @@ from rag_core.services.prompts import PromptService, load_profile_prompts
 from rag_core.settings import load_profile
 from rag_core.settings.card import load_card
 from rag_core.settings.profile import Profile
-from rag_core.settings.sections import Timeouts
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
 CARD = Path(__file__).resolve().parents[2] / "deploy" / "env" / "ci-fake-card.toml"
@@ -86,15 +85,6 @@ def deps(intent: str) -> GraphDeps:
         answer_llm=GenericFakeChatModel(messages=iter([AIMessage(content="Die Antwort")])),
         counter=Counter(),
         retrieval=Retrieval(),
-        timeouts=Timeouts(
-            request_deadline_s=120,
-            request_idle_s=45,
-            analysis_s=20,
-            retrieval_s=10,
-            parent_lookup_s=5,
-            reranker_s=15,
-            llm_read_s=60,
-        ),
     )
 
 
@@ -665,12 +655,13 @@ def test_the_logit_bias_and_bad_words_are_bound_to_german_answers() -> None:
             return options
 
     quirks = load_card(CARD).quirks.model_copy(update={"logit_bias": {12: -5.0}, "bad_words": ("Mitarbeiter",)})
-    assert with_decoding_limits(Llm(), quirks) == {
+    assert with_decoding_limits(Llm(), quirks, "vllm") == {
         "logit_bias": {"12": -5.0},
         "extra_body": {"top_k": 50, "bad_words": ["Mitarbeiter"]},
     }
     llm = Llm()
-    assert with_decoding_limits(llm, load_card(CARD).quirks) is llm
+    assert with_decoding_limits(llm, load_card(CARD).quirks, "vllm") is llm
+    assert with_decoding_limits(llm, quirks, "ollama") is llm  # a provider that accepts no extras gets none
 
 
 ENGLISH_QUESTION = "How do I apply for leave?"

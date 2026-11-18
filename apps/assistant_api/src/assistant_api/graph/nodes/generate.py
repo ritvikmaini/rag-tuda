@@ -12,6 +12,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from rag_core.adapters.chat_openai import accepts_extras
 
 from rag_core.domain.answer_shapes import (
     answer_language,
@@ -110,9 +111,11 @@ def past_event_reply(answer: str, context: str, today: date, texts: Any) -> str 
     return text + (" [%s]" % cites[0] if cites else "") + "."
 
 
-def with_decoding_limits(llm: Any, quirks: Any) -> Any:
-    """The answer model with the card's logit bias and bad words bound to its requests (the model's own extra_body is
-    kept, since a bound extra_body replaces it)."""
+def with_decoding_limits(llm: Any, quirks: Any, provider: str) -> Any:
+    """The answer model with the card's logit bias and bad words bound to its requests where the provider accepts them (the
+    model's own extra_body is kept, since a bound extra_body replaces it)."""
+    if not accepts_extras(provider):
+        return llm
     options: dict[str, Any] = {}
     if quirks.logit_bias:
         options["logit_bias"] = {str(token): bias for token, bias in quirks.logit_bias.items()}
@@ -124,7 +127,7 @@ def with_decoding_limits(llm: Any, quirks: Any) -> Any:
 def make_generate(deps: GraphDeps):
     profile = deps.profile
     budget = ContextBudget(
-        reserve=profile.generation.max_tokens,
+        reserve=deps.card.budget.answer_tokens,
         margin=profile.guard.safety_margin,
         window_chars=profile.guard.source_window_chars,
         full_sources=profile.guard.full_sources,
@@ -241,7 +244,7 @@ def make_generate(deps: GraphDeps):
         try:
             llm = deps.answer_llm
             if answer_language(state) == "Deutsch":
-                llm = with_decoding_limits(llm, deps.card.quirks)
+                llm = with_decoding_limits(llm, deps.card.quirks, deps.card.answer.provider)
             response = await llm.ainvoke(prompt)
             if holds_answer(state):
                 try:

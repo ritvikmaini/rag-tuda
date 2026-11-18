@@ -158,20 +158,11 @@ class Guard(ProfileModel):
     full_sources: int = Field(ge=0)
 
 
-class Sampling(ProfileModel):
-    top_k: int | None
-    top_p: float | None
-    repetition_penalty: float | None
-    frequency_penalty: float | None
-    presence_penalty: float | None
-
-
 class Generation(ProfileModel):
-    temperature: float
+    """The analysis call's values; the answer's sampling, window and answer tokens are the model card's."""
+
     analysis_temperature: float
-    max_tokens: int = Field(gt=0)
     analysis_max_tokens: int = Field(gt=0)
-    sampling: Sampling
 
 
 class Formats(ProfileModel):

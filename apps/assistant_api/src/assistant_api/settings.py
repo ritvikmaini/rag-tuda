@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict
 
 from rag_core.domain.source_meta import SourceLabels
 from rag_core.services.prompts import PromptText, load_profile_prompts
@@ -28,15 +28,6 @@ class AssistantOverlay(OverlaySection):
     http: Http
     tracing: Tracing
     server: Server = Server()
-
-    @model_validator(mode="after")
-    def _ordered(self) -> AssistantOverlay:
-        if not self.compute.slot_wait_s < self.timeouts.request_idle_s <= self.timeouts.request_deadline_s:
-            raise ValueError(
-                "compute.slot_wait_s < timeouts.request_idle_s <= timeouts.request_deadline_s (the guard's "
-                "silence limit must not end a request that waits for the slot)"
-            )
-        return self
 
 
 class _Texts(BaseModel):
@@ -139,6 +130,11 @@ def load_settings(
         secrets_dir=secrets_dir,
         profile_sections=frozenset(Profile.model_fields),
     )
+    if not overlay.compute.slot_wait_s < card.timeouts.idle_s <= card.timeouts.deadline_s:
+        raise SettingsError(
+            f"compute.slot_wait_s < timeouts.idle_s <= timeouts.deadline_s (the card {card.name}'s): the guard's "
+            "silence limit must not end a request that waits for the slot"
+        )
     texts = yaml.safe_load((profile_file.parent / "messages.de.yaml").read_text(encoding="utf-8"))
     prompts = load_profile_prompts(profile_file.parent / "prompts")
     return AssistantSettings(profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent)

@@ -18,23 +18,14 @@ STACK = {  # the stack's values as RAG__ entries
     "RAG__CARD": "xl-vllm-example",
     "RAG__MODEL_SERVERS__EMBEDDING_URL": "http://embedding_service:8001",
     "RAG__MODEL_SERVERS__RERANKER_URL": "http://reranker_service:8003",
-    "RAG__COMPUTE__SLOTS": "1",
     "RAG__COMPUTE__SLOT_WAIT_S": "30",
-    "RAG__TIMEOUTS__REQUEST_DEADLINE_S": "120",
-    "RAG__TIMEOUTS__REQUEST_IDLE_S": "45",
-    "RAG__TIMEOUTS__ANALYSIS_S": "20",
     "RAG__TIMEOUTS__RETRIEVAL_S": "10",
     "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
     "RAG__TIMEOUTS__RERANKER_S": "15",
-    "RAG__TIMEOUTS__LLM_READ_S": "60",
     "RAG__HTTP__CORS_DOMAIN": "example.org",
     "RAG__TRACING__URL": "",
 }
-CI_ONLY = {
-    "RAG__COMPUTE__SLOT_WAIT_S": "3",
-    "RAG__TIMEOUTS__REQUEST_DEADLINE_S": "25",
-    "RAG__TIMEOUTS__REQUEST_IDLE_S": "5",
-}
+CI_ONLY = {"RAG__COMPUTE__SLOT_WAIT_S": "3"}
 LINUX = {
     "sys_platform": "linux",
     "platform_system": "Linux",
@@ -127,31 +118,24 @@ def test_the_stack_environment_holds_the_expected_values() -> None:
     assert "RAG_OVERLAY" not in env and "RAG_PROFILE" not in env  # no overlay for the backend; the profile is baked
     assert env["RAG__MODEL_SERVERS__EMBEDDING_URL"] + "/embed" == "http://embedding_service:8001/embed"
     assert env["RAG__MODEL_SERVERS__RERANKER_URL"] + "/v2/rerank" == "http://reranker_service:8003/v2/rerank"
-    assert (
-        env["RAG__COMPUTE__SLOTS"] == "1" and env["RAG__COMPUTE__SLOT_WAIT_S"] == "30"
-    )  # the code default of the wait is 10
+    assert env["RAG__COMPUTE__SLOT_WAIT_S"] == "30"  # the code default of the wait is 10
 
 
 def test_the_stack_sets_the_slot_and_timeout_values_the_code_does_not_default() -> None:
     """A wrong default would change answers under load without a test failing: the pipeline slot wait is 30 s in the stack (the
-    settings model has no default for it), one slot, request deadline 120 s and idle 45 s, CORS for example.org."""
+    settings model has no default for it), CORS for example.org. The slots, request deadline and idle limit are the card's."""
     env = environment(backend("deploy/compose.yaml"))
     expected = {
-        "RAG__COMPUTE__SLOTS": "1",
         "RAG__COMPUTE__SLOT_WAIT_S": "30",
-        "RAG__TIMEOUTS__REQUEST_DEADLINE_S": "120",
-        "RAG__TIMEOUTS__REQUEST_IDLE_S": "45",
-        "RAG__TIMEOUTS__ANALYSIS_S": "20",
         "RAG__TIMEOUTS__RETRIEVAL_S": "10",
         "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
         "RAG__TIMEOUTS__RERANKER_S": "15",
-        "RAG__TIMEOUTS__LLM_READ_S": "60",
         "RAG__HTTP__CORS_DOMAIN": "example.org",
     }
     assert {key: env[key] for key in expected} == expected
 
 
-def test_the_ci_environment_differs_only_in_the_card_and_the_three_harness_timeouts() -> None:
+def test_the_ci_environment_differs_only_in_the_card_and_the_slot_wait() -> None:
     env = {k: v for k, v in environment(backend("deploy/compose.ci.yaml")).items() if k.startswith("RAG__")}
     assert env.pop("RAG__CARD_FILE") == "/app/card.toml"  # the harness's card file replaces the named card
     env["RAG__CARD"] = STACK["RAG__CARD"]

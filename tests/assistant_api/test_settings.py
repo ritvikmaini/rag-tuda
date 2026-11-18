@@ -48,14 +48,7 @@ EXPECTED = {
     "CONTEXT_SAFETY_MARGIN": ("guard.safety_margin", 128),
     "SOURCE_WINDOW_CHARS": ("guard.source_window_chars", 300),
     "FULL_SOURCES": ("guard.full_sources", 3),
-    "RAG_TEMPERATURE": ("generation.temperature", 0.1),
-    "MAX_TOKENS": ("generation.max_tokens", 900),
     "ANALYSIS_MAX_TOKENS": ("generation.analysis_max_tokens", 400),
-    "TOP_K": ("generation.sampling.top_k", 50),
-    "TOP_P": ("generation.sampling.top_p", 0.1),
-    "REPETITION_PENALTY": ("generation.sampling.repetition_penalty", 1.05),
-    "FREQUENCY_PENALTY": ("generation.sampling.frequency_penalty", None),
-    "PRESENCE_PENALTY": ("generation.sampling.presence_penalty", None),
     "SOURCES_EVENT": ("formats.sources_event", "before"),
 }
 # values the profile names beyond that table: the analysis temperature, the date locale and format, the reranker's revision
@@ -75,15 +68,10 @@ STACK = {
     "RAG__CARD_FILE": str(ROOT / "deploy" / "env" / "ci-fake-card.toml"),
     "RAG__MODEL_SERVERS__EMBEDDING_URL": "http://embedding_service:8001",
     "RAG__MODEL_SERVERS__RERANKER_URL": "http://reranker_service:8003",
-    "RAG__COMPUTE__SLOTS": "1",
-    "RAG__COMPUTE__SLOT_WAIT_S": "30",
-    "RAG__TIMEOUTS__REQUEST_DEADLINE_S": "120",
-    "RAG__TIMEOUTS__REQUEST_IDLE_S": "45",
-    "RAG__TIMEOUTS__ANALYSIS_S": "20",
+    "RAG__COMPUTE__SLOT_WAIT_S": "3",
     "RAG__TIMEOUTS__RETRIEVAL_S": "10",
     "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
     "RAG__TIMEOUTS__RERANKER_S": "15",
-    "RAG__TIMEOUTS__LLM_READ_S": "60",
     "RAG__HTTP__CORS_DOMAIN": "example.org",
     "RAG__TRACING__URL": "",
 }
@@ -164,16 +152,8 @@ def test_every_assistant_profile_value_is_explained(secrets: Path) -> None:
 
 def test_the_environment_supplies_the_technical_values(secrets: Path) -> None:
     overlay = load_settings(environment(), secrets_dir=secrets).overlay
-    assert (overlay.compute.slots, overlay.compute.slot_wait_s) == (1, 30)
-    assert (
-        overlay.timeouts.request_deadline_s,
-        overlay.timeouts.request_idle_s,
-        overlay.timeouts.analysis_s,
-        overlay.timeouts.retrieval_s,
-        overlay.timeouts.parent_lookup_s,
-        overlay.timeouts.reranker_s,
-        overlay.timeouts.llm_read_s,
-    ) == (120, 45, 20, 10, 5, 15, 60)
+    assert overlay.compute.slot_wait_s == 3
+    assert (overlay.timeouts.retrieval_s, overlay.timeouts.parent_lookup_s, overlay.timeouts.reranker_s) == (10, 5, 15)
     assert overlay.model_servers.reranker_url == "http://reranker_service:8003"
     assert (overlay.database.host, overlay.database.port) == ("pgvector", 5432)
     assert (overlay.http.cors_domain, overlay.tracing.url) == ("example.org", "")
@@ -186,12 +166,13 @@ def test_a_profile_key_in_the_environment_is_refused(secrets: Path) -> None:
 
 def test_a_missing_technical_value_is_refused(secrets: Path) -> None:
     with pytest.raises(SettingsError, match="compute"):
-        load_settings(environment(RAG__COMPUTE__SLOTS="<unset>"), secrets_dir=secrets)
+        load_settings(environment(RAG__COMPUTE__SLOT_WAIT_S="<unset>"), secrets_dir=secrets)
 
 
 def test_the_slot_wait_ends_before_the_silence_limit(secrets: Path) -> None:
+    """The card's idle_s is 5 s: a wait of 5 s would let the guard's silence limit end a request still waiting for the slot."""
     with pytest.raises(SettingsError, match="slot_wait_s"):
-        load_settings(environment(RAG__COMPUTE__SLOT_WAIT_S="45"), secrets_dir=secrets)
+        load_settings(environment(RAG__COMPUTE__SLOT_WAIT_S="5"), secrets_dir=secrets)
 
 
 def test_the_token_comes_from_the_secret_file(secrets: Path) -> None:

@@ -153,8 +153,8 @@ def test_every_line_of_a_question_carries_its_ref(monkeypatch) -> None:
     app.dependency_overrides[verify_token] = lambda: None
     app.state.runtime = types.SimpleNamespace(
         settings=types.SimpleNamespace(
+            card=types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5)),
             overlay=types.SimpleNamespace(
-                timeouts=types.SimpleNamespace(request_deadline_s=5, request_idle_s=5),
                 server=types.SimpleNamespace(token=SecretStr("t")),
                 http=types.SimpleNamespace(cors_domain="example.org"),
             ),
