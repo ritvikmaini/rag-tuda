@@ -37,8 +37,6 @@ build-backend = "uv_build"
 [tool.deptry.per_rule_ignores]
 # installed but not imported by the indexer's own code
 DEP002 = [
-    "httpx",
-    "lxml",
     "pgvector",
     "psycopg",
     "python-box",

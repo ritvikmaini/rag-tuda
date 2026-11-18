@@ -1,1 +1,1 @@
-"""The crawler: robots.txt matching."""
+"""The crawler: the robots.txt matcher and the polite fetcher."""
