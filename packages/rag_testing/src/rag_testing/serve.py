@@ -5,6 +5,8 @@ compose service per fake, each started as `python -m rag_testing.serve <name> --
                                        (POST /_script), the request log (GET /_calls), POST /_reset
   embedder   embedding_service:8001    /embed
   reranker   reranker_service:8003     /v2/rerank
+  minisite   <port>                    the faculty host of the fixture mini-site (rag_testing.minisite): pages, robots.txt, PDFs
+  minisite-intern <port>               its second host, the original of the general examination regulation
 
 Never installed in a service image: import-linter's testing-dev-only contract keeps packages/ and apps/ from importing it."""
 
@@ -14,10 +16,13 @@ from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import uvicorn
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from rag_testing import llm, scoring
+from rag_testing.minisite import pages
+
+INTERN_ORIGIN = "http://127.0.0.1:8092"
 
 
 def llm_app() -> FastAPI:
@@ -114,12 +119,42 @@ def reranker_app() -> FastAPI:
     return app
 
 
+def minisite_app(site: str = "fb20", intern_origin: str = INTERN_ORIGIN) -> FastAPI:
+    """One host of the mini-site: `fb20` or `intern`. `intern_origin` is where the second host is reached, for the links to it."""
+    files = {"fb20": pages.FB20, "intern": pages.INTERN}[site]
+    app = FastAPI()
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/{path:path}")
+    async def page(path: str, request: Request) -> Response:
+        found = files.get("/" + path)
+        if found is None:
+            raise HTTPException(status_code=404)
+        media_type, body = found
+        if isinstance(body, str):
+            body = body.replace("@INTERN@", intern_origin).replace("@SELF@", str(request.base_url).rstrip("/"))
+            media_type += "; charset=utf-8"
+        return Response(body, media_type=media_type)
+
+    return app
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="python -m rag_testing.serve", description="Start one fake of the harness")
-    builders = {"llm": llm_app, "embedder": embedder_app, "reranker": reranker_app}
-    ap.add_argument("name", choices=list(builders))
+    ap.add_argument("name", choices=["llm", "embedder", "reranker", "minisite", "minisite-intern"])
     ap.add_argument("--port", type=int, required=True)
+    ap.add_argument("--intern-origin", default=INTERN_ORIGIN, help="where minisite links to the second host")
     args = ap.parse_args(argv)
+    builders = {
+        "llm": llm_app,
+        "embedder": embedder_app,
+        "reranker": reranker_app,
+        "minisite": lambda: minisite_app("fb20", args.intern_origin),
+        "minisite-intern": lambda: minisite_app("intern", args.intern_origin),
+    }
     app = builders[args.name]()
     uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
 

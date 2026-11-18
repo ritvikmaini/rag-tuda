@@ -53,7 +53,7 @@ def test_the_embedder_and_reranker_servers_keep_the_services_contracts():
     assert client.post("/rerank-multi-query", json={"queries": ["a b"], "documents": ["a"]}).status_code == 404
 
 
-@pytest.mark.parametrize("name", ["llm", "embedder", "reranker"])
+@pytest.mark.parametrize("name", ["llm", "embedder", "reranker", "minisite", "minisite-intern"])
 def test_every_fake_can_be_named_on_the_command_line(name, monkeypatch):
     started = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: started.append((app, kw["port"])))
