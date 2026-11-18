@@ -1,11 +1,12 @@
 """The reranker server by import: settings from the environment, the pinned load (fake torch, Hugging Face and
-sentence-transformers), length-sorted scoring, the rerank endpoint, one GPU job at a time, the client-left stop, the
+sentence-transformers), the two scoring modes, length-sorted scoring, the rerank endpoint, one GPU job at a time, the client-left stop, the
 start-up reference pair, the routes, the fatal CUDA exit and the device choice. No GPU and no model."""
 
 import asyncio
 import dataclasses
 import json
 import logging
+import math
 import os
 import signal
 import sys
@@ -70,6 +71,11 @@ def test_settings_come_from_the_environment():
     assert main.Settings.from_env({**env, "MAX_LENGTH": ""}) == SETTINGS
     with pytest.raises(ValueError, match="MAX_LENGTH is not a positive integer"):
         main.Settings.from_env({**env, "MAX_LENGTH": "0"})
+    assert SETTINGS.mode == "cross_encoder"
+    assert main.Settings.from_env({**env, "RERANK_MODE": "qwen_yes_no"}).mode == "qwen_yes_no"
+    assert main.Settings.from_env({**env, "RERANK_MODE": ""}) == SETTINGS
+    with pytest.raises(ValueError, match="RERANK_MODE=yes_no is not one of cross_encoder, qwen_yes_no"):
+        main.Settings.from_env({**env, "RERANK_MODE": "yes_no"})
     assert main.Settings.from_env(
         {**env, "RERANKER_PREDICT_BATCH_SIZE": "8", "MULTI_QUERY_WAIT_S": "1.5"}
     ) == main.Settings(SETTINGS.model, REV, 8, 1.5)
@@ -157,6 +163,176 @@ def test_fp16_on_mps(monkeypatch):
     calls = fake_libraries(monkeypatch, cuda=False, mps=True)
     model = main.load_model(SETTINGS)
     assert calls["to"] == [("mps", "torch.float16")] and (model.dtype, model.device) == ("float16", "mps")
+
+
+# --- the qwen yes/no mode ------------------------------------------------------------------------------------------------
+class FakeQwenTokenizer:
+    """words are tokens: 0 is "no", 1 is "yes", the rest are numbered as they come; pad ids are 99, on the left"""
+
+    def __init__(self, padding_side="left"):
+        self.vocabulary, self.padding_side = {}, padding_side
+
+    def _ids(self, text):
+        return [self.vocabulary.setdefault(word, 2 + len(self.vocabulary)) for word in text.split()]
+
+    def convert_tokens_to_ids(self, token):
+        return {"no": 0, "yes": 1}[token]
+
+    def encode(self, text, add_special_tokens):
+        assert add_special_tokens is False
+        return self._ids(text)
+
+    def __call__(self, texts, padding, truncation, return_attention_mask, max_length):
+        assert (padding, truncation, return_attention_mask) == (False, "longest_first", False)
+        return {"input_ids": [self._ids(text)[:max_length] for text in texts]}
+
+    def pad(self, inputs, padding, return_tensors):
+        import torch
+
+        assert (padding, return_tensors) == (True, "pt")
+        longest = max(map(len, inputs["input_ids"]))
+        gap = {
+            "left": lambda ids: [99] * (longest - len(ids)) + ids,
+            "right": lambda ids: ids + [99] * (longest - len(ids)),
+        }
+        rows = [gap[self.padding_side](ids) for ids in inputs["input_ids"]]
+        mask = [[int(i != 99) for i in row] for row in rows]
+
+        class Batch(dict):
+            def to(self, device):
+                return self
+
+        return Batch(input_ids=torch.tensor(rows), attention_mask=torch.tensor(mask))
+
+
+class FakeQwenModel:
+    """says yes (logit +6, against 0 for no) when the query's key word is also in the document, else no (-6); a row that
+    does not end on a real token (right padding) makes it say no, as a model reading a pad position would be wrong"""
+
+    device = "cpu"
+
+    def __init__(self, key_id):
+        self.key_id, self.seen = key_id, []
+
+    def __call__(self, input_ids, attention_mask, logits_to_keep):
+        import torch
+
+        self.seen.append((input_ids, attention_mask, logits_to_keep))
+        logits = torch.zeros(len(input_ids), 1, 3)
+        for row, ids in enumerate(input_ids):
+            logits[row, -1, 1] = 6.0 if (ids == self.key_id).sum() >= 2 and ids[-1] != 99 else -6.0
+        return types.SimpleNamespace(logits=logits)
+
+
+def test_qwen_yes_no_scores_in_unit_interval():
+    tokenizer = FakeQwenTokenizer()
+    model = FakeQwenModel(key_id=tokenizer._ids("urlaub")[0])
+    predict = main.qwen_yes_no_predict(tokenizer, model, max_length=64)
+    pairs = [
+        ("urlaub", "urlaub beantragen beim personalamt"),
+        ("urlaub", "das rathaus"),
+        ("urlaub", "so viel urlaub wie noch nie"),
+    ]
+    scores = predict(pairs, batch_size=2, convert_to_numpy=True)
+    yes_if_relevant = 1 / (1 + math.exp(-6))  # softmax over [no=0, yes=6], taken at yes
+    assert scores == pytest.approx([yes_if_relevant, 1 - yes_if_relevant, yes_if_relevant])
+    assert all(0.0 <= score <= 1.0 for score in scores)
+    assert [len(ids) for ids, _, _ in model.seen] == [2, 1]
+    assert len(model.seen) == 2 and all(
+        keep == 1 for _, _, keep in model.seen
+    )  # batches of 2, last-position logits only
+
+
+def test_qwen_scores_do_not_depend_on_the_tokenizers_padding_side():
+    pairs = [("urlaub", "urlaub beantragen beim personalamt heute noch"), ("urlaub", "urlaub")]
+    for side in ("left", "right"):
+        tokenizer = FakeQwenTokenizer(padding_side=side)
+        predict = main.qwen_yes_no_predict(tokenizer, FakeQwenModel(key_id=tokenizer._ids("urlaub")[0]), max_length=200)
+        assert tokenizer.padding_side == "left"
+        assert predict(pairs, batch_size=2) == pytest.approx([1 / (1 + math.exp(-6))] * 2), side
+
+
+def test_the_qwen_prompt_wraps_each_pair_and_pads_on_the_left():
+    tokenizer = FakeQwenTokenizer()
+    model = FakeQwenModel(key_id=-1)
+    predict = main.qwen_yes_no_predict(tokenizer, model, max_length=1000)
+    predict([("a", "b"), ("a", "b c d e f")], batch_size=8)
+    ((ids, mask, _),) = model.seen
+    prefix, suffix = tokenizer._ids(main.QWEN_PREFIX), tokenizer._ids(main.QWEN_SUFFIX)
+    short, long = ids.tolist()
+    assert long[: len(prefix)] == prefix and long[-len(suffix) :] == suffix
+    assert short[-len(suffix) :] == suffix and short[:4] == [99] * 4  # the shorter row is padded on the left
+    assert mask.tolist()[0][:4] == [0] * 4 and sum(mask.tolist()[1]) == len(long)
+    sent = main.QWEN_PAIR.format(instruction=main.QWEN_INSTRUCTION, query="a", document="b")
+    assert sent.startswith("<Instruct>: Given a web search query") and "\n<Query>: a\n<Document>: b" in sent
+
+
+def test_a_qwen_pair_is_cut_to_the_length_setting_with_the_prompt_kept():
+    tokenizer = FakeQwenTokenizer()
+    model = FakeQwenModel(key_id=-1)
+    prompt = len(tokenizer._ids(main.QWEN_PREFIX)) + len(tokenizer._ids(main.QWEN_SUFFIX))
+    main.qwen_yes_no_predict(tokenizer, model, max_length=prompt + 10)([("q", " ".join(["w"] * 50))], batch_size=1)
+    assert model.seen[0][0].shape[1] == prompt + 10
+
+
+def test_qwen_scores_go_through_the_length_sorted_call():
+    tokenizer = FakeQwenTokenizer()
+    predict = main.qwen_yes_no_predict(tokenizer, FakeQwenModel(key_id=tokenizer._ids("urlaub")[0]), max_length=200)
+    pairs = [("urlaub", "x " * 20 + "urlaub"), ("urlaub", "nichts"), ("urlaub", "urlaub")]
+    scores = main.length_sorted_predict(predict, pairs, 2)
+    assert [round(score) for score in scores] == [1, 0, 1]  # in the input order
+
+
+def fake_qwen_libraries(monkeypatch, cuda=False, mps=False):
+    calls = fake_libraries(monkeypatch, cuda=cuda, mps=mps)
+    sys.modules["torch"].float16, sys.modules["torch"].float32 = "torch.float16", "torch.float32"
+
+    class Tokenizer(FakeQwenTokenizer):
+        @classmethod
+        def from_pretrained(cls, path, padding_side, local_files_only):
+            calls["tokenizer"] = (path, padding_side, local_files_only)
+            return cls()
+
+    class CausalLM:
+        device = "cpu"
+
+        def __init__(self, dtype):
+            self.dtype = dtype
+
+        @classmethod
+        def from_pretrained(cls, path, torch_dtype, local_files_only):
+            calls["causal_lm"] = (path, torch_dtype, local_files_only)
+            return cls(torch_dtype)
+
+        def to(self, device):
+            calls["moved_to"] = device
+            return self
+
+        def eval(self):
+            calls["eval"] = True
+            return self
+
+        def parameters(self):
+            return iter([types.SimpleNamespace(dtype=self.dtype)])
+
+    monkeypatch.setitem(
+        sys.modules, "transformers", types.SimpleNamespace(AutoTokenizer=Tokenizer, AutoModelForCausalLM=CausalLM)
+    )
+    return calls
+
+
+@pytest.mark.parametrize(
+    "cuda, mps, device, dtype",
+    [(True, False, "cuda", "float16"), (False, True, "mps", "float16"), (False, False, "cpu", "float32")],
+)
+def test_the_qwen_mode_loads_a_causal_model_in_the_device_dtype(monkeypatch, cuda, mps, device, dtype):
+    calls = fake_qwen_libraries(monkeypatch, cuda=cuda, mps=mps)
+    model = main.load_model(dataclasses.replace(SETTINGS, mode="qwen_yes_no"))
+    path = "/hf/hub/snapshots/" + REV
+    assert calls["snapshot"] == (SETTINGS.model, REV, True) and "cross_encoder" not in calls
+    assert calls["tokenizer"] == (path, "left", True)  # the answer position must be the last
+    assert calls["causal_lm"] == (path, "torch." + dtype, True) and calls["moved_to"] == device and calls["eval"]
+    assert (model.dtype, model.device) == (dtype, device)
 
 
 # --- length-sorted scoring ----------------------------
@@ -311,6 +487,7 @@ def test_info_liveness_and_the_routes_that_are_gone(tmp_path):
             "max_length": 1024,
             "dtype": "float16",
             "device": "cuda",
+            "mode": "cross_encoder",
         }
     with client(tmp_path, settings=dataclasses.replace(SETTINGS, max_length=256)) as c:
         assert c.get("/info").json()["max_length"] == 256

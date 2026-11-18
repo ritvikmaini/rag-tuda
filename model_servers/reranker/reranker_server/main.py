@@ -1,12 +1,14 @@
 """The reranker server.
 
 POST /v2/rerank {"queries": [str], "documents": [str]} -> {"scores": [float]} aligned to the documents, each the highest
-over the queries (multi-query). One job on the GPU at a time: a waiting request gets 503 after
-MULTI_QUERY_WAIT_S, and a job stops between queries when its client has left. GET /info, /readyz (the start-up reference
-pair, from reference.<device>.json when it exists, else reference.json), /healthz. The settings come from the
-environment the Dockerfile sets; the model loads in the lifespan from its pinned snapshot, never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone)
-answers 500, turns /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. The device is
-RAG_DEVICE (cuda, mps or cpu; unset: the first available in that order), and a device that is not available stops the start.
+over the queries (multi-query). One job on the GPU at a time: a waiting request gets 503 after MULTI_QUERY_WAIT_S, and a job
+stops between queries when its client has left. GET /info (model, revision, max_length, dtype, device, mode), /readyz (the
+start-up reference pair, from reference.<device>.json when it exists, else reference.json), /healthz. The settings come
+from the environment the Dockerfile sets (MAX_LENGTH tokens per pair; RERANK_MODE cross_encoder, or qwen_yes_no for a
+Qwen3-Reranker scored by the probability of "yes"); the model loads in the lifespan from its pinned snapshot, never from the
+network; nothing happens at import. The device is RAG_DEVICE (cuda, mps or cpu; unset: the first available in that order),
+and a device that is not available stops the start. A torch.AcceleratorError (the CUDA context is gone) answers 500, turns
+/readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it.
 Run: uvicorn --factory reranker_server.main:create_app"""
 
 import asyncio
@@ -30,6 +32,7 @@ from pydantic import BaseModel
 logger = logging.getLogger("reranker_server")
 
 COMMIT = re.compile(r"[0-9a-f]{40}")
+MODES = ("cross_encoder", "qwen_yes_no")
 READY_DIFFERENCE = 1e-3  # the reference pair's score may differ by at most this
 REFERENCE = Path(__file__).with_name("reference.json")
 
@@ -89,6 +92,7 @@ class Settings:
     predict_batch_size: int = 32  # CrossEncoder.predict's default
     wait_s: float = 20.0  # a request waiting for the GPU job gives up after this (the assistant's timeout is 15 s)
     max_length: int = 1024  # tokens per (query, passage) pair; a parent section is ~500-700 tokens
+    mode: str = "cross_encoder"  # or qwen_yes_no: a generative model whose yes/no logits are the score
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
@@ -97,12 +101,16 @@ class Settings:
             raise ValueError("missing in the environment: " + ", ".join(missing))
         if not COMMIT.fullmatch(env["RERANKER_REVISION"]):
             raise ValueError("RERANKER_REVISION is not a 40-character commit hash")
+        mode = env.get("RERANK_MODE") or "cross_encoder"
+        if mode not in MODES:
+            raise ValueError("RERANK_MODE=%s is not one of %s" % (mode, ", ".join(MODES)))
         return cls(
             env["RERANKER_MODEL"],
             env["RERANKER_REVISION"],
             int(env.get("RERANKER_PREDICT_BATCH_SIZE", "32")),
             float(env.get("MULTI_QUERY_WAIT_S", "20")),
             positive_int(env, "MAX_LENGTH", 1024),
+            mode,
         )
 
 
@@ -128,18 +136,59 @@ def length_sorted_predict(predict, pairs, batch_size):
     return out
 
 
-def load_model(settings: Settings) -> Loaded:
-    """The CrossEncoder from its pinned snapshot (a missing snapshot fails the start), max_length tokens per pair, fp16 on
-    CUDA and MPS, fp32 on the CPU (a failed conversion keeps fp32 and says so), converted on the CPU before the move. No
-    remote code."""
+QWEN_INSTRUCTION = "Given a web search query, retrieve relevant passages that answer the query"
+QWEN_PREFIX = (
+    "<|im_start|>system\nJudge whether the Document meets the requirements based on the Query and the Instruct provided. "
+    'Note that the answer can only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
+)
+QWEN_SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+QWEN_PAIR = "<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {document}"
+
+
+def qwen_yes_no_predict(tokenizer, model, max_length):
+    """The predict function of a Qwen3-Reranker, a generative model that answers "yes" or "no" to whether the document meets
+    the query: each pair goes into the model card's prompt, left-padded so the answer position is the last, and the score is
+    the softmax of the "no" and "yes" logits there, taken at "yes" (the probability of yes, between 0 and 1). The pairs are cut
+    to max_length tokens with the prompt's own tokens kept. Same call as CrossEncoder.predict."""
     import torch
-    from huggingface_hub import snapshot_download
+
+    tokenizer.padding_side = "left"  # whatever the tokenizer was configured with: the answer position must be the last
+    no, yes = tokenizer.convert_tokens_to_ids("no"), tokenizer.convert_tokens_to_ids("yes")
+    prefix = tokenizer.encode(QWEN_PREFIX, add_special_tokens=False)
+    suffix = tokenizer.encode(QWEN_SUFFIX, add_special_tokens=False)
+
+    def predict(pairs, batch_size=32, convert_to_numpy=True):
+        scores = []
+        for start in range(0, len(pairs), batch_size):
+            texts = [
+                QWEN_PAIR.format(instruction=QWEN_INSTRUCTION, query=query, document=document)
+                for query, document in pairs[start : start + batch_size]
+            ]
+            inputs = tokenizer(
+                texts,
+                padding=False,
+                truncation="longest_first",
+                return_attention_mask=False,
+                max_length=max_length - len(prefix) - len(suffix),
+            )
+            inputs["input_ids"] = [prefix + ids + suffix for ids in inputs["input_ids"]]
+            batch = tokenizer.pad(inputs, padding=True, return_tensors="pt").to(model.device)
+            with torch.no_grad():
+                last = model(**batch, logits_to_keep=1).logits[
+                    :, -1, :
+                ]  # only the last position's logits: no 150k-wide rows
+            answers = torch.stack([last[:, no], last[:, yes]], dim=1).float()
+            scores += torch.softmax(answers, dim=1)[:, 1].tolist()
+        return scores
+
+    return predict
+
+
+def load_cross_encoder(path, settings, device):
+    """(predict, torch module) of the CrossEncoder at path, fp16 on CUDA and MPS (a failed conversion keeps fp32 and says
+    so), converted on the CPU before the move."""
     from sentence_transformers import CrossEncoder
 
-    device = pick_device(os.environ, torch.cuda.is_available(), torch.backends.mps.is_available())
-    logger.info("Reranker source: local CrossEncoder (device: %s)", device)
-    logger.info("Loading reranking model: %s at %s", settings.model, settings.revision)
-    path = snapshot_download(settings.model, revision=settings.revision, local_files_only=True)
     # on the CPU: s-t 4 would move the fp32 weights to the GPU in __init__, where the card has no room for them
     model = CrossEncoder(path, max_length=settings.max_length, device="cpu")
     if device != "cpu":
@@ -149,8 +198,35 @@ def load_model(settings: Settings) -> Loaded:
         except Exception as e:
             logger.warning("fp16 conversion failed, the reranker stays fp32: %s", e)
         model.model.to(device)  # the accelerator only ever holds the fp16 weights
+    return model.predict, model.model
+
+
+def load_qwen(path, settings, device):
+    """(predict, torch module) of the Qwen3-Reranker at path, loaded in fp16 on CUDA and MPS, fp32 on the CPU."""
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(path, padding_side="left", local_files_only=True)
+    dtype = torch.float32 if device == "cpu" else torch.float16
+    model = AutoModelForCausalLM.from_pretrained(path, torch_dtype=dtype, local_files_only=True).to(device).eval()
+    return qwen_yes_no_predict(tokenizer, model, settings.max_length), model
+
+
+def load_model(settings: Settings) -> Loaded:
+    """The reranker from its pinned snapshot (a missing snapshot fails the start) on the picked device, max_length tokens per
+    pair: the CrossEncoder, or with RERANK_MODE=qwen_yes_no a Qwen3-Reranker scored by its yes/no logits. fp16 on CUDA and
+    MPS, fp32 on the CPU. No remote code."""
+    import torch
+    from huggingface_hub import snapshot_download
+
+    device = pick_device(os.environ, torch.cuda.is_available(), torch.backends.mps.is_available())
+    logger.info("Reranker source: local %s (device: %s)", settings.mode, device)
+    logger.info("Loading reranking model: %s at %s", settings.model, settings.revision)
+    path = snapshot_download(settings.model, revision=settings.revision, local_files_only=True)
+    load = load_qwen if settings.mode == "qwen_yes_no" else load_cross_encoder
+    predict, module = load(path, settings, device)
     logger.info("Reranking model loaded successfully.")
-    return Loaded(model.predict, str(next(model.model.parameters()).dtype).removeprefix("torch."), device)
+    return Loaded(predict, str(next(module.parameters()).dtype).removeprefix("torch."), device)
 
 
 async def best_scores(
@@ -282,6 +358,7 @@ def create_app(
             "max_length": current.max_length,
             "dtype": app.state.loaded.dtype,
             "device": app.state.loaded.device,
+            "mode": current.mode,
         }
 
     @app.get("/readyz")
