@@ -23,6 +23,7 @@ PROGRAMME = {
     "label_en": "B.Sc. X",
     "degree": "bachelor",
     "url_prefix": "https://a.example/x",
+    "pdf_prefix": "https://a.example/media/x/",
     "po_versions": [{"year": 2023, **TERMS}],
     "po_change": None,
 }
@@ -130,6 +131,7 @@ def test_roles_accept_programmes_groups_and_offices():
         ),
         ({"programmes|bsc-x|degree": "promotion"}, "degree"),
         ({"programmes|bsc-x|url_prefix": "http://a.example/x"}, "https URL"),
+        ({"programmes|bsc-x|pdf_prefix": "/media/x/"}, "https URL"),
         ({"programmes|bsc-x|po_change": {"text_de": "", "text_en": "x"}}, "text_de"),
         ({"programmes|BSc X": PROGRAMME}, "lowercase words"),
         ({"groups|bachelor|part_of": "nobody"}, "part_of"),

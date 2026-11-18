@@ -338,7 +338,8 @@ class Programme(ProfileModel):
     label_de: str
     label_en: str
     degree: Literal["bachelor", "master"]
-    url_prefix: str  # the URL a programme's documents are under
+    url_prefix: str  # the URL of the programme's hub page; its page sections are under it
+    pdf_prefix: str  # the URL of the folder holding the programme's PDFs
     po_versions: list[PoVersion] = Field(min_length=1)
     po_change: Wording | None  # how a student moves to a newer version; null = not stated for the programme
 
@@ -370,8 +371,8 @@ class Roles(ProfileModel):
         if bad := [p for p in self.programmes if not PROGRAMME_ID.fullmatch(p)]:
             raise ValueError(f"programme {bad[0]}: an id is lowercase words joined by hyphens")
         for programme in self.programmes.values():
-            if not programme.url_prefix.startswith("https://"):
-                raise ValueError(f"{programme.label_de}: url_prefix is an https URL")
+            if not (programme.url_prefix.startswith("https://") and programme.pdf_prefix.startswith("https://")):
+                raise ValueError(f"{programme.label_de}: url_prefix and pdf_prefix are https URLs")
         _check_part_of(self.groups)
         return self
 

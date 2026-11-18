@@ -152,6 +152,54 @@ def test_sources_are_the_planned_hosts_and_build_the_crawlers_sources():
         assert any(s.startswith(programme.url_prefix + ".") for s in fb20.seeds), programme.label_de
 
 
+FB20 = "https://www.informatik.tu-darmstadt.de/media/informatik/"
+PO_FOLDER = FB20 + "fb20_studium/formulare_und_dokumente/ordnungen/"
+PROGRAMME_PDFS = {  # the PDFs the programme hubs link, by programme
+    "bsc-informatik": [
+        PO_FOLDER + "ordnungen_bsc/pruefungsordnung_2023/2022_09_30_MHB_BSC_INF.pdf",
+        PO_FOLDER + "ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf",
+        PO_FOLDER + "ordnungen_bsc/pruefungsordnung_2023/SPP_B.Sc._Informatik.pdf",
+    ],
+    "msc-informatik": [  # the folder is named pruefungsordnung_9, not by the year
+        PO_FOLDER + "ordnungen_msc/pruefungsordnung_9/2023_05_11_MHB_MSC_INF.pdf",
+        PO_FOLDER + "ordnungen_msc/pruefungsordnung_9/Ordnung_des_Studiengangs_M_Sc_Informatik_PO_2023.pdf",
+        PO_FOLDER + "ordnungen_msc/pruefungsordnung_9/Studien-_und_Pruefungsplan_M_Sc_Informatik_PO_2023.pdf",
+    ],
+    "msc-computer-science": [
+        PO_FOLDER + "ordnungen_cs/pruefungsordnungen_cs_2023/2023_05_11_MHB_MSC_CS.de.pdf",
+        PO_FOLDER
+        + "ordnungen_cs/pruefungsordnungen_cs_2023/Studien-_und_Pruefungsplan_M_Sc_Computer_Science_PO_2023.de.pdf",
+    ],
+}
+OTHER_PDFS = [  # promotion documents and the university's APB
+    FB20 + "fb20_dekanat/dokumente_promotion/Allgemeine_Bestimmungen_der_Promotionsordnung_der_TU_Darmstadt.pdf",
+    FB20 + "fb20_dekanat/dokumente_promotion/Besondere_Bestimmungen_FB20_30_08_SB_2024_VI.pdf",
+    "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf",
+]
+
+
+def _listed(entry, url):
+    """Whether the crawl lists a URL of the host: under a prefix and under no exclusion."""
+    path = urlsplit(url).path
+    return any(path.startswith(p) for p in entry.prefixes) and not any(path.startswith(p) for p in entry.exclude)
+
+
+def test_the_pdfs_the_pages_link_are_listed_and_matched_to_their_programme():
+    sources = load_profile(Sources, TU / "sources.yaml")
+    roles = load_profile(Roles, TU / "roles.yaml")
+    for programme, urls in PROGRAMME_PDFS.items():
+        for url in urls:
+            assert _listed(sources.hosts[urlsplit(url).netloc], url), url
+            assert url.startswith(roles.programmes[programme].pdf_prefix), url
+            assert not any(url.startswith(r.pdf_prefix) for p, r in roles.programmes.items() if p != programme), url
+    for url in OTHER_PDFS:
+        assert _listed(sources.hosts[urlsplit(url).netloc], url), url
+    # other programmes' folders and unrelated media stay out
+    fb20 = sources.hosts["www.informatik.tu-darmstadt.de"]
+    for path in ("fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_other/x.pdf", "fb20_news/x.pdf"):
+        assert not _listed(fb20, FB20 + path), path
+
+
 def test_every_crawled_host_has_a_label_in_both_languages_and_the_languages_match():
     sources = load_profile(Sources, TU / "sources.yaml")
     de = yaml.safe_load((TU / "messages.de.yaml").read_text(encoding="utf-8"))

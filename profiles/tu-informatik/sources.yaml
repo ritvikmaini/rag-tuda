@@ -21,6 +21,11 @@ hosts:
       - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_cs
       - /studium_fb20/im_studium/studienbuero/
       - /forschung_fb20/wissenschaftliche_karriere/promotion/
+      # the PDFs of those pages: one media folder per programme, and the promotion documents
+      - /media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/
+      - /media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/
+      - /media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/
+      - /media/informatik/fb20_dekanat/dokumente_promotion/
     exclude: []
     depth: 1
     twins: true
@@ -28,14 +33,14 @@ hosts:
     selectors: {main: .main-column, section: "section.content-section", drop: null}
   www.intern.tu-darmstadt.de:
     set: core
-    # the APB, the Einschreibeordnung and the Promotionsordnung with their English information versions; the
-    # login-gated paragraphs of the page are skipped by the crawler
+    # the APB, the Einschreibeordnung and the Promotionsordnung with their English information versions: the sitemap lists
+    # no PDF, so depth 1 reaches the PDFs the seed links; the login-gated paragraphs of the page are skipped by the crawler
     seeds:
       - https://www.intern.tu-darmstadt.de/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/index.de.jsp
     sitemap: [https://www.intern.tu-darmstadt.de/sitemap.de.xml]
-    prefixes: [/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/]
+    prefixes: [/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/, /media/dezernat_ii/ordnungen/]
     exclude: []
-    depth: 0
+    depth: 1
     twins: false
     # unverified
     selectors: {main: "main, .main-column, #content", section: "section.content-section", drop: null}

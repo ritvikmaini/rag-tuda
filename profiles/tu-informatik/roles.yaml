@@ -1,5 +1,6 @@
 # The programmes with their Prüfungsordnung versions, the status groups and the referral offices by topic. A start term
-# is written only where the programme's pages state it; null is "not stated".
+# is written only where the programme's pages state it; null is "not stated". url_prefix is the programme's hub page,
+# pdf_prefix the folder of its PDFs.
 po_rule:
   text_de: In der Regel gelten für Sie die zum Zeitpunkt Ihrer Einschreibung aktuellsten Regelungen.
   text_en: As a rule, the regulations in force at the time of your enrolment apply to you.
@@ -9,6 +10,7 @@ programmes:
     label_en: B.Sc. Informatik
     degree: bachelor
     url_prefix: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik
+    pdf_prefix: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/
     po_versions:
       - {year: 2023, start_from: null, start_to: null, official_url: "https://www.intern.tu-darmstadt.de/media/dezernat_ii/satzungsbeilagen/SB_2023_II.pdf"}
       - {year: 2015, start_from: null, start_to: null, official_url: null}
@@ -20,6 +22,7 @@ programmes:
     label_en: M.Sc. Informatik
     degree: master
     url_prefix: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik
+    pdf_prefix: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/
     po_versions:
       - {year: 2023, start_from: "WiSe 2023/24", start_to: null, official_url: null}
       - {year: 2015, start_from: null, start_to: null, official_url: null}
@@ -29,6 +32,7 @@ programmes:
     label_en: M.Sc. Computer Science
     degree: master
     url_prefix: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_cs
+    pdf_prefix: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/
     po_versions:
       - {year: 2023, start_from: "WiSe 2023/24", start_to: null, official_url: null}
     po_change: null
