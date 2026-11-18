@@ -1,6 +1,7 @@
 """Model classes S, M, L and XL, the hardware facts that pick a local class, and the models every class downloads."""
 
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING
 
 from rag_tuda import cards
@@ -47,38 +48,48 @@ def size_class(name: str, rule: str, card_name: str, use_case: str, *, local: bo
     )
 
 
-CLASSES = (
-    size_class(
-        "S",
-        f"< {M_FROM_GB:g} GB usable memory, or no GPU / AMD / Intel",
-        "s-qwen3-4b-instruct-2507",
-        "short cited answers on a laptop: a small model, an 8K window, no iterative retrieval",
-        local=True,
-        hf_model="Qwen/Qwen3-4B-Instruct-2507",
-    ),
-    size_class(
-        "M",
-        f">= {M_FROM_GB:g} GB usable memory",
-        "m-qwen3.6-35b-a3b",
-        "the full experience: a 16K window, iterative retrieval, the version table",
-        local=True,
-        hf_model="Qwen/Qwen3.6-35B-A3B",
-    ),
-    size_class(
-        "L",
-        "a hosted open model (Groq free tier), chosen with --card",
-        "l-groq-gpt-oss-120b",
-        "a stronger model at the provider's 8K window, with a local analysis model",
-        local=False,
-    ),
-    size_class(
-        "XL",
-        "large open models on vLLM, chosen with --card",
-        "xl-vllm-example",
-        "long windows and every gated step on a GPU server (documented, untested)",
-        local=False,
-    ),
-)
+@cache
+def _classes() -> tuple[SizeClass, SizeClass, SizeClass, SizeClass]:
+    """The four classes, built from the cards on first use so that importing this module needs no `models/` folder."""
+    return (
+        size_class(
+            "S",
+            f"< {M_FROM_GB:g} GB usable memory, or no GPU / AMD / Intel",
+            "s-qwen3-4b-instruct-2507",
+            "short cited answers on a laptop: a small model, an 8K window, no iterative retrieval",
+            local=True,
+            hf_model="Qwen/Qwen3-4B-Instruct-2507",
+        ),
+        size_class(
+            "M",
+            f">= {M_FROM_GB:g} GB usable memory",
+            "m-qwen3.6-35b-a3b",
+            "the full experience: a 16K window, iterative retrieval, the version table",
+            local=True,
+            hf_model="Qwen/Qwen3.6-35B-A3B",
+        ),
+        size_class(
+            "L",
+            "a hosted open model (Groq free tier), chosen with --card",
+            "l-groq-gpt-oss-120b",
+            "a stronger model at the provider's 8K window, with a local analysis model",
+            local=False,
+        ),
+        size_class(
+            "XL",
+            "large open models on vLLM, chosen with --card",
+            "xl-vllm-example",
+            "long windows and every gated step on a GPU server (documented, untested)",
+            local=False,
+        ),
+    )
+
+
+def __getattr__(name: str) -> tuple[SizeClass, ...]:
+    if name == "CLASSES":  # classes.CLASSES, read on first use
+        return _classes()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 FIXED_MODELS = (
     Model("Snowflake/snowflake-arctic-embed-m-v2.0", 1.2),
@@ -102,5 +113,5 @@ def usable_gb(f: "Facts") -> float:
 
 def pick_class(f: "Facts") -> SizeClass:
     """The local class the hardware fits: L and XL are never picked, they come with an explicit card."""
-    s, m, _, _ = CLASSES
+    s, m, _, _ = _classes()
     return m if usable_gb(f) >= M_FROM_GB else s

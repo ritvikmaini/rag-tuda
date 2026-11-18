@@ -1,5 +1,8 @@
 import dataclasses
 import re
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -106,3 +109,23 @@ def test_fixed_models_and_total():
     assert classes.download_total_gb(classes.CLASSES[0]) == pytest.approx(6.5)
     assert classes.download_total_gb(classes.CLASSES[1]) == pytest.approx(26.6)
     assert classes.download_total_gb(classes.CLASSES[3]) == pytest.approx(4.0)
+
+
+def test_importing_classes_reads_no_card(tmp_path):
+    """Without a models/ folder the module still imports; the cards are read on first use."""
+    code = (
+        "from rag_tuda import cards\n"
+        "def unreadable(*args, **kwargs):\n"
+        "    raise FileNotFoundError('no cards here')\n"
+        "cards.named = unreadable\n"
+        "from rag_tuda import classes\n"
+        "try:\n"
+        "    classes.CLASSES\n"
+        "except FileNotFoundError:\n"
+        "    print('read on first use')\n"
+    )
+    src = Path(__file__).resolve().parents[2] / "src"
+    out = subprocess.run(
+        [sys.executable, "-c", code], env={"PYTHONPATH": str(src)}, cwd=tmp_path, capture_output=True, text=True
+    )
+    assert (out.returncode, out.stdout.strip()) == (0, "read on first use"), out.stderr
