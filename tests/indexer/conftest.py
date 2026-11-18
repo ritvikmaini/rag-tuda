@@ -17,7 +17,7 @@ CI = str(ROOT / "deploy" / "env" / "ci-example.yaml")
 # the sources the build tests feed with fakes, listed after the example profile's own: pages, PDFs and a small map source
 SOURCES = {
     "web": {"connector": "example.web", "audience": "public", "min_documents": 200},
-    "pdfs": {"connector": "example.pdfs", "audience": "internal", "min_doc_ratio": 0.9},
+    "pdfs": {"connector": "example.pdfs", "audience": "public", "min_doc_ratio": 0.9},
     "maps": {"connector": "example.maps", "audience": "public", "min_documents": 1},
 }
 

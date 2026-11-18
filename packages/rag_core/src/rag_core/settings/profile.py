@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from rag_core.settings import ProfileModel
 
-Audience = Literal["internal", "public"]
+Audience = Literal["public"]  # the index table allows no other
 
 
 class Collection(ProfileModel):

@@ -4,7 +4,7 @@ import copy
 
 import pytest
 from pydantic import ValidationError
-from rag_core.settings.profile import Acronyms, Roles, Sources
+from rag_core.settings.profile import Acronyms, Roles, Source, Sources
 
 SELECTORS = {"main": ".main-column", "section": "section.content-section", "drop": None}
 HOST = {
@@ -173,3 +173,9 @@ def test_acronym_groups_are_strict_and_a_term_belongs_to_one_group():
     ):
         with pytest.raises(ValidationError, match=needle):
             Acronyms.model_validate(bad)
+
+
+def test_a_source_is_public_only():
+    assert Source(connector="folder", audience="public").audience == "public"
+    with pytest.raises(ValidationError, match="audience"):
+        Source(connector="folder", audience="internal")  # pyright: ignore[reportArgumentType]
