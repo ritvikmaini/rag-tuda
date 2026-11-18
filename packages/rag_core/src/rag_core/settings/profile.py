@@ -291,10 +291,24 @@ class PdfTwin(ProfileModel):
     en: str
 
 
+class Law(ProfileModel):
+    """A statute taken from the official XML of its publisher instead of crawled pages: the norms from `start` to `end`
+    (both written as the XML's `enbez`, e.g. "§ 16b"; null = from the first or to the last norm) become one document."""
+
+    title: str
+    kind: Literal["Gesetz", "Verordnung"]
+    xml_url: str  # the zip with the law's XML, on a listed host
+    page_url: str  # the page citations link to, on a listed host
+    start: str | None
+    end: str | None
+
+
 class Sources(ProfileModel):
-    """sources.yaml: the crawl's host allow-list (every other host is refused by the crawler) and the PDF twin pairs."""
+    """sources.yaml: the crawl's host allow-list (every other host is refused by the crawler), the statutes read from XML
+    and the PDF twin pairs."""
 
     hosts: dict[str, CrawlHost] = Field(min_length=1)
+    laws: list[Law] = []  # none by default
     pdf_twins: list[PdfTwin] = []  # none by default: PDFs have no twin key unless a pair is listed
 
     @model_validator(mode="after")
@@ -318,6 +332,12 @@ class Sources(ProfileModel):
                 raise ValueError(f"{host}: only a core host has a full block")
             if (entry.depth and not entry.prefixes) or (entry.full and entry.full.depth and not entry.full.prefixes):
                 raise ValueError(f"{host}: links are followed inside prefixes, so a depth needs prefixes")
+        for law in self.laws:
+            if any(
+                urlsplit(url).scheme != "https" or urlsplit(url).hostname not in self.hosts
+                for url in (law.xml_url, law.page_url)
+            ):
+                raise ValueError(f"{law.title}: a law's URLs are https URLs on listed hosts")
         for pair in self.pdf_twins:
             if any(
                 urlsplit(url).scheme != "https" or urlsplit(url).hostname not in self.hosts

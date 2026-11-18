@@ -39,8 +39,9 @@ def _shape(tree):
 def test_profile_and_roles_load():
     profile = load_profile(Profile, TU / "profile.yaml")
     assert [(c.name, c.audiences) for c in profile.collections] == [("rag", ["public"])]
-    assert list(profile.ingest.sources) == ["tu_web"]
+    assert list(profile.ingest.sources) == ["tu_web", "laws"]
     assert profile.ingest.sources["tu_web"].connector == "tuda_web"
+    assert profile.ingest.sources["laws"].connector == "law_xml"
     assert profile.generation.analysis_max_tokens == 800
     assert profile.identity.language == "de" and profile.ranking.recency_types == []
 
@@ -115,7 +116,9 @@ def test_sources_are_the_planned_hosts_and_build_the_crawlers_sources():
         "www.tu-darmstadt.de": "core",
         "digitales-rathaus.darmstadt.de": "core",
         "www.ladadi.de": "full",
+        "www.gesetze-im-internet.de": "core",
     }
+    assert [(law.start, law.end) for law in sources.laws] == [("§ 16b", "§ 16b"), ("§ 45", "§ 45")]
     assert sources.hosts["www.tu-darmstadt.de"].full is not None
     for host, entry in sources.hosts.items():
         prefixes = tuple(entry.prefixes)

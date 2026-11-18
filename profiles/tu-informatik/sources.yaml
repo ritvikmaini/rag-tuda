@@ -2,7 +2,8 @@
 # full build; a core host with a `full` block lists more pages in a full build. Prefixes are URL paths. The city's main
 # site (www.darmstadt.de) and the other university (h-da.de) are never listed.
 # Selectors: only the FB20 host's section selector is read from a page's markup; every other selector is unverified. The
-# statutes of gesetze-im-internet.de are not crawled; they come from the official XML.
+# statutes of gesetze-im-internet.de are not crawled as pages; they come from the official XML (`laws`, read by the law
+# connector through the same fetcher, so the host is on the allow-list and robots.txt applies).
 hosts:
   www.informatik.tu-darmstadt.de:
     set: core
@@ -91,3 +92,28 @@ hosts:
     twins: false
     # unverified
     selectors: {main: "main, #content, .main-column", section: "section.content-section", drop: null}
+  www.gesetze-im-internet.de:
+    set: core
+    # no pages: the host lists nothing for the web crawl and serves the XML of the `laws` below
+    seeds: []
+    sitemap: []
+    prefixes: []
+    exclude: []
+    depth: 0
+    twins: false
+    # unused
+    selectors: {main: body, section: "section.content-section", drop: null}
+# the norms the residence pages and the questions of international students refer to; the XML paths are unverified
+laws:
+  - title: Aufenthaltsgesetz (AufenthG), § 16b Studium
+    kind: Gesetz
+    xml_url: https://www.gesetze-im-internet.de/aufenthg_2004/xml.zip
+    page_url: https://www.gesetze-im-internet.de/aufenthg_2004/__16b.html
+    start: "§ 16b"
+    end: "§ 16b"
+  - title: Aufenthaltsverordnung (AufenthV), § 45
+    kind: Verordnung
+    xml_url: https://www.gesetze-im-internet.de/aufenthv/xml.zip
+    page_url: https://www.gesetze-im-internet.de/aufenthv/__45.html
+    start: "§ 45"
+    end: "§ 45"

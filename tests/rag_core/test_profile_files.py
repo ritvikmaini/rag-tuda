@@ -112,6 +112,24 @@ def test_pdf_twin_pairs_are_empty_by_default_and_need_listed_https_hosts():
             Sources.model_validate({**sources(), "pdf_twins": [bad]})
 
 
+def test_laws_are_empty_by_default_and_need_https_urls_on_listed_hosts():
+    law = {
+        "title": "Gesetz X",
+        "kind": "Gesetz",
+        "xml_url": "https://a.example/x/xml.zip",
+        "page_url": "https://a.example/x/__1.html",
+        "start": "§ 1",
+        "end": None,
+    }
+    assert Sources.model_validate(sources()).laws == []
+    assert Sources.model_validate({**sources(), "laws": [law]}).laws[0].start == "§ 1"
+    for bad in ({**law, "xml_url": "https://b.example/x/xml.zip"}, {**law, "page_url": "http://a.example/x"}):
+        with pytest.raises(ValidationError, match="listed hosts"):
+            Sources.model_validate({**sources(), "laws": [bad]})
+    with pytest.raises(ValidationError, match="kind"):
+        Sources.model_validate({**sources(), "laws": [{**law, "kind": "Erlass"}]})
+
+
 def test_an_empty_host_list_is_refused():
     with pytest.raises(ValidationError):
         Sources.model_validate({"hosts": {}})

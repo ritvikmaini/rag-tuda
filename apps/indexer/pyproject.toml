@@ -26,6 +26,7 @@ indexer = "indexer.cli:main"
 # found by the indexer through this entry point group (indexer.sources.discover)
 [project.entry-points."rag_core.connectors"]
 folder = "indexer.connectors.folder:Folder"
+law_xml = "indexer.connectors.law_xml:LawXml"
 
 [tool.uv.sources]
 rag-core = { workspace = true }

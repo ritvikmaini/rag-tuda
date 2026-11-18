@@ -28,6 +28,7 @@ ingest:
   # in build order; a source not listed is not built
   sources:
     tu_web: {connector: tuda_web, audience: public, min_documents: 30}
+    laws: {connector: law_xml, audience: public, min_documents: 2}
 
 # --- the assistant: its effective values --------------------------------------------------------------------------------
 identity:

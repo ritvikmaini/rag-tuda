@@ -1,19 +1,29 @@
-"""gesetze-im-internet.de XML -> Markdown, one '## § N Titel' section per norm.
+"""The law connector: statutes from the official XML of gesetze-im-internet.de, one document per configured law.
 
-Usage: python3 -I laws_to_md.py IN.xml OUT.md --title T --source-url U
-           [--doc-type Gesetz|Verordnung] [--from "§ 535"] [--to "§ 580a"]
-Stdlib only. Editorial footnotes (textdaten/fussnoten) are dropped. Unknown XML
-tags raise, so a changed layout fails loudly instead of losing text.
-"""
+sources.yaml lists the laws (`laws`: title, kind, the zip with the XML, the page citations link to and the first and last
+norm to take). The zip is fetched through the crawl fetcher, so the host allow-list, robots.txt, the rate limit and the cache
+apply. `law_markdown` turns the XML into Markdown with one "## § N Titel" section per norm; editorial footnotes are dropped,
+and an unknown XML tag raises, so a changed layout fails loudly instead of losing text."""
 
-import argparse
-import json
+import io
 import re
-import sys
-import xml.etree.ElementTree as ET
+import zipfile
+from datetime import date
+from typing import Any
+
+import lxml.etree as etree
+
+from rag_core.domain.sources import PageItem, SourceResult
+from rag_core.ports.sources import SourceContext
+from rag_core.settings.profile import Law
+
+from indexer.connectors.crawl_setup import load_sources, make_fetcher
+from indexer.crawl.fetch import Response, Skipped
+
+XML = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, remove_comments=True, remove_pis=True)
+MAX_XML_BYTES = 64 * 1024 * 1024
 
 SUP = {"2": "²", "3": "³"}
-SOURCE_NOTE = "Quelle: gesetze-im-internet.de, abgerufen am 29.10.2026; amtliches Werk, § 5 UrhG"
 
 
 def norm(s):
@@ -154,40 +164,22 @@ def section_body(textel):
     return "\n\n".join(parts)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("xml")
-    ap.add_argument("out")
-    ap.add_argument("--title", required=True)
-    ap.add_argument("--source-url", required=True)
-    ap.add_argument("--doc-type", default="Gesetz", choices=["Gesetz", "Verordnung"])
-    ap.add_argument("--from", dest="start")
-    ap.add_argument("--to", dest="end")
-    a = ap.parse_args()
-
-    root = ET.parse(a.xml).getroot()
+def law_markdown(xml: bytes, start: str | None = None, end: str | None = None) -> tuple[str, str]:
+    """(the Stand line, the Markdown) of the norms from `start` to `end` (the XML's `enbez`, e.g. "§ 16b"; None takes the
+    first or the last). ValueError when there is no Stand line, a norm has an unknown tag or the range is not in the XML."""
+    root = etree.fromstring(xml, XML)
     stand = ""
     for n in root:  # the first norm carries the Stand line
         for sa in n.findall("metadaten/standangabe"):
             if sa.findtext("standtyp") == "Stand":
-                stand = norm(sa.findtext("standkommentar"))
+                stand = norm(sa.findtext("standkommentar") or "")
         if stand:
             break
     if not stand:
-        sys.exit("no Stand line found")
-
-    q = json.dumps
-    md = [
-        "---",
-        f"title: {q(a.title, ensure_ascii=False)}",
-        f"doc_type: {a.doc_type}",
-        "origin: gesetz",
-        f"stand: {q(stand, ensure_ascii=False)}",
-        f"url: {q(a.source_url)}",
-        "---",
-        "",
-    ]
-    stack, pending, on, seen_end = [], False, a.start is None, False
+        raise ValueError("no Stand line found")
+    md: list[str] = []
+    stack: list[str] = []
+    pending, on, seen_end = False, start is None, False
     for n in root:
         m = n.find("metadaten")
         if m is None:
@@ -202,7 +194,7 @@ def main():
             continue
         if not enbez or not enbez.startswith(("§", "Anhang", "Anlage", "Art")):
             continue  # Inhaltsübersicht, Eingangsformel etc.
-        if a.start and enbez == a.start:
+        if start and enbez == start:
             on = True
         if not on:
             continue
@@ -215,15 +207,78 @@ def main():
         body = section_body(t) if t is not None else ""
         if body:
             md += [body, ""]
-        if a.end and enbez == a.end:
+        if end and enbez == end:
             seen_end = True
             break
-    if a.start and not on or a.end and not seen_end:
-        sys.exit("--from/--to not found in XML")
-    md += ["---", "", SOURCE_NOTE, ""]
-    with open(a.out, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(md))
+    if start and not on or end and not seen_end:
+        raise ValueError(f"the norms {start or 'first'} to {end or 'last'} are not in the XML")
+    return stand, "\n".join(md)
 
 
-if __name__ == "__main__":
-    main()
+def xml_of_zip(archive: bytes) -> bytes:
+    """The one XML file of a law's zip; ValueError for anything else or a file that unpacks to more than MAX_XML_BYTES."""
+    with zipfile.ZipFile(io.BytesIO(archive)) as zf:
+        names = [i for i in zf.infolist() if i.filename.lower().endswith(".xml")]
+        if len(names) != 1 or names[0].file_size > MAX_XML_BYTES:
+            raise ValueError("the zip does not hold exactly one XML file of a reasonable size")
+        return zf.read(names[0])
+
+
+def source_note(fetched: str) -> str:
+    return f"Quelle: gesetze-im-internet.de, abgerufen am {date.fromisoformat(fetched).strftime('%d.%m.%Y')}; amtliches Werk, § 5 UrhG"
+
+
+def document(law: Law, reply: Response) -> PageItem:
+    """The law as one page document: its title, the Stand line, the norms and the source note."""
+    stand, markdown = law_markdown(xml_of_zip(reply.body), law.start, law.end)
+    text = f"# {law.title}\n\nStand: {stand}\n\n{markdown}\n---\n\n{source_note(reply.fetched)}\n"
+    return PageItem(
+        law.page_url,
+        text,
+        {
+            "title": law.title,
+            "url": law.page_url,
+            "source_type": "page",
+            "doc_type": law.kind,
+            "origin": "gesetz",
+            "section": "",
+            "doc_year": None,
+            "doc_date": None,
+            "page_number": -1,  # not a PDF page, as for a crawled web page
+            "doc_key": law.page_url,
+            "regulation": "residence",
+            "lang": "de",
+        },
+    )
+
+
+class LawXml:
+    """The profile entry's `min_documents` is the source gate; a law that cannot be fetched or read is listed under
+    `skipped` in the report. `fetcher_options` are Fetcher's own (a test injects a client and a clock)."""
+
+    name = "law_xml"
+    state_files: tuple[str, ...] = ()
+
+    def __init__(self, **fetcher_options: Any) -> None:
+        self.fetcher_options = fetcher_options
+
+    def collect(self, ctx: SourceContext) -> SourceResult:
+        sources = load_sources(ctx)
+        today = self.fetcher_options.get("today", date.today)()
+        fetcher = make_fetcher(ctx, sources.hosts, since=today, **self.fetcher_options)
+        items: list[PageItem] = []
+        skipped: list[dict[str, str]] = []
+        for law in sources.laws[: ctx.limit]:
+            reply = fetcher.get(law.xml_url)
+            if isinstance(reply, Skipped):
+                skipped.append({"url": law.xml_url, "reason": reply.reason})
+                continue
+            try:
+                items.append(document(law, reply))
+            except (ValueError, zipfile.BadZipFile, etree.XMLSyntaxError) as exc:
+                skipped.append({"url": law.xml_url, "reason": f"unreadable: {exc}"})
+        return SourceResult(
+            items,
+            {"laws": len(items), "skipped": skipped},
+            expected_minimum=int(ctx.settings.get("min_documents", 0)),
+        )
