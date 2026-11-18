@@ -52,6 +52,12 @@ def test_robots_txt_carries_the_wildcard_and_query_rules_and_the_sitemap():
     assert SECOND.get("/robots.txt").text.splitlines() == ["User-agent: *", "Disallow: /*.login"]
 
 
+def test_a_host_reached_through_a_route_names_itself_in_its_sitemap_and_robots_txt():
+    routed = TestClient(serve.minisite_app("fb20", "https://intern.example", "https://faculty.example"))
+    assert "Sitemap: https://faculty.example/sitemap.de.xml" in routed.get("/robots.txt").text.splitlines()
+    assert "<loc>https://faculty.example" + pages.BSC_HUB + ".de.jsp</loc>" in routed.get("/sitemap.de.xml").text
+
+
 def test_the_hub_links_the_copy_on_its_own_host_and_the_original_on_the_second():
     html = FB20.get(pages.BSC_HUB + ".de.jsp").text
     assert f'href="{pages.APB_COPY_PDF}"' in html and f'href="{INTERN}{pages.APB_ORIGINAL_PDF}"' in html

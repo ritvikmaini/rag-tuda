@@ -119,8 +119,9 @@ def reranker_app() -> FastAPI:
     return app
 
 
-def minisite_app(site: str = "fb20", intern_origin: str = INTERN_ORIGIN) -> FastAPI:
-    """One host of the mini-site: `fb20` or `intern`. `intern_origin` is where the second host is reached, for the links to it."""
+def minisite_app(site: str = "fb20", intern_origin: str = INTERN_ORIGIN, origin: str | None = None) -> FastAPI:
+    """One host of the mini-site: `fb20` or `intern`. `intern_origin` is where the second host is reached, for the links to it;
+    `origin` is the name this host is reached by, for its sitemap and robots.txt (the request's own by default)."""
     files = {"fb20": pages.FB20, "intern": pages.INTERN}[site]
     app = FastAPI()
 
@@ -135,7 +136,9 @@ def minisite_app(site: str = "fb20", intern_origin: str = INTERN_ORIGIN) -> Fast
             raise HTTPException(status_code=404)
         media_type, body = found
         if isinstance(body, str):
-            body = body.replace("@INTERN@", intern_origin).replace("@SELF@", str(request.base_url).rstrip("/"))
+            body = body.replace("@INTERN@", intern_origin).replace(
+                "@SELF@", origin or str(request.base_url).rstrip("/")
+            )
             media_type += "; charset=utf-8"
         return Response(body, media_type=media_type)
 
@@ -147,13 +150,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap.add_argument("name", choices=["llm", "embedder", "reranker", "minisite", "minisite-intern"])
     ap.add_argument("--port", type=int, required=True)
     ap.add_argument("--intern-origin", default=INTERN_ORIGIN, help="where minisite links to the second host")
+    ap.add_argument("--origin", help="the name the mini-site host is reached by (default: the request's own)")
     args = ap.parse_args(argv)
     builders = {
         "llm": llm_app,
         "embedder": embedder_app,
         "reranker": reranker_app,
-        "minisite": lambda: minisite_app("fb20", args.intern_origin),
-        "minisite-intern": lambda: minisite_app("intern", args.intern_origin),
+        "minisite": lambda: minisite_app("fb20", args.intern_origin, args.origin),
+        "minisite-intern": lambda: minisite_app("intern", args.intern_origin, args.origin),
     }
     app = builders[args.name]()
     uvicorn.run(app, host="0.0.0.0", port=args.port, log_level="warning")
