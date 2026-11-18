@@ -237,6 +237,29 @@ def test_metrics_are_the_queue_gauges(tmp_path):
         }
 
 
+def test_reference_file_by_device(tmp_path):
+    base = reference_file(tmp_path)
+    assert main.reference_for(base, "mps") == base  # only the base exists
+    own = tmp_path / "reference.mps.json"
+    own.write_text("{}", encoding="utf-8")
+    assert main.reference_for(base, "mps") == own
+    assert main.reference_for(base, "cuda") == base and main.reference_for(base, "cpu") == base
+
+
+def test_the_start_up_check_reads_the_reference_of_the_device_class(tmp_path):
+    reference_file(tmp_path)
+    moved = [vector("query: eins"), [1.0, 0.0, 0.0, 0.0]]
+    (tmp_path / "reference.mps.json").write_text(
+        json.dumps({"model": SETTINGS.model, "revision": REV, "texts": ["query: eins", "zwei drei"], "vectors": moved}),
+        encoding="utf-8",
+    )
+    for device, status in (("cuda", 200), ("mps", 503)):
+        loaded = main.Loaded(fake_loaded().embed, 4, "float16", device, lambda: None)
+        app = main.create_app(SETTINGS, load=lambda s: loaded, reference_path=tmp_path / "reference.json")
+        with TestClient(app) as c:
+            assert c.get("/readyz").status_code == status
+
+
 # --- /embed -----------------------------------------------------------------------------------------------------------------
 def test_embed_answers_in_input_order_and_nothing_for_no_text(tmp_path):
     with client(tmp_path) as c:

@@ -3,8 +3,8 @@
 POST /v2/rerank {"queries": [str], "documents": [str]} -> {"scores": [float]} aligned to the documents, each the highest
 over the queries (multi-query). One job on the GPU at a time: a waiting request gets 503 after
 MULTI_QUERY_WAIT_S, and a job stops between queries when its client has left. GET /info, /readyz (the start-up reference
-pair), /healthz. The settings come from the environment the Dockerfile sets; the model loads in the lifespan from its
-pinned snapshot, never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone)
+pair, from reference.<device>.json when it exists, else reference.json), /healthz. The settings come from the
+environment the Dockerfile sets; the model loads in the lifespan from its pinned snapshot, never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone)
 answers 500, turns /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. The device is
 RAG_DEVICE (cuda, mps or cpu; unset: the first available in that order), and a device that is not available stops the start.
 Run: uvicorn --factory reranker_server.main:create_app"""
@@ -169,6 +169,13 @@ async def best_scores(
     return best
 
 
+def reference_for(base: Path, device: str) -> Path:
+    """reference.<device>.json beside the base reference when it exists, else the base: one stored reference serves every
+    device class until a device's output moves outside the tolerance, and then it gets its own file."""
+    specific = base.with_name("%s.%s%s" % (base.stem, device, base.suffix))
+    return specific if specific.exists() else base
+
+
 def reference_check(loaded: Loaded, settings: Settings, reference: Mapping[str, Any]) -> dict[str, Any]:
     """Once at start, never per probe (the GPU must not compute for a healthcheck): the reference pair against its stored
     score. Ready when the reference belongs to this model and revision and the score is within
@@ -205,7 +212,9 @@ def create_app(
     async def lifespan(app: FastAPI):
         current = settings or Settings.from_env()
         loaded = load(current)
-        app.state.readiness = reference_check(loaded, current, json.loads(reference_path.read_text(encoding="utf-8")))
+        app.state.readiness = reference_check(
+            loaded, current, json.loads(reference_for(reference_path, loaded.device).read_text(encoding="utf-8"))
+        )
         logger.info("Reference check: %s", app.state.readiness)
         app.state.settings, app.state.loaded = current, loaded
         app.state.stopping = False

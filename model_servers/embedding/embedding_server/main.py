@@ -2,8 +2,8 @@
 
 POST /embed {"texts": [str]} -> {"embeddings": [[float]]} in input order, through a bounded queue and one batch worker (503
 when the queue stays full for 5 s, 504 after 60 s); GET /info (model, revisions, dimension, dtype, max_seq_length), /readyz
-(the start-up reference check), /healthz, /metrics (queue gauges). The settings come from
-the environment the Dockerfile sets; the model loads in the lifespan from its pinned snapshot in the Hugging Face cache,
+(the start-up reference check, against reference.<device>.json when it exists, else reference.json), /healthz,
+/metrics (queue gauges). The settings come from the environment the Dockerfile sets; the model loads in the lifespan from its pinned snapshot in the Hugging Face cache,
 never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone) answers 500, turns
 /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. The device is RAG_DEVICE
 (cuda, mps or cpu; unset: the first available in that order), and a device that is not available stops the start.
@@ -178,6 +178,13 @@ def cosine(a: list[float], b: list[float]) -> float:
     return sum(x * y for x, y in zip(a, b)) / math.sqrt(sum(x * x for x in a) * sum(y * y for y in b))
 
 
+def reference_for(base: Path, device: str) -> Path:
+    """reference.<device>.json beside the base reference when it exists, else the base: one stored reference serves every
+    device class until a device's output moves outside the tolerance, and then it gets its own file."""
+    specific = base.with_name("%s.%s%s" % (base.stem, device, base.suffix))
+    return specific if specific.exists() else base
+
+
 def reference_check(loaded: Loaded, settings: Settings, reference: Mapping[str, Any]) -> dict[str, Any]:
     """Once at start, never per probe (the GPU must not compute for a healthcheck): the reference texts against the stored
     reference vectors. Ready when the reference belongs to this model and revision and every cosine is at
@@ -260,7 +267,9 @@ def create_app(
     async def lifespan(app: FastAPI):
         current = settings or Settings.from_env()
         loaded = load(current)
-        app.state.readiness = reference_check(loaded, current, json.loads(reference_path.read_text(encoding="utf-8")))
+        app.state.readiness = reference_check(
+            loaded, current, json.loads(reference_for(reference_path, loaded.device).read_text(encoding="utf-8"))
+        )
         logger.info("Reference check: %s", app.state.readiness)
         app.state.settings, app.state.loaded = current, loaded
         app.state.queue = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)

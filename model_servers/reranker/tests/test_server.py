@@ -305,6 +305,27 @@ def test_info_liveness_and_the_routes_that_are_gone(tmp_path):
         assert gone + [c.get(p).status_code for p in ("/docs", "/redoc", "/openapi.json")] == [404] * 5
 
 
+def test_reference_file_by_device(tmp_path):
+    base = reference_file(tmp_path)
+    assert main.reference_for(base, "mps") == base  # only the base exists
+    own = tmp_path / "reference.mps.json"
+    own.write_text("{}", encoding="utf-8")
+    assert main.reference_for(base, "mps") == own
+    assert main.reference_for(base, "cuda") == base and main.reference_for(base, "cpu") == base
+
+
+def test_the_start_up_check_reads_the_reference_of_the_device_class(tmp_path):
+    reference_file(tmp_path)
+    (tmp_path / "reference.mps.json").write_text(
+        json.dumps({"model": SETTINGS.model, "revision": REV, **REF, "score": 0.0}), encoding="utf-8"
+    )
+    for device, status in (("cuda", 200), ("mps", 503)):
+        fake = main.Loaded(loaded().predict, "float16", device)
+        app = main.create_app(SETTINGS, load=lambda s: fake, reference_path=tmp_path / "reference.json")
+        with TestClient(app) as c:
+            assert c.get("/readyz").status_code == status
+
+
 # --- the fatal CUDA exit and the device choice ---------------------------------------------------
 def fake_torch_errors(monkeypatch):
     """torch with the two error classes the rule tells apart (torch 2.11: both are RuntimeErrors)"""
