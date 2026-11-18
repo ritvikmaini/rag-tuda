@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from rag_core.adapters.chat_openai import ChatOpenAIModel, build_chat_openai
+from rag_core.adapters.chat_openai import ChatOpenAIModel, build_chat_openai, response_format
 from rag_core.adapters.embedding_http import EmbeddingClient
 from rag_core.adapters.http import get_http_client
 from rag_core.adapters.pg_index import IndexHandles, open_index
@@ -18,6 +18,7 @@ from rag_core.adapters.reranker_http import RerankerHttp
 from rag_core.adapters.vllm_tokenize import token_counter
 from rag_core.domain.access import AllowAll
 from rag_core.domain.context_budget import TokenCounter
+from rag_core.domain.query_analysis import analysis_schema
 from rag_core.domain.resilience import dispose_engines
 from rag_core.services.prompts import PromptService
 from rag_core.services.retrieval import RetrievalService
@@ -86,7 +87,9 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
     profile, card, overlay = settings.profile, settings.card, settings.overlay
     g = profile.generation
 
-    def chat(endpoint: Endpoint, reasoning: str, temperature: float, max_tokens: int, retries: int) -> Any:
+    def chat(
+        endpoint: Endpoint, reasoning: str, temperature: float, max_tokens: int, retries: int, stream: bool = True
+    ) -> Any:
         return build_chat_openai(
             provider=endpoint.provider,
             model=endpoint.model,
@@ -98,6 +101,7 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
             reasoning=reasoning,
             extras=card.sampling.extras,
             max_retries=retries,
+            stream=stream,
         )
 
     embedding = profile.retrieval.embedding
@@ -115,8 +119,10 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
                 g.analysis_temperature,
                 g.analysis_max_tokens,
                 card.timeouts.retries,
+                stream=False,
             ),
             g.analysis_max_tokens,
+            response_format(card.structured_output, card.analysis_endpoint.provider, analysis_schema(profile)),
         ),
         counter=token_counter(card),
         embedder=EmbeddingClient(

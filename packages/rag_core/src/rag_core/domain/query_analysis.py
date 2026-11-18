@@ -23,6 +23,25 @@ MAX_QUERIES = {"situation": 4}
 DEFAULT_MAX_QUERIES = 3
 ANSWER_SHAPES = ("text", "table", "steps")
 
+
+def analysis_schema(profile: Any) -> dict[str, Any]:
+    """The JSON schema of the rewriter's answer, in the strict shape (every property required, no extra keys, a nullable
+    date as a union with null). The fields are the ones the prompt asks for and parse_query_analysis reads; the enums are
+    the module's (profile is the argument for enums that come from a profile)."""
+    string = {"type": "string"}
+    date_or_null = {"type": ["string", "null"]}
+    properties = {
+        "standalone_question": string,
+        "intent": {"type": "string", "enum": list(INTENTS)},
+        "search_queries": {"type": "array", "items": string},
+        "language": string,
+        "date_from": date_or_null,
+        "date_to": date_or_null,
+        "answer_shape": {"type": "string", "enum": list(ANSWER_SHAPES)},
+    }
+    return {"type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}
+
+
 THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 LANGUAGE_NAME = re.compile(r"[A-Za-zÄÖÜäöüß]{2,20}")

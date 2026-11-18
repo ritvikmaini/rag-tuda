@@ -60,11 +60,13 @@ def build_chat_openai(
     reasoning: str,
     extras: Mapping[str, Any],
     max_retries: int,
+    stream: bool = True,
     http_async_client: httpx.AsyncClient | None = None,
 ) -> ChatOpenAI:
     """Bounded waits on the model server: up to read_timeout_s between two streamed chunks (the guard bounds the whole
     answer). A streamed answer asks for the usage of the call. The API key comes from OPENAI_API_KEY (compose: not-needed).
-    The options travel as extra_body (langchain-openai 1.x warns when they come through model_kwargs; the body is the same)."""
+    The options travel as extra_body (langchain-openai 1.x warns when they come through model_kwargs; the body is the same).
+    stream=False fixes the client to one non-streamed request: astream_events around the graph cannot turn its calls into streams."""
     options: dict[str, Any] = {"base_url": base_url, "max_tokens": int(max_tokens)}
     if body := extra_body(provider, reasoning, extras):
         options["extra_body"] = body
@@ -75,10 +77,22 @@ def build_chat_openai(
         temperature=temperature,
         top_p=top_p,
         stream_usage=True,
+        disable_streaming=not stream,
         timeout=httpx.Timeout(connect=5.0, read=read_timeout_s, write=10.0, pool=10.0),
         max_retries=max_retries,
         **options,
     )
+
+
+def response_format(structured_output: str, provider: str, schema: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The request's response_format for the card's structured_output: the schema (json_schema, strict only at Groq, whose
+    models enforce it), any JSON object (json_object), or none (prompt: the lenient parser reads the text)."""
+    if structured_output == "json_schema":
+        json_schema = {"name": "query_analysis", "schema": dict(schema), "strict": provider == "groq"}
+        return {"type": "json_schema", "json_schema": json_schema}
+    if structured_output == "json_object":
+        return {"type": "json_object"}
+    return None
 
 
 def failure_of(exc: BaseException, provider: str) -> str | None:
@@ -130,8 +144,11 @@ async def ainvoke_waiting(llm: Any, prompt: Any, *, retries: int, deadline_at: f
 class ChatOpenAIModel:
     """The ChatModel port over a ChatOpenAI client: (role, text) messages in, the reply's text out."""
 
-    def __init__(self, llm: Any, max_tokens: int) -> None:
-        self.runnable = llm.bind(max_tokens=max_tokens)  # the analysis' length is bounded
+    def __init__(self, llm: Any, max_tokens: int, response_format: Mapping[str, Any] | None = None) -> None:
+        options: dict[str, Any] = {"max_tokens": max_tokens}  # the analysis' length is bounded
+        if response_format is not None:
+            options["response_format"] = dict(response_format)
+        self.runnable = llm.bind(**options)
 
     async def complete(self, messages: Sequence[tuple[str, str]]) -> str:
         classes: dict[str, Any] = {"system": SystemMessage, "assistant": AIMessage}

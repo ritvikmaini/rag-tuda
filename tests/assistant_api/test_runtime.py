@@ -256,6 +256,11 @@ def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) ->
     # the options each provider accepts: Groq the reasoning level, Ollama (the analysis) its own, neither the vLLM extras
     assert rt.answer_llm.extra_body == {"reasoning_effort": "low"}
     assert rt.analysis.runnable.bound.extra_body == {"reasoning_effort": "low"}
+    # the analysis client never streams (the answer's does) and sends the card's response_format; its provider here is
+    # Ollama, so the schema is not strict
+    assert rt.analysis.runnable.bound.disable_streaming and not rt.answer_llm.disable_streaming
+    assert rt.analysis.runnable.kwargs["response_format"]["json_schema"]["strict"] is False
+    assert rt.analysis.runnable.kwargs["max_tokens"] == settings.profile.generation.analysis_max_tokens == 800
 
 
 def test_timeouts_come_from_card(tmp_path, monkeypatch) -> None:

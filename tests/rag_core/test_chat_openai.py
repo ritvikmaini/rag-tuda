@@ -7,12 +7,15 @@ import asyncio
 import json
 import time
 import warnings
+from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import httpx
 import openai
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableLambda
 from langchain_openai import ChatOpenAI
 
 from rag_core.adapters.chat_openai import (
@@ -25,8 +28,15 @@ from rag_core.adapters.chat_openai import (
     extra_body,
     failure_of,
     reasoning_options,
+    response_format,
 )
+from rag_core.domain.query_analysis import analysis_schema
+from rag_core.services.analysis import analyse
+from rag_core.services.prompts import PromptService, load_profile_prompts
+from rag_core.settings import load_profile
+from rag_core.settings.profile import Profile
 
+PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
 URL = "http://vllm.test/v1"
 MODEL = "Qwen/Qwen3-14B-AWQ"
 EXTRAS = {"top_k": 50, "repetition_penalty": 1.05}
@@ -297,3 +307,116 @@ def test_429_waits_retry_after_within_deadline(monkeypatch) -> None:
         assert reply is None and len(calls) == 1, kwargs  # the rate limit is raised: the busy message
     assert run(None)[0] is None  # no retry-after: nothing to wait for
     assert run("soon")[0] is None  # not a number of seconds
+
+
+def analysis_model(
+    bodies: list, *, structured_output: str = "json_schema", provider: str = "ollama", reply: str = "{}"
+) -> ChatOpenAIModel:
+    """The analysis model as the runtime builds it: a non-streamed client, the schema from the card's structured_output."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        bodies.append(body)
+        if body.get("stream"):  # what a streaming client would get
+            text = sse({"role": "assistant", "content": reply})
+            return httpx.Response(200, headers={"content-type": "text/event-stream"}, text=text)
+        message = {"role": "assistant", "content": reply}
+        choice = {"index": 0, "message": message, "finish_reason": "stop"}
+        return httpx.Response(
+            200, json={"id": "c", "object": "chat.completion", "created": 1, "model": MODEL, "choices": [choice]}
+        )
+
+    llm = build_chat_openai(
+        provider=provider,
+        model=MODEL,
+        base_url=URL,
+        temperature=0,
+        top_p=0.1,
+        max_tokens=800,
+        read_timeout_s=60.0,
+        reasoning="off",
+        extras={},
+        max_retries=0,
+        stream=False,
+        http_async_client=httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+    )
+    return ChatOpenAIModel(llm, 800, response_format(structured_output, provider, analysis_schema(None)))
+
+
+def test_analysis_inside_astream_events_is_not_streamed(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    bodies: list = []
+    model = analysis_model(bodies)
+
+    async def analysis_node(_: Any) -> str:
+        return await model.complete([("system", "s"), ("user", "q")])
+
+    async def run() -> None:  # the graph's way: an event stream around a runnable that awaits the model
+        async for _ in RunnableLambda(analysis_node).astream_events(None, version="v2"):
+            pass
+
+    asyncio.run(run())
+    assert len(bodies) == 1 and not bodies[0].get("stream")
+    assert "stream_options" not in bodies[0]
+    assert bodies[0]["response_format"]["type"] == "json_schema"
+    assert bodies[0]["max_completion_tokens"] == 800
+
+
+def test_the_cards_structured_output_picks_the_response_format_and_strict_is_groq_only(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    schema = analysis_schema(None)
+    assert response_format("json_object", "ollama", schema) == {"type": "json_object"}
+    assert response_format("prompt", "ollama", schema) is None
+    for provider, strict in (("groq", True), ("ollama", False), ("vllm", False), ("lmstudio", False)):
+        assert response_format("json_schema", provider, schema) == {
+            "type": "json_schema",
+            "json_schema": {"name": "query_analysis", "schema": schema, "strict": strict},
+        }, provider
+
+    def body_of(structured_output: str) -> dict:
+        bodies: list = []
+        asyncio.run(analysis_model(bodies, structured_output=structured_output).complete([("user", "q")]))
+        return bodies[0]
+
+    assert body_of("json_object")["response_format"] == {"type": "json_object"}
+    assert "response_format" not in body_of("prompt")
+
+
+def test_the_analysis_schema_is_in_the_strict_shape() -> None:
+    schema = analysis_schema(None)
+    assert schema["additionalProperties"] is False
+    assert set(schema["required"]) == set(schema["properties"])
+    assert set(schema["properties"]) == {
+        "standalone_question",
+        "intent",
+        "search_queries",
+        "language",
+        "date_from",
+        "date_to",
+        "answer_shape",
+    }
+    assert schema["properties"]["date_from"]["type"] == ["string", "null"]
+    assert "out_of_scope" in schema["properties"]["intent"]["enum"]
+    assert schema["properties"]["answer_shape"]["enum"] == ["text", "table", "steps"]
+
+
+def test_invalid_json_falls_back_to_plain_question(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    question = "Wann hat das Bürgerbüro am Samstag geöffnet?"
+    truncated = '{"standalone_question": "Wann hat das Bürgerbüro am Sams'  # cut off at the token cap
+    profile = load_profile(Profile, PROFILE)
+    analysis, queries = asyncio.run(
+        analyse(
+            question=question,
+            history="",
+            now=datetime(2026, 11, 18, 9, 30),
+            identity=profile.identity,
+            prompts=PromptService(load_profile_prompts(PROFILE.parent / "prompts")),
+            model=analysis_model([], reply=truncated),
+            timeout_s=5.0,
+            max_queries=3,
+            first_turn=True,
+        )
+    )
+    assert analysis.parsed == "fallback" and analysis.standalone_question == question
+    assert analysis.intent == "lookup" and queries == [question]
