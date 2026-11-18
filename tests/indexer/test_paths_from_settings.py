@@ -4,6 +4,8 @@ are the defaults, the environment moves them (a native run puts them under .rag/
 import json
 from pathlib import Path
 
+import yaml
+
 from indexer import build, gates
 from indexer.settings import load_settings
 
@@ -49,3 +51,23 @@ def test_the_secrets_folder_is_set_by_the_environment(tmp_path, profile):
     (secrets / "pg_vector_password").write_text("pw\n", encoding="utf-8")
     environ = {"RAG_PROFILE": profile, "RAG_OVERLAY": CI, "RAG_SECRETS_DIR": str(secrets)}
     assert load_settings(environ).overlay.database.password.get_secret_value() == "pw"
+
+
+def test_the_config_hash_ignores_the_paths_and_follows_the_profile(tmp_path, profile, moved):
+    """A characterisation: the hash names what shapes the index, so a native run (other folders) and a compose run of one
+    profile share it, and a changed profile value changes it."""
+
+    def hash_of(profile_path, folders):
+        environ = {"RAG_PROFILE": profile_path, "RAG_OVERLAY": CI} | {
+            f"RAG__PATHS__{k.upper()}": v for k, v in folders.items()
+        }
+        return load_settings(environ, secrets_dir=str(tmp_path / "secrets")).config_hash()
+
+    elsewhere = {key: str(tmp_path / "native" / Path(value).name) for key, value in moved.items()}
+    assert hash_of(profile, moved) == hash_of(profile, elsewhere)
+
+    spec = yaml.safe_load(Path(profile).read_text(encoding="utf-8"))
+    spec["ingest"]["extraction"]["max_ocr_pages"] += 1
+    changed = tmp_path / "changed.yaml"
+    changed.write_text(yaml.safe_dump(spec, allow_unicode=True), encoding="utf-8")
+    assert hash_of(str(changed), moved) != hash_of(profile, moved)
