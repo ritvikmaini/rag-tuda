@@ -14,7 +14,7 @@ from pydantic import BaseModel, ConfigDict
 from rag_core.domain.source_meta import SourceLabels
 from rag_core.services.prompts import PromptText, load_profile_prompts
 from rag_core.settings import OverlaySection, SettingsError, load, load_profile
-from rag_core.settings.card import DEFAULT_CARDS_DIR, Card, load_card
+from rag_core.settings.card import DEFAULT_CARDS_DIR, Card, load_card, with_local_url
 from rag_core.settings.profile import Guard, Profile
 from rag_core.settings.sections import Compute, DatabaseSection, Http, ModelServersSection, Server, Timeouts, Tracing
 
@@ -105,11 +105,13 @@ class AssistantSettings:
 
 
 def _card(environ: Mapping[str, str]) -> Card:
-    """The model card: RAG__CARD names a shipped card (in RAG_CARDS_DIR, the image's /app/cards), RAG__CARD_FILE a card file."""
+    """The model card: RAG__CARD names a shipped card (in RAG_CARDS_DIR, the image's /app/cards), RAG__CARD_FILE a card file.
+    RAG__LLM_URL, when set, replaces the url of the card's local endpoints."""
     name, file = environ.get("RAG__CARD"), environ.get("RAG__CARD_FILE")
     if bool(name) == bool(file):
         raise SettingsError("RAG__CARD or RAG__CARD_FILE: exactly one names the model card (environment)")
-    return load_card(Path(file) if file else name or "", environ.get("RAG_CARDS_DIR") or DEFAULT_CARDS_DIR)
+    card = load_card(Path(file) if file else name or "", environ.get("RAG_CARDS_DIR") or DEFAULT_CARDS_DIR)
+    return with_local_url(card, url) if (url := environ.get("RAG__LLM_URL")) else card
 
 
 def load_settings(

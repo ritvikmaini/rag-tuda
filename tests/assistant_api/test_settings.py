@@ -235,6 +235,12 @@ def test_the_card_comes_from_a_name_or_a_file(secrets: Path) -> None:
     assert by_file.card.name == "ci-fake" and by_file.card.answer.model == "Qwen/Qwen3-14B-AWQ"
 
 
+def test_llm_url_moves_the_cards_local_endpoints(secrets: Path) -> None:
+    moved = load_settings(environment(RAG__LLM_URL="http://ollama:11434/v1"), secrets_dir=secrets)
+    assert moved.card.answer.url == "http://ollama:11434/v1"
+    assert load_settings(environment(), secrets_dir=secrets).card.answer.url != moved.card.answer.url
+
+
 def test_exactly_one_card_is_named(secrets: Path) -> None:
     with pytest.raises(SettingsError, match="RAG__CARD"):
         load_settings(environment(RAG__CARD_FILE="<unset>"), secrets_dir=secrets)

@@ -7,7 +7,7 @@ import pytest
 
 from rag_core.domain.language import strip_foreign
 from rag_core.settings import SettingsError
-from rag_core.settings.card import Card, effective_window, load_card
+from rag_core.settings.card import Card, effective_window, load_card, with_local_url
 from rag_core.settings.profile import Generation
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -172,3 +172,22 @@ def test_a_section_that_is_no_table_names_the_file_and_the_key(tmp_path: Path) -
     )
     with pytest.raises(SettingsError, match=r"budget.*flat\.toml"):
         load_card(path)
+
+
+def test_llm_url_replaces_the_local_endpoints_only() -> None:
+    local = card(analysis={**LOCAL, "model": "analysis:1b", "context_window": 32768})
+    moved = with_local_url(local, "http://ollama:11434/v1")
+    assert moved.answer.url == moved.analysis_endpoint.url == "http://ollama:11434/v1"
+    assert moved.answer.model == "test:4b" and moved.analysis_endpoint.model == "analysis:1b"
+    groq = {"provider": "groq", "url": "https://api.groq.com/openai/v1", "model": "g/120b", "context_window": 131072}
+    mixed = with_local_url(
+        card("L", answer=groq, analysis={**LOCAL, "context_window": 32768}), "http://ollama:11434/v1"
+    )
+    assert mixed.answer.url == "https://api.groq.com/openai/v1"  # a remote endpoint keeps its own
+    assert mixed.analysis_endpoint.url == "http://ollama:11434/v1"
+
+
+def test_llm_url_must_be_an_http_url_without_a_trailing_slash() -> None:
+    for bad in ("ollama:11434/v1", "http://ollama:11434/v1/"):
+        with pytest.raises(SettingsError, match="RAG__LLM_URL"):
+            with_local_url(card(), bad)

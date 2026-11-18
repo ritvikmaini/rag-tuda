@@ -3,7 +3,8 @@
 Technical sections are OverlaySection models (extra keys forbidden, frozen) and a settings model holds sections. load()
 reads, each layer overriding the one before:
   1. the overlay file, when one is named (YAML: {section: {key: value}});
-  2. environment variables RAG__<SECTION>__<KEY> (RAG__CARD and RAG__CARD_FILE name the model card, see card.py);
+  2. environment variables RAG__<SECTION>__<KEY> (RAG__CARD and RAG__CARD_FILE name the model card, RAG__LLM_URL moves its
+     local endpoints, see card.py);
   3. secret files: a field declared with secret("<name>") reads <secrets_dir>/<name> (trailing line breaks stripped);
      secrets_dir is the argument, else RAG_SECRETS_DIR, else /run/secrets.
 An unknown section or key, in the overlay or the environment, raises SettingsError naming the key and its source; so does a
@@ -24,7 +25,9 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic.fields import FieldInfo
 
 PREFIX = "RAG__"
-CARD_VARIABLES = frozenset({"RAG__CARD", "RAG__CARD_FILE"})  # select the model card; they set no section key
+CARD_VARIABLES = frozenset(
+    {"RAG__CARD", "RAG__CARD_FILE", "RAG__LLM_URL"}
+)  # select or adjust the model card; no section key
 _SECRET_FILE = "secret_file"
 
 Layer = dict[tuple[str, str], tuple[object, str]]  # (section, key) -> (value, the source's name)

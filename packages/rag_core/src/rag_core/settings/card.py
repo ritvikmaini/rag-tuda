@@ -203,6 +203,23 @@ def effective_window(card: Card) -> int:
     return min(windows)
 
 
+def with_local_url(card: Card, url: str) -> Card:
+    """The card with url as the url of each endpoint whose provider is local (ollama, vllm, lmstudio); a remote endpoint keeps
+    its own. Cards name the host's address of a local server, a container reaches it by its service name."""
+
+    def swap(endpoint: Endpoint) -> Endpoint:
+        if endpoint.provider in REMOTE_PROVIDERS:
+            return endpoint
+        try:
+            return Endpoint.model_validate({**endpoint.model_dump(), "url": url})
+        except ValidationError:
+            raise SettingsError(
+                "RAG__LLM_URL: expected an http(s) URL without a trailing slash (environment)"
+            ) from None
+
+    return card.model_copy(update={"answer": swap(card.answer), "analysis": card.analysis and swap(card.analysis)})
+
+
 def load_card(name_or_path: str | Path, cards_dir: str | Path = DEFAULT_CARDS_DIR) -> Card:
     """The card named name_or_path (a file in cards_dir), or the file at that path when it is a Path or ends in .toml; an
     unreadable file or an invalid key raises SettingsError naming the file and the key, never a value."""
