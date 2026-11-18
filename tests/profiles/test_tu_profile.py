@@ -183,34 +183,23 @@ def test_prompts_render_de():
         assert system[0] == "system" and user[0] == "user"
         assert "{{" not in system[1] + user[1] and "<bot_name>" in system[1]
         if name != "question-rewriting":  # the analysis answers in JSON, not to the person
-            assert 'mit "Sie" an' in system[1], name  # German answers address the person with Sie
+            assert '("Sie")' in system[1], name  # German answers address the person with Sie
             assert "Antworte in: Deutsch" in system[1], name
         assert "Studierende und Promovierende des Fachbereichs Informatik der TU Darmstadt" in system[1], name
     rules = _rendered("rag-generation")[0][1]
     assert [int(n) for n in re.findall(r"^(\d+)\. ", rules, re.M)] == list(range(1, 12))
-    assert "Maßgeblich ist der deutsche Wortlaut" in rules and "Rechtsberatung" in rules
+    assert "Verbindlich ist der deutsche Wortlaut" in rules and "Rechtsberatung" in rules
     assert "PO 2015" in rules and "nebeneinander" in rules  # the versions of an Ordnung stand side by side
     assert "kein offizieller Dienst der TU Darmstadt" in rules
     direct = _rendered("direct-reply")[0][1]
-    assert "kein offizieller Dienst der TU Darmstadt" in direct and "112" in direct and "116 117" in direct
+    assert "kein offizieller Dienst der TU Darmstadt" in direct and "112" in direct and "0800" not in direct
     for name in ("direct-reply", "no-docs-found", "rag-generation"):
         text = _rendered(name)[0][1]
         assert not re.search(r"@|06151", text), name  # no contact of the university is named
-        assert set(re.findall(r"\b\d{3,}\b", text)) <= {
-            "110",
-            "111",
-            "112",
-            "116",
-            "117",
-            "222",
-            "0800",
-            "250",
-            "2015",
-            "2023",
-        }, name
+        assert set(re.findall(r"\b\d{3,}\b", text)) <= {"112", "250", "2015", "2023"}, name
     rewriting = _rendered("question-rewriting")[0][1]
     assert "B.Sc. Informatik, M.Sc. Informatik und M.Sc. Computer Science" in rewriting
-    assert "auch bei einer englischen Nachricht" in rewriting  # German queries for every question
+    assert "auch bei englischen Nachrichten" in rewriting  # German queries for every question
 
 
 def test_markers_classify_v0_prompts():
