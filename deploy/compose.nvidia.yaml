@@ -1,0 +1,28 @@
+# NVIDIA GPUs for the model servers: merged over compose.yaml with
+#   docker compose --env-file .env -f deploy/compose.yaml -f deploy/compose.nvidia.yaml up -d
+# Needs the NVIDIA container toolkit on the host. With compose.vllm.yaml, name that file last: it removes the ollama
+# service this file extends.
+
+x-gpu: &gpu
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities: [gpu]
+
+services:
+  embedding_service:
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - RAG_DEVICE=cuda
+    deploy: *gpu
+
+  reranker_service:
+    environment:
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - RAG_DEVICE=cuda
+    deploy: *gpu
+
+  ollama:
+    deploy: *gpu

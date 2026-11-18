@@ -1,5 +1,7 @@
-"""Compose services: the unused Streamlit demo is gone; the evals job."""
+"""Compose services: the unused Streamlit demo is gone; the evals job; the user stack (loopback ports, pinned images, CPU base,
+NVIDIA and vLLM overlays)."""
 
+import json
 import os
 import re
 import shutil
@@ -8,12 +10,30 @@ import subprocess
 import pytest
 import yaml
 
+from rag_core.settings.card import effective_window, load_card
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BASE = "deploy/compose.yaml"
+NVIDIA = "deploy/compose.nvidia.yaml"
+VLLM = "deploy/compose.vllm.yaml"
+COMPOSE_FILES = (BASE, NVIDIA, VLLM, "deploy/compose.ci.yaml", "deploy/compose.ci.example.yaml")
+HAS_COMPOSE = (
+    shutil.which("docker") is not None
+    and subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0
+)
+needs_compose = pytest.mark.skipif(not HAS_COMPOSE, reason="needs the docker CLI with the compose plugin (no daemon)")
+
+
+class ComposeLoader(yaml.SafeLoader):
+    """safe_load that reads compose's `!reset` (an overlay removing a key) as null."""
+
+
+ComposeLoader.add_constructor("!reset", lambda loader, node: None)
 
 
 def services(name):
     with open(os.path.join(ROOT, name), encoding="utf-8") as fh:
-        return yaml.safe_load(fh)["services"]
+        return yaml.load(fh, ComposeLoader)["services"]
 
 
 def test_no_compose_service_builds_or_runs_the_streamlit_demo():
@@ -45,37 +65,29 @@ def test_the_backend_token_reaches_the_evals_job_as_a_file_not_a_variable():
     assert [e for e in compose["services"]["evals"].get("environment", []) if "TOKEN" in e] == []
 
 
-@pytest.mark.skipif(
-    shutil.which("docker") is None
-    or subprocess.run(["docker", "compose", "version"], capture_output=True).returncode != 0,
-    reason="needs the docker CLI with the compose plugin (no daemon)",
-)
-def test_compose_renders_the_evals_job_with_every_secret_set(tmp_path):
+def render(*files, args=(), env=None):
+    """docker compose config for the files, as the project rag-tuda; no daemon is needed."""
+    command = ["docker", "compose", "-p", "rag-tuda"]
+    for name in files:
+        command += ["-f", name]
+    return subprocess.run(
+        [*command, *args, "config", "--format", "json"], cwd=ROOT, capture_output=True, text=True, timeout=60, env=env
+    )
+
+
+@needs_compose
+@pytest.mark.parametrize("overlays", [(), (NVIDIA,), (VLLM,), (NVIDIA, VLLM)])
+def test_compose_renders_every_stack_combination_with_every_secret_set(tmp_path, overlays):
     names = set()
-    for name in ("deploy/compose.yaml",):
+    for name in (BASE, *overlays):
         with open(os.path.join(ROOT, name), encoding="utf-8") as fh:
             names |= set(re.findall(r"\$\{([A-Z0-9_]+):\?", fh.read()))
     env = tmp_path / "full.env"
     env.write_text("".join("%s=x\n" % k for k in sorted(names)), encoding="utf-8")
-    result = subprocess.run(
-        [
-            "docker",
-            "compose",
-            "--env-file",
-            str(env),
-            "-f",
-            "deploy/compose.yaml",
-            "--profile",
-            "evals",
-            "--profile",
-            "migrate",
-            "config",
-            "--quiet",
-        ],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        timeout=60,
+    result = render(
+        BASE,
+        *overlays,
+        args=("--env-file", str(env), "--profile", "evals", "--profile", "migrate", "--profile", "build"),
     )
     assert result.returncode == 0, result.stderr
 
@@ -102,3 +114,76 @@ def test_the_documented_index_build_command_runs_the_indexer_cli():
     assert services("deploy/compose.yaml")["indexer"]["profiles"] == ["build"]
     harness = open(os.path.join(ROOT, "packages/rag_testing/src/rag_testing/harness.py"), encoding="utf-8").read()
     assert '"--no-deps", "indexer"]' in harness and '[*command, "build"]' in harness
+
+
+def all_services(name):
+    return {service: spec for service, spec in services(name).items() if spec is not None}  # `!reset` entries are null
+
+
+def test_every_published_port_is_bound_to_loopback_and_the_stack_publishes_only_the_backend():
+    for name in COMPOSE_FILES:
+        for service, spec in all_services(name).items():
+            for port in spec.get("ports", []):
+                assert str(port).startswith("127.0.0.1:"), (name, service, port)
+    published = {s: spec["ports"] for s, spec in services(BASE).items() if "ports" in spec}
+    assert published == {"backend": ["127.0.0.1:8700:8000"]}
+    for overlay in (NVIDIA, VLLM):
+        assert [s for s, spec in all_services(overlay).items() if "ports" in spec] == [], overlay
+
+
+def test_every_stack_service_is_built_here_or_pinned_by_digest():
+    for name in (BASE, VLLM):
+        for service, spec in all_services(name).items():
+            if "build" in spec or (name != BASE and service in services(BASE)):  # an overlay only adjusts these
+                continue
+            image = spec.get("image", "")
+            if service == "migrate":  # a one-off of the backend image the stack builds
+                assert image == "rag-tuda-backend:latest"
+                continue
+            assert re.fullmatch(r"[\w./-]+:[\w.-]+@sha256:[0-9a-f]{64}", image), (name, service, image)
+
+
+def test_the_base_stack_runs_on_the_cpu_with_ollama():
+    found = services(BASE)
+    assert "vllm" not in found and "ollama" in found
+    assert "ports" not in found["ollama"] and "ollama-models:/root/.ollama" in found["ollama"]["volumes"]
+    assert "ollama" in found["backend"]["depends_on"] and "vllm" not in found["backend"]["depends_on"]
+    for service, spec in found.items():
+        assert "devices" not in str(spec.get("deploy", {})) and "gpu" not in str(spec.get("deploy", {})), service
+        assert not [e for e in spec.get("environment", []) if "cuda" in e.lower() or "RAG_DEVICE" in e], service
+
+
+def test_ollama_context_length_is_the_default_cards_window():
+    from_stack = {e.split("=", 1)[0]: e.split("=", 1)[1] for e in services(BASE)["backend"]["environment"] if "=" in e}
+    card = load_card(from_stack["RAG__CARD"], os.path.join(ROOT, "models", "cards"))
+    ollama = dict(e.split("=", 1) for e in services(BASE)["ollama"]["environment"])
+    assert int(ollama["OLLAMA_CONTEXT_LENGTH"]) == effective_window(card)
+    assert from_stack["RAG__LLM_URL"] == "http://ollama:11434/v1"
+    assert card.answer.provider == "ollama"
+
+
+def test_the_nvidia_overlay_adds_the_gpus_and_the_device_to_the_model_servers_only():
+    found = services(NVIDIA)
+    assert set(found) == {"embedding_service", "reranker_service", "ollama"}
+    for service in ("embedding_service", "reranker_service"):
+        assert "RAG_DEVICE=cuda" in found[service]["environment"], service
+    for service, spec in found.items():
+        (device,) = spec["deploy"]["resources"]["reservations"]["devices"]
+        assert device == {"driver": "nvidia", "count": "all", "capabilities": ["gpu"]}, service
+
+
+@needs_compose
+def test_the_vllm_overlay_replaces_ollama_with_the_cards_server():
+    for files in ((BASE, VLLM), (BASE, NVIDIA, VLLM)):
+        result = render(*files)
+        assert result.returncode == 0, result.stderr
+        rendered = json.loads(result.stdout)["services"]
+        assert "ollama" not in rendered, files
+        assert set(rendered["backend"]["depends_on"]) == {"pgvector", "vllm"}, files
+        env = rendered["backend"]["environment"]
+        card = load_card(env["RAG__CARD"], os.path.join(ROOT, "models", "cards"))
+        assert card.answer.provider == "vllm" and env["RAG__LLM_URL"] == "http://vllm:8000/v1"
+        command = " ".join(rendered["vllm"]["command"]) + " "
+        assert f"--model {card.answer.model} " in command and "ports" not in rendered["vllm"]
+        assert f"--max-model-len {card.answer.context_window} " in command
+    assert "vllm" not in json.loads(render(BASE).stdout)["services"]

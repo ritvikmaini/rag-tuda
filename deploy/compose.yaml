@@ -1,6 +1,11 @@
-# The rag-tuda stack: one file, project rag-tuda, run from the repository root with the
-# root .env:   docker compose --env-file .env -f deploy/compose.yaml <command> <service>
-# Paths are relative to this folder (deploy/). The GPU settings are inline.
+# The rag-tuda stack, project rag-tuda, run from the repository root with the root .env:
+#   docker compose --env-file .env -f deploy/compose.yaml <command> <service>
+# This file runs on the CPU with Ollama as the language model server; the only host port is the backend's, on 127.0.0.1.
+#   -f deploy/compose.nvidia.yaml   adds the GPUs to the embedding, reranker and Ollama services
+#   -f deploy/compose.vllm.yaml     replaces Ollama by vLLM (name it last)
+# Ollama starts without a model: pull the card's once, after the first `up` (the card's download_gb is the size):
+#   docker compose --env-file .env -f deploy/compose.yaml exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
+# Paths are relative to this folder (deploy/).
 
 name: rag-tuda
 
@@ -23,6 +28,8 @@ services:
       args:
         PROFILE: example
     logging: *default-logging
+    ports:
+      - "127.0.0.1:8700:8000"
     volumes:
       - ../data:/app/data
     environment:
@@ -34,7 +41,9 @@ services:
       # the assistant's technical settings: RAG__<SECTION>__<KEY>
       - RAG__DATABASE__HOST=pgvector
       - RAG__DATABASE__PORT=5432
-      - RAG__CARD=xl-vllm-example
+      # the card's url names the host's Ollama; RAG__LLM_URL moves its local endpoints to the compose service
+      - RAG__CARD=s-qwen3-4b-instruct-2507
+      - RAG__LLM_URL=http://ollama:11434/v1
       - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
       - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
       - RAG__COMPUTE__SLOT_WAIT_S=30
@@ -53,7 +62,7 @@ services:
     depends_on:
       pgvector:
         condition: service_healthy
-      vllm:
+      ollama:
         condition: service_healthy
     deploy:
       resources:
@@ -94,18 +103,11 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - HF_HUB_DISABLE_XET=1
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - RAG_DEVICE=cuda
     deploy:
       resources:
         limits:
           cpus: '4.0'
           memory: 6G
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     healthcheck:
       # /readyz: the start-up reference check, cached (no GPU work per probe)
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/readyz', timeout=4)"]
@@ -126,18 +128,11 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - HF_HUB_DISABLE_XET=1
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - RAG_DEVICE=cuda
     deploy:
       resources:
         limits:
           cpus: '4.0'
           memory: 6G
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     healthcheck:
       # /readyz: the start-up reference check, cached (no GPU work per probe)
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/readyz', timeout=4)"]
@@ -146,42 +141,22 @@ services:
       retries: 3
       start_period: 120s
 
-  # --- vLLM (LLM inference with GPU) ---
-  vllm:
-    image: docker.io/vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
-    logging: *default-logging
+  # --- Ollama (language model server, CPU): no host port, reached by the backend as http://ollama:11434. The context
+  # length is the card's effective window, so a prompt is not cut at Ollama's default ---
+  ollama:
+    image: docker.io/ollama/ollama:0.40.16@sha256:910d0d8107b538fb0894e63163eb195de0cc7aefcbc666dc62d3b18f71124592
     restart: unless-stopped
+    logging: *default-logging
     volumes:
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ollama-models:/root/.ollama
     environment:
-      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
-      - HF_HUB_OFFLINE=1
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-        limits:
-          memory: 14G
-    # the pinned model snapshot is loaded offline from the cache; the batch sizes 2048/256 are the ones vLLM 0.17.1 used on
-    # this GPU, pinned so an upgrade keeps them
-    command: >
-      --model Qwen/Qwen3-14B-AWQ
-      --revision 31c69efc29464b6bb0aee1398b5a7b50a99340c3
-      --dtype auto
-      --max-model-len 8192
-      --max-num-batched-tokens 2048
-      --max-num-seqs 256
-      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTIL:-0.65}
-      --kv-cache-memory-bytes 2147483648
+      - OLLAMA_CONTEXT_LENGTH=8000
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
       timeout: 10s
-      retries: 10
-      start_period: 120s
+      retries: 5
+      start_period: 20s
 
   # --- pgvector (PostgreSQL) ---
   pgvector:
@@ -237,7 +212,6 @@ services:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - HF_HUB_DISABLE_XET=1
-      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
     secrets:
       - source: rag_indexer_password
         target: pg_vector_password
@@ -282,6 +256,7 @@ services:
 
 volumes:
   db-data:
+  ollama-models:
 
 secrets:
   pg_vector_password:

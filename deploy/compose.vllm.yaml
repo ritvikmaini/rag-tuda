@@ -1,0 +1,53 @@
+# vLLM instead of Ollama, for a server with NVIDIA GPUs: merged over compose.yaml, named after compose.nvidia.yaml when
+# both are used:
+#   docker compose --env-file .env -f deploy/compose.yaml -f deploy/compose.nvidia.yaml -f deploy/compose.vllm.yaml up -d
+# The card is xl-vllm-example and the vllm service serves the model it names, with the window it names (Qwen's own
+# 4-GPU recipe for the FP8 weights). To serve another model, copy the card and change both together. The weights are loaded
+# offline from the Hugging Face cache of the host (~/.cache/huggingface): download the pinned revision there first.
+# Reached only inside the compose network as http://vllm:8000; no host port.
+
+services:
+  ollama: !reset null
+
+  backend:
+    environment:
+      - RAG__CARD=xl-vllm-example
+      - RAG__LLM_URL=http://vllm:8000/v1
+    depends_on:
+      ollama: !reset null
+      vllm:
+        condition: service_healthy
+
+  vllm:
+    image: docker.io/vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+    logging:
+      driver: local
+      options:
+        max-size: "50m"
+        max-file: "5"
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HUB_OFFLINE=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: >
+      --model Qwen/Qwen3-235B-A22B-Instruct-2507-FP8
+      --revision e156cb4efae43fbee1a1ab073f946a1377e6b969
+      --dtype auto
+      --tensor-parallel-size 4
+      --max-model-len 131072
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTIL:-0.9}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 600s
