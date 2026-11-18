@@ -302,6 +302,15 @@ def test_a_foreign_server_gets_no_ollama_steps(tmp_path, current):
     assert backend.env["RAG__LLM_URL"] == "http://gpu.lan:8080/v1" and "RAG__LLM_MODEL" not in backend.env
 
 
+def test_a_crawling_profile_has_no_folder_source_and_so_no_overlay_file(tmp_path, current):
+    assert stack.FOLDER_SOURCES["tu-informatik"] == {}
+    for profile, written in (("example", True), ("tu-informatik", False)):
+        steps = stack.plan_up(current, facts(tmp_path, ollama_up=True, crawl_contact=True), args(profile=profile))
+        assert any(s.name == "overlay" for s in steps) is written, profile
+        index = next(s for s in steps if s.name == "index-build")
+        assert ("RAG_OVERLAY" in index.env) is written, profile
+
+
 def test_the_crawl_contact_hint_is_printed_when_a_crawling_profile_has_none(tmp_path, current):
     hint = lambda steps: [s.text for s in steps if s.kind == "say" and "RAG__CRAWL__CONTACT" in s.text]  # noqa: E731
     assert not hint(stack.plan_up(current, facts(tmp_path, ollama_up=True), args(profile="example")))

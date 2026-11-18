@@ -29,8 +29,9 @@ KEYS = ("GROQ_API_KEY",)  # provider keys: only a step that names one gets it
 KEEP_RAG_ENV = ("RAG_DEVICE",)  # the one RAG_ variable a child inherits; every other is set by the plan
 READY_WAIT_S = {"embedding": 900, "reranker": 900, "backend": 180}
 SERVICES = {"embedding": runtime.PORTS["embedding"], "reranker": runtime.PORTS["reranker"]}
-# the profiles whose folder sources read a folder of the profile (source name -> folder in the profile)
-FOLDER_SOURCES = {"example": {"gesetze": "documents"}}
+# the profiles whose folder sources read a folder of the profile (source name -> folder in the profile); the TU profile
+# crawls the web and has none, so its index build needs no overlay file
+FOLDER_SOURCES = {"example": {"gesetze": "documents"}, "tu-informatik": {}}
 HF_ENV = {"HF_HUB_DISABLE_XET": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1"}
 
 

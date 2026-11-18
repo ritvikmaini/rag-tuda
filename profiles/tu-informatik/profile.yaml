@@ -1,0 +1,56 @@
+# The TU Informatik profile: the study rules and study-related pages of the Fachbereich Informatik of TU Darmstadt in the
+# collection `rag`, crawled by the web connector (sources.yaml names the hosts; roles.yaml the programmes, status groups and
+# referral offices; acronyms.yaml the term groups). An independent assistant, not an official TU service.
+collections:
+  - {name: rag, audiences: [public]}
+retrieval:
+  embedding:
+    model: Snowflake/snowflake-arctic-embed-m-v2.0
+    revision: 95c2741480856aa9666782eb4afe11959938017f
+    dimensions: 768
+    query_prefix: "query: "
+    passage_prefix: ""
+  fts_language: german
+  semantic_k: 30
+  keyword_k: 10
+  fts_extra_stopwords: []
+  semantic_max_distance: null
+  rerank: {model: BAAI/bge-reranker-v2-m3, revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e, threshold: 0.50,
+           parent_text: true, min_docs: 3, scope_fallback_min: null}
+ingest:
+  chunking: {mode: structure, parent_chars: 2000, parent_overlap: 100, child_chars: 450, child_overlap: 50,
+             children: recursive, header: tier1}
+  collections:
+    rag: {min_build_ratio: 0.7}
+  extraction: {processing: fast, max_ocr_pages: 500, ocr_pages_per_run: 100, clean_markup: true, min_text_length: 50}
+  # no scope vocabulary: the programme, degree and version of a document are typed metadata, not read from its text
+  scope: {groups: {}, areas: [], compilations: []}
+  # in build order; a source not listed is not built
+  sources:
+    tu_web: {connector: tuda_web, audience: public, min_documents: 30}
+
+# --- the assistant: its effective values --------------------------------------------------------------------------------
+identity:
+  bot_name: Studienassistent Informatik
+  language: de
+  locale: de_DE
+  date_format: "%A, der %d.%m.%Y %H:%M:%S"
+  day_names: [Montag, Dienstag, Mittwoch, Donnerstag, Freitag, Samstag, Sonntag]
+# no recency: the Ordnungen of different versions stand side by side, so no document type prefers its newer sources
+ranking:
+  recency_types: []
+  recency_bonus_per_year: 0.01
+  recency_max_bonus: 0.05
+  in_range_bonus: 0.2
+  in_range_by_year: true
+  question_years: true
+  no_recency_in_range: true
+  relevance_floor: 0.0
+  source_min_score: 0.0
+  max_per_document: 0
+history: {max_age_hours: 12, position: after_system}
+guard: {max_question_chars: 2000, safety_margin: 128, source_window_chars: 300}
+generation:
+  analysis_temperature: 0
+  analysis_max_tokens: 800
+formats: {sources_event: before}

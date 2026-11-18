@@ -1,0 +1,88 @@
+# The crawl's host allow-list; every other host is refused. A core host is built by every build, a full host only by a
+# full build; a core host with a `full` block lists more pages in a full build. Prefixes are URL paths. The city's main
+# site (www.darmstadt.de) and the other university (h-da.de) are never listed.
+# Selectors: only the FB20 host's section selector is read from a page's markup; every other selector is unverified. The
+# statutes of gesetze-im-internet.de are not crawled; they come from the official XML.
+hosts:
+  www.informatik.tu-darmstadt.de:
+    set: core
+    # the Ordnungen hubs of the three programmes, the Studienbüro pages and the promotion page; the other programmes'
+    # hubs stay out by the prefixes below. The programme, FAQ and knowledge-base pages are not listed (paths unverified).
+    seeds:
+      - https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp
+      - https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik.de.jsp
+      - https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_cs.de.jsp
+      - https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studienbuero/index.de.jsp
+      - https://www.informatik.tu-darmstadt.de/forschung_fb20/wissenschaftliche_karriere/promotion/index.de.jsp
+    sitemap: [https://www.informatik.tu-darmstadt.de/sitemap.de.xml]
+    prefixes:
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_cs
+      - /studium_fb20/im_studium/studienbuero/
+      - /forschung_fb20/wissenschaftliche_karriere/promotion/
+    exclude: []
+    depth: 1
+    twins: true
+    # .main-column is unverified
+    selectors: {main: .main-column, section: "section.content-section", drop: null}
+  www.intern.tu-darmstadt.de:
+    set: core
+    # the APB, the Einschreibeordnung and the Promotionsordnung with their English information versions; the
+    # login-gated paragraphs of the page are skipped by the crawler
+    seeds:
+      - https://www.intern.tu-darmstadt.de/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/index.de.jsp
+    sitemap: [https://www.intern.tu-darmstadt.de/sitemap.de.xml]
+    prefixes: [/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/]
+    exclude: []
+    depth: 0
+    twins: false
+    # unverified
+    selectors: {main: "main, .main-column, #content", section: "section.content-section", drop: null}
+  www.tu-darmstadt.de:
+    set: core
+    # core: listed pages only (semester dates, re-registration and fee, the residence pages for international students)
+    seeds:
+      - https://www.tu-darmstadt.de/studieren/studierende_tu/semestermine/index.de.jsp
+      - https://www.tu-darmstadt.de/studieren/studieren_von_a_bis_z/artikel_details_de_en_286144.de.jsp
+      - https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_204992.de.jsp
+      - https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_269184.en.jsp
+    sitemap: []
+    prefixes: []
+    exclude: []
+    depth: 0
+    twins: true
+    # unverified
+    selectors: {main: "main, .main-column, #content", section: "section.content-section", drop: null}
+    # full: the TU-wide study rules, found through the sitemap
+    full:
+      sitemap: [https://www.tu-darmstadt.de/sitemap.de.xml]
+      prefixes: [/studieren/studierende_tu/, /studieren/studieren_von_a_bis_z/]
+      exclude: []
+      depth: 0
+  digitales-rathaus.darmstadt.de:
+    set: core
+    # Aufenthaltserlaubnis zum Studium, the Ausländerbehörde category page and Anmeldung; listed pages only, since the
+    # category links to more than 60 services
+    seeds:
+      - https://digitales-rathaus.darmstadt.de/kategorien/aemter-und-einrichtungen/aufenthaltserlaubnis-zum-studium
+      - https://digitales-rathaus.darmstadt.de/kategorien/aemter-und-einrichtungen/buerger-und-ordnungsamt-abt-auslaender-und-staatsangehoerigkeitswesen-sachgebiet-auslaenderbehoerde
+      - https://digitales-rathaus.darmstadt.de/lebensbereiche/umzug-zuzug/dienstleistungen/anmeldung-ummeldung-des-wohnsitzes
+    sitemap: []
+    prefixes: []
+    exclude: []
+    depth: 0
+    twins: false
+    # unverified
+    selectors: {main: "main, #content, .main-column", section: "section.content-section", drop: null}
+  www.ladadi.de:
+    set: full
+    # the Ausländerwesen pages for students who live in the Landkreis
+    seeds: [https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/]
+    sitemap: [https://www.ladadi.de/sitemap.xml]
+    prefixes: [/umwelt-soziales/migration/auslaenderwesen/]
+    exclude: []
+    depth: 0
+    twins: false
+    # unverified
+    selectors: {main: "main, #content, .main-column", section: "section.content-section", drop: null}

@@ -1,0 +1,30 @@
+# The TU Informatik profile's user-facing English texts, for the questions asked in English. question.too_long takes
+# {limit}, the limit with a thousands separator.
+guard:
+  not_ready: The assistant is being updated and will be back for you in a few minutes.
+  busy: Many requests have arrived at once. Please try again in a moment.
+  error: Sorry, a technical error occurred while answering. Please try again in a moment.
+  timeout: The answer is taking unusually long, so I stopped. Please ask your question again in a few minutes.
+question:
+  too_long: "Your message is too long for me (at most {limit} characters). Please shorten your question to the essentials or ask several shorter questions one after another, and I will gladly help."
+variant:
+  refused: This conversion is only possible for the last answer with sources.
+answer:
+  unavailable: Sorry, the AI assistant is currently not available. Please try again later.
+  context_too_long: Sorry, the question and the documents found were together too long for an answer. Please shorten the question or start a new conversation.
+  past_event: The date named in the documents, {dates}, has already passed
+  past_events: The dates named in the documents, {dates}, have already passed
+  no_newer_event: "; the documents name no later date"
+docs:
+  none: "Note: No sources were used for this answer!"
+labels:
+  source_types: {}
+  origins: {}
+  hosts:
+    www.informatik.tu-darmstadt.de: Department of Computer Science, TU Darmstadt
+    www.intern.tu-darmstadt.de: University regulations, TU Darmstadt
+    www.tu-darmstadt.de: TU Darmstadt
+    digitales-rathaus.darmstadt.de: Digital Town Hall of Darmstadt
+    www.ladadi.de: District of Darmstadt-Dieburg
+    www.gesetze-im-internet.de: Gesetze im Internet
+  scope: Scope according to the document  # the source header's line for a document's own scope statement

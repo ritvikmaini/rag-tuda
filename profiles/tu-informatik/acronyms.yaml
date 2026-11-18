@@ -1,0 +1,16 @@
+# Terms that stand for one thing. A matched term widens to its whole group in the keyword search; the German and English
+# words of the students are listed beside the terms the Ordnungen use.
+groups:
+  - terms: [PO, Prüfungsordnung, Studiengangsordnung]
+  - terms: [APB, Allgemeine Prüfungsbestimmungen]
+  - terms: [MHB, Modulhandbuch]
+  - terms: [SPP, Studien- und Prüfungsplan]
+  - terms: [CP, LP, Credit Points, Leistungspunkte]
+  - terms: [ESO, Einschreibeordnung]
+  - terms: [Ersti, Erstsemester, Studienanfänger]
+  - terms: [Prüfungsrücktritt, Rücktritt von der Prüfung, Rücktritt]
+  - terms: [Anerkennung, Anrechnung]
+  - terms: [Härtefall, Härtefallantrag]
+  - terms: [PO-Wechsel, Wechsel der Prüfungsordnung, Wechsel der Studiengangsordnung]
+  - terms: [Studiengang, Studienprogramm]
+  - terms: [durchgefallen, endgültig nicht bestanden, Wiederholungsprüfung]

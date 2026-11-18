@@ -1,0 +1,73 @@
+# The programmes with their Prüfungsordnung versions, the status groups and the referral offices by topic. A start term
+# is written only where the programme's pages state it; null is "not stated".
+po_rule:
+  text_de: In der Regel gelten für Sie die zum Zeitpunkt Ihrer Einschreibung aktuellsten Regelungen.
+  text_en: As a rule, the regulations in force at the time of your enrolment apply to you.
+programmes:
+  bsc-informatik:
+    label_de: B.Sc. Informatik
+    label_en: B.Sc. Informatik
+    degree: bachelor
+    url_prefix: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik
+    po_versions:
+      - {year: 2023, start_from: null, start_to: null, official_url: "https://www.intern.tu-darmstadt.de/media/dezernat_ii/satzungsbeilagen/SB_2023_II.pdf"}
+      - {year: 2015, start_from: null, start_to: null, official_url: null}
+    po_change: &po_change_informatik
+      text_de: Studierende, die in die neue Prüfungsordnung des B.Sc. oder M.Sc. Informatik wechseln wollen, müssen eine Erklärung zum Wechsel (PDF-Datei) im Studienbüro Informatik einreichen.
+      text_en: Students who want to switch to the new examination regulations of the B.Sc. or M.Sc. Informatik must submit a declaration of the switch (PDF file) to the Studienbüro Informatik.
+  msc-informatik:
+    label_de: M.Sc. Informatik
+    label_en: M.Sc. Informatik
+    degree: master
+    url_prefix: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik
+    po_versions:
+      - {year: 2023, start_from: "WiSe 2023/24", start_to: null, official_url: null}
+      - {year: 2015, start_from: null, start_to: null, official_url: null}
+    po_change: *po_change_informatik
+  msc-computer-science:
+    label_de: M.Sc. Computer Science
+    label_en: M.Sc. Computer Science
+    degree: master
+    url_prefix: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_cs
+    po_versions:
+      - {year: 2023, start_from: "WiSe 2023/24", start_to: null, official_url: null}
+    po_change: null
+# ask: question words (a word start or a compound end); the groups of one side are contrasted with those of the other
+# sides. The programme groups are read from the documents' typed metadata, not from question words.
+groups:
+  studierende:
+    {label: Studierende, side: studium, ask: [student, studierend]}
+  bachelor:
+    {label: Bachelor-Studierende, side: studium, part_of: studierende, ask: [bachelor, bsc]}
+  master:
+    {label: Master-Studierende, side: studium, part_of: studierende, ask: [master, msc]}
+  promotion:
+    {label: Promovierende, side: promotion, ask: [promovierend, promovend, doktorand, doctoral, phd]}
+  bsc-informatik:
+    {label: B.Sc. Informatik, side: programm}
+  msc-informatik:
+    {label: M.Sc. Informatik, side: programm}
+  msc-computer-science:
+    {label: M.Sc. Computer Science, side: programm}
+# the offices a question is referred to; a url is written only where a page is known
+offices:
+  studienbuero:
+    label_de: Studienbüro Informatik
+    label_en: Studienbüro Informatik (study office)
+    url: https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studienbuero/index.de.jsp
+  pruefungsausschuss:
+    {label_de: Prüfungsausschuss, label_en: Examination board (Prüfungsausschuss), url: null}
+  studienberatung:
+    {label_de: Studienberatung, label_en: Student advisory service (Studienberatung), url: null}
+  promotionsbuero:
+    {label_de: Promotionsbüro, label_en: Doctoral office (Promotionsbüro), url: null}
+  international-office:
+    {label_de: International Office, label_en: International Office, url: null}
+  auslaenderbehoerde-stadt:
+    label_de: Ausländerbehörde der Stadt Darmstadt
+    label_en: Foreigners Office of the City of Darmstadt
+    url: https://digitales-rathaus.darmstadt.de/kategorien/aemter-und-einrichtungen/buerger-und-ordnungsamt-abt-auslaender-und-staatsangehoerigkeitswesen-sachgebiet-auslaenderbehoerde
+  auslaenderbehoerde-landkreis:
+    label_de: Ausländerbehörde des Landkreises Darmstadt-Dieburg
+    label_en: Foreigners Office of the District of Darmstadt-Dieburg
+    url: https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/
