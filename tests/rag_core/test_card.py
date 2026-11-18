@@ -7,7 +7,7 @@ import pytest
 
 from rag_core.domain.language import strip_foreign
 from rag_core.settings import SettingsError
-from rag_core.settings.card import Card, effective_window, load_card, with_local_url
+from rag_core.settings.card import Card, effective_window, load_card, with_local_model, with_local_url
 from rag_core.settings.profile import Generation
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -185,6 +185,23 @@ def test_llm_url_replaces_the_local_endpoints_only() -> None:
     )
     assert mixed.answer.url == "https://api.groq.com/openai/v1"  # a remote endpoint keeps its own
     assert mixed.analysis_endpoint.url == "http://ollama:11434/v1"
+
+
+def test_llm_model_renames_the_local_endpoints_on_the_answer_model_only() -> None:
+    same = card(analysis={**LOCAL, "context_window": 32768})
+    renamed = with_local_model(same, "rag-test")
+    assert renamed.answer.model == renamed.analysis_endpoint.model == "rag-test"  # one loaded runner serves both
+    other = with_local_model(card(analysis={**LOCAL, "model": "analysis:1b", "context_window": 32768}), "rag-test")
+    assert other.answer.model == "rag-test" and other.analysis_endpoint.model == "analysis:1b"
+    assert renamed.answer.url == same.answer.url  # nothing else changes
+    groq = {"provider": "groq", "url": "https://api.groq.com/openai/v1", "model": "test:4b", "context_window": 131072}
+    remote = card("L", answer=groq, analysis={**LOCAL, "context_window": 32768})
+    assert with_local_model(remote, "rag-test") == remote  # a remote answer has no local model to rename
+
+
+def test_llm_model_must_not_be_empty() -> None:
+    with pytest.raises(SettingsError, match="RAG__LLM_MODEL"):
+        with_local_model(card(), "")
 
 
 def test_llm_url_must_be_an_http_url_without_a_trailing_slash() -> None:

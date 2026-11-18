@@ -220,6 +220,25 @@ def with_local_url(card: Card, url: str) -> Card:
     return card.model_copy(update={"answer": swap(card.answer), "analysis": card.analysis and swap(card.analysis)})
 
 
+def with_local_model(card: Card, model: str) -> Card:
+    """The card with model as the model of each local endpoint that serves the card's answer model (an analysis endpoint on the
+    same model shares the one loaded runner); an endpoint on another model keeps its own, and a card whose answer is remote is
+    returned as it is. The command line names the server's derived model (the answer model with the card's window) this way."""
+    answer = card.answer
+    if answer.provider in REMOTE_PROVIDERS:
+        return card
+
+    def swap(endpoint: Endpoint) -> Endpoint:
+        if endpoint.provider in REMOTE_PROVIDERS or endpoint.model != answer.model:
+            return endpoint
+        try:
+            return Endpoint.model_validate({**endpoint.model_dump(), "model": model})
+        except ValidationError:
+            raise SettingsError("RAG__LLM_MODEL: expected a model name (environment)") from None
+
+    return card.model_copy(update={"answer": swap(answer), "analysis": card.analysis and swap(card.analysis)})
+
+
 def load_card(name_or_path: str | Path, cards_dir: str | Path = DEFAULT_CARDS_DIR) -> Card:
     """The card named name_or_path (a file in cards_dir), or the file at that path when it is a Path or ends in .toml; an
     unreadable file or an invalid key raises SettingsError naming the file and the key, never a value."""

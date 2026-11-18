@@ -241,6 +241,16 @@ def test_llm_url_moves_the_cards_local_endpoints(secrets: Path) -> None:
     assert load_settings(environment(), secrets_dir=secrets).card.answer.url != moved.card.answer.url
 
 
+def test_llm_model_renames_the_cards_local_model(secrets: Path) -> None:
+    base = load_settings(environment(), secrets_dir=secrets).card
+    renamed = load_settings(environment(RAG__LLM_MODEL="rag-ci"), secrets_dir=secrets).card
+    assert base.answer.model == "Qwen/Qwen3-14B-AWQ" and renamed.answer.model == "rag-ci"
+    both = load_settings(
+        environment(RAG__LLM_MODEL="rag-ci", RAG__LLM_URL="http://ollama:11434/v1"), secrets_dir=secrets
+    )
+    assert (both.card.answer.model, both.card.answer.url) == ("rag-ci", "http://ollama:11434/v1")
+
+
 def test_exactly_one_card_is_named(secrets: Path) -> None:
     with pytest.raises(SettingsError, match="RAG__CARD"):
         load_settings(environment(RAG__CARD_FILE="<unset>"), secrets_dir=secrets)
