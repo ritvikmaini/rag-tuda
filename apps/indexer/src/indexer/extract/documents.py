@@ -67,8 +67,23 @@ def resolve_title(download_title, pdf_meta_title="", first_page_text="", generic
     return "Dokument"
 
 
+# the document metadata a connector derives (the crawler's regulation, scope, dates, language); a PDF's pages carry it
+DOCUMENT_METADATA = (
+    "regulation",
+    "degree",
+    "programme",
+    "po_version",
+    "archived",
+    "valid_from",
+    "lang",
+    "twin_key",
+    "official_url",
+)
+
+
 def pdf_page_documents(entry, cache, title):
-    """One document per non-empty page of a PDF from its extraction-cache entry."""
+    """One document per non-empty page of a PDF from its extraction-cache entry; the entry's document metadata (the keys of
+    DOCUMENT_METADATA it states) goes onto every page."""
     docs = []
     year = extract_year(entry.get("download_url", ""), entry.get("download_title", ""), title)
     for number, text in split_pages(cache.get("text", "")):
@@ -91,6 +106,7 @@ def pdf_page_documents(entry, cache, title):
                     "doc_key": entry.get("download_url"),
                     "file_hash": cache.get("file_hash"),
                     "extraction_method": cache.get("extraction_method"),
+                    **{k: entry[k] for k in DOCUMENT_METADATA if entry.get(k) is not None},
                 },
             }
         )

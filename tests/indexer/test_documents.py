@@ -148,3 +148,30 @@ def test_a_template_title_shared_by_two_pdfs_is_not_used(tmp_path, monkeypatch):
         "Rundschreiben Kantinenkarte",
         "Dienstanweisung über den Datenschutz bei der Behörde",
     ]
+
+
+def test_a_pdf_page_carries_the_document_metadata_its_connector_derived():
+    derived = {
+        "regulation": "po",
+        "degree": ["bachelor"],
+        "programme": ["bsc-informatik"],
+        "po_version": [2023],
+        "archived": False,
+        "valid_from": "2023-10-01",
+        "lang": "de",
+        "official_url": "https://docs.example.org/official",
+    }
+    entry = {"download_url": "https://docs.example.org/po.pdf", "twin_key": None, **derived}
+    (page,) = documents.pdf_page_documents(
+        entry, {"text": "[Page 1]\n" + "§ 1 Geltungsbereich der Ordnung. " * 3}, "PO"
+    )
+    meta = page["metadata"]
+    assert {k: meta[k] for k in derived} == derived
+    assert "twin_key" not in meta  # an absent value stays absent: NULL in the index
+
+
+def test_a_pdf_page_without_derived_metadata_carries_none_of_it():
+    (page,) = documents.pdf_page_documents(
+        {"download_url": "https://docs.example.org/a.pdf"}, {"text": "[Page 1]\n" + "Ein Absatz über etwas. " * 3}, "A"
+    )
+    assert not set(page["metadata"]) & {"regulation", "degree", "programme", "po_version", "lang", "valid_from"}
