@@ -22,6 +22,8 @@ from rag_core.settings import SettingsError
 
 # the providers whose servers take the options outside the OpenAI chat API
 EXTRAS_PROVIDERS = frozenset({"vllm"})
+# the providers that read the cap from max_tokens only: langchain-openai sends max_completion_tokens, which they ignore
+MAX_TOKENS_PROVIDERS = frozenset({"ollama", "lmstudio"})
 RETRY_PAUSE_S = 1.0  # between two attempts after a dropped connection or a server error
 
 BUSY, TIMEOUT, TOO_LONG = "busy", "timeout", "too_long"
@@ -41,10 +43,15 @@ def reasoning_options(provider: str, level: str) -> dict[str, Any]:
     return {}  # LM Studio has no switch
 
 
-def extra_body(provider: str, reasoning: str, extras: Mapping[str, Any]) -> dict[str, Any]:
-    """The body fields beyond the OpenAI chat API: the card's extras where the provider accepts them, and the reasoning
-    switch (merged into chat_template_kwargs when the extras carry some)."""
+def extra_body(
+    provider: str, reasoning: str, extras: Mapping[str, Any], max_tokens: int | None = None
+) -> dict[str, Any]:
+    """The body fields beyond the OpenAI chat API: the card's extras where the provider accepts them, the cap as max_tokens
+    where the provider reads no other field, and the reasoning switch (merged into chat_template_kwargs when the extras
+    carry some)."""
     body = dict(extras) if accepts_extras(provider) else {}
+    if max_tokens is not None and provider in MAX_TOKENS_PROVIDERS:
+        body["max_tokens"] = int(max_tokens)
     option = reasoning_options(provider, reasoning)
     if "chat_template_kwargs" in option:
         option = {"chat_template_kwargs": {**body.get("chat_template_kwargs", {}), **option["chat_template_kwargs"]}}
@@ -85,7 +92,7 @@ def build_chat_openai(
     options: dict[str, Any] = {"base_url": base_url, "max_tokens": int(max_tokens)}
     if key := api_key(provider):
         options["api_key"] = key
-    if body := extra_body(provider, reasoning, extras):
+    if body := extra_body(provider, reasoning, extras, max_tokens):
         options["extra_body"] = body
     if http_async_client is not None:
         options["http_async_client"] = http_async_client
@@ -163,6 +170,9 @@ class ChatOpenAIModel:
 
     def __init__(self, llm: Any, max_tokens: int, response_format: Mapping[str, Any] | None = None) -> None:
         options: dict[str, Any] = {"max_tokens": max_tokens}  # the analysis' length is bounded
+        sent: Mapping[str, Any] = getattr(llm, "extra_body", None) or {}
+        if "max_tokens" in sent:
+            options["extra_body"] = {**sent, "max_tokens": max_tokens}  # a bound extra_body replaces the client's
         if response_format is not None:
             options["response_format"] = dict(response_format)
         self.runnable = llm.bind(**options)

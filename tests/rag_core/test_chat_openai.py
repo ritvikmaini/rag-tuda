@@ -169,6 +169,37 @@ def test_extras_only_for_accepting_providers(monkeypatch) -> None:
     assert asyncio.run(sent("ollama"))["reasoning_effort"] == "none"
 
 
+def test_ollama_and_lm_studio_get_the_cap_as_max_tokens_too(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    assert extra_body("ollama", "off", EXTRAS, 900) == {"reasoning_effort": "none", "max_tokens": 900}
+    assert extra_body("lmstudio", "high", EXTRAS, 900) == {"max_tokens": 900}
+    assert "max_tokens" not in extra_body("groq", "low", EXTRAS, 900)
+    assert "max_tokens" not in extra_body("vllm", "off", EXTRAS, 900)
+
+    async def sent(provider: str) -> list:
+        bodies: list = []
+        await new(0.1, bodies, provider=provider).ainvoke(MESSAGES)
+        async for _ in new(0.1, bodies, provider=provider).astream(MESSAGES):
+            pass
+        return bodies
+
+    for provider in ("ollama", "lmstudio"):
+        assert [(b["max_tokens"], b["max_completion_tokens"]) for b in asyncio.run(sent(provider))] == [(900, 900)] * 2
+    for provider in ("vllm", "groq"):
+        assert all("max_tokens" not in body for body in asyncio.run(sent(provider)))
+
+
+def test_the_analysis_binding_replaces_the_cap_in_the_body_the_client_sends(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    bodies: list = []
+    llm = new(0, bodies, provider="ollama")  # the client's own cap is 900
+    asyncio.run(ChatOpenAIModel(llm, max_tokens=400).complete([("user", "q")]))
+    assert (bodies[0]["max_tokens"], bodies[0]["max_completion_tokens"]) == (400, 400)
+    assert bodies[0]["reasoning_effort"] == "none"  # the rest of the client's extra_body is kept
+
+
 @pytest.mark.parametrize(
     ("provider", "level", "option"),
     [

@@ -254,10 +254,11 @@ def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) ->
     assert str(rt.analysis.runnable.bound.openai_api_base) == "http://127.0.0.1:11434/v1"
     assert effective_window(settings.card) == 8000 == rt.counter.max_model_len
     assert not rt.counter.exact and rt.counter.chars_per_token == settings.card.chars_per_token  # no /tokenize at Groq
-    # the options each provider accepts: Groq the reasoning level, Ollama (the analysis) its own, neither the vLLM extras
+    # the options each provider accepts: Groq the reasoning level, Ollama (the analysis) its own and its cap as max_tokens,
+    # neither the vLLM extras
     assert rt.answer_llm.extra_body == {"reasoning_effort": "low"}
     # (the analysis model on the machine has no reasoning)
-    assert rt.analysis.runnable.bound.extra_body == {"reasoning_effort": "none"}
+    assert rt.analysis.runnable.bound.extra_body == {"reasoning_effort": "none", "max_tokens": 800}
     # the analysis client never streams (the answer's does) and sends the card's response_format; its provider here is
     # Ollama, so the schema is not strict
     assert rt.analysis.runnable.bound.disable_streaming and not rt.answer_llm.disable_streaming
