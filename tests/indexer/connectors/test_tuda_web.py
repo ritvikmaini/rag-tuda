@@ -60,7 +60,7 @@ LADADI_HTML = (
 
 def sources_yaml(*, extra_seeds=(), extra_prefixes=()) -> dict:
     """The profile's three kinds of host in miniature, with the paths of the mini-site: the faculty (sitemap, link-following,
-    English twins), the university's host (its APB under /media/dezernat_ii/hochschulrecht/) and a full-set host."""
+    English twins), the university's host (its APB under /media/dezernat_ii/ordnungen/) and a full-set host."""
     ordnungen = pages.ORDNUNGEN
     media = "/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/"
     return {
@@ -81,7 +81,7 @@ def sources_yaml(*, extra_seeds=(), extra_prefixes=()) -> dict:
                 "sitemap": [],
                 "prefixes": [
                     "/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/",
-                    "/media/dezernat_ii/hochschulrecht/",
+                    "/media/dezernat_ii/ordnungen/",
                 ],
                 "exclude": [],
                 "depth": 1,

@@ -14,7 +14,7 @@ from rag_testing.minisite.pdf import make_pdf
 ORDNUNGEN = "/studium_fb20/im_studium/formulare_und_dokumente/ordnungen"
 BSC_HUB = f"{ORDNUNGEN}/ordnungen_bsc_informatik"
 EXCLUDED_HUB = f"{ORDNUNGEN}/ordnungen_msc_visual_computing"
-STUDIENBUERO = "/studium_fb20/studienbuero"
+STUDIENBUERO = "/studium_fb20/im_studium/studienbuero"
 NOAI_PAGE = f"{STUDIENBUERO}/wissenssammlung_studium_beispiel.de.jsp"
 LOGIN_PAGE = f"{STUDIENBUERO}/index.login"
 PO_2023_PDF = (
@@ -24,7 +24,7 @@ PO_2023_PDF = (
 APB_COPY_PDF = (
     "/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/allgemeine_bestimmungen/apb.pdf"
 )
-APB_ORIGINAL_PDF = "/media/dezernat_ii/hochschulrecht/apb.pdf"
+APB_ORIGINAL_PDF = "/media/dezernat_ii/ordnungen/apb.pdf"
 INTERN_INDEX = "/verwaltung/dez_ii/hochschulrecht/gesetze_und_ordnungen/index.de.jsp"
 
 PO_2023 = make_pdf(
