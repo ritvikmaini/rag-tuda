@@ -3,7 +3,7 @@ name = "rag-testing"
 version = "0.1.0"
 description = "Dev-only support of the black-box harness: the fakes, the harness helpers, the transcript redaction"
 requires-python = ">=3.12,<3.13"
-dependencies = ["fastapi>=0.136,<0.137", "uvicorn>=0.44,<0.45", "httpx>=0.28,<0.29"]
+dependencies = ["fastapi>=0.136,<0.137", "uvicorn>=0.44,<0.45", "httpx>=0.28,<0.29", "pyyaml>=6.0,<7"]
 
 [build-system]
 requires = ["uv_build>=0.12.23,<0.13.0"]

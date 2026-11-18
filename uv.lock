@@ -2403,6 +2403,7 @@ source = { editable = "packages/rag_testing" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 
@@ -2410,6 +2411,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.136,<0.137" },
     { name = "httpx", specifier = ">=0.28,<0.29" },
+    { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "uvicorn", specifier = ">=0.44,<0.45" },
 ]
 
