@@ -1,6 +1,7 @@
 """The profile's sections: what decides the index, then the assistant's sections and keys. Every model forbids unknown
 keys, except a source entry, whose connector-specific keys the connector validates."""
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -177,6 +178,13 @@ class StatusGroup(ProfileModel):
     ] = ()  # regular expressions, matched at a word start in a source's scope, path, title, file name
 
 
+def _check_part_of(groups: dict[str, StatusGroup]) -> None:
+    for key, group in groups.items():
+        parent = groups.get(group.part_of) if group.part_of else None
+        if group.part_of and (parent is None or parent.side != group.side or parent.part_of):
+            raise ValueError(f"status group {key}: part_of must name a top group of the same side")
+
+
 class StatusGroups(ProfileModel):
     """How an answer tells status groups (Beamte with Anwärter, Tarifbeschäftigte with Auszubildende) apart."""
 
@@ -201,10 +209,7 @@ class StatusGroups(ProfileModel):
 
     @model_validator(mode="after")
     def _table_is_consistent(self) -> "StatusGroups":
-        for key, group in self.groups.items():
-            parent = self.groups.get(group.part_of) if group.part_of else None
-            if group.part_of and (parent is None or parent.side != group.side or parent.part_of):
-                raise ValueError(f"status group {key}: part_of must name a top group of the same side")
+        _check_part_of(self.groups)
         for part, key in self.overrides.items():
             if key != "alle" and key not in self.groups:
                 raise ValueError(f"status group override {part!r}: unknown group {key!r}")
@@ -222,3 +227,179 @@ class Profile(ProfileModel):
     generation: Generation
     formats: Formats
     status_groups: StatusGroups = StatusGroups()
+
+
+# --- the files beside profile.yaml: sources.yaml, roles.yaml and acronyms.yaml ----------------------------------------
+# Each is a model of its own, read with load_profile(); none is a section of Profile.
+
+# the city's main site (its robots.txt shuts out AI agents) and the other university: no crawl host, whatever else is listed
+NEVER_CRAWLED = ("darmstadt.de", "www.darmstadt.de", "h-da.de")
+TERM = re.compile(r"(WiSe) (\d{4})/(\d{2})|(SoSe) (\d{4})")
+PROGRAMME_ID = re.compile(r"[a-z][a-z0-9]*(-[a-z0-9]+)*")
+
+
+def _term_order(term: str) -> tuple[int, int]:
+    """(year, 0 for a summer term, 1 for a winter term) of "SoSe 2023" or "WiSe 2023/24"; ValueError for any other text."""
+    match = TERM.fullmatch(term)
+    if not match:
+        raise ValueError(f"{term!r}: a term is written 'WiSe 2023/24' or 'SoSe 2024'")
+    if match.group(1):
+        year = int(match.group(2))
+        if int(match.group(3)) != (year + 1) % 100:
+            raise ValueError(f"{term!r}: a winter term spans two consecutive years")
+        return year, 1
+    return int(match.group(5)), 0
+
+
+class Selectors(ProfileModel):
+    """Where a host's content is on its pages: a small CSS subset (tag, .class, #id, descendant, child, comma)."""
+
+    main: str
+    section: str  # an outermost match becomes one document of its own
+    drop: str | None  # the chrome removed from the main content; null = the crawler's default list
+
+
+class FullBuild(ProfileModel):
+    """What a full build uses on a core host instead of the host's own sitemap, prefixes, exclusions and depth."""
+
+    sitemap: list[str]
+    prefixes: list[str]
+    exclude: list[str]
+    depth: int = Field(ge=0, le=3)
+
+
+class CrawlHost(ProfileModel):
+    """One host of the crawl. A core host is built by every build; a full host only by a full build. A host that both
+    sets use is a core host with a `full` block. Seeds are listed pages; a host without prefixes lists its seeds only."""
+
+    set: Literal["core", "full"]
+    seeds: list[str]
+    sitemap: list[str]
+    prefixes: list[str]  # URL path prefixes a page must be under
+    exclude: list[str]  # URL path prefixes left out, whatever else matches
+    depth: int = Field(ge=0, le=3)  # links followed from the seeds, inside the prefixes
+    twins: bool  # the English page of each ".de.jsp" page is fetched too
+    selectors: Selectors
+    full: FullBuild | None = None
+
+
+class Sources(ProfileModel):
+    """sources.yaml: the crawl's host allow-list. Every other host is refused by the crawler."""
+
+    hosts: dict[str, CrawlHost] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _hosts_are_wellformed(self) -> "Sources":
+        for host, entry in self.hosts.items():
+            if host != host.lower() or not re.fullmatch(r"[a-z0-9.-]+", host):
+                raise ValueError(f"{host}: a host is written in lowercase without scheme or path")
+            if host in NEVER_CRAWLED or host.endswith(".h-da.de"):
+                raise ValueError(f"{host}: this host is never crawled")
+            urls = [*entry.seeds, *entry.sitemap, *(entry.full.sitemap if entry.full else [])]
+            if any(not url.startswith(f"https://{host}/") for url in urls):
+                raise ValueError(f"{host}: seeds and sitemaps are https URLs on the host")
+            paths = [
+                *entry.prefixes,
+                *entry.exclude,
+                *((*entry.full.prefixes, *entry.full.exclude) if entry.full else ()),
+            ]
+            if any(not path.startswith("/") for path in paths):
+                raise ValueError(f"{host}: prefixes and exclusions are URL paths starting with /")
+            if entry.full and entry.set != "core":
+                raise ValueError(f"{host}: only a core host has a full block")
+            if (entry.depth and not entry.prefixes) or (entry.full and entry.full.depth and not entry.full.prefixes):
+                raise ValueError(f"{host}: links are followed inside prefixes, so a depth needs prefixes")
+        return self
+
+
+class PoVersion(ProfileModel):
+    """One version of a programme's Prüfungsordnung; the terms are the first and last start term it governs (null =
+    not stated). A term is written 'WiSe 2023/24' or 'SoSe 2024'."""
+
+    year: int = Field(ge=1990, le=2099)
+    start_from: str | None
+    start_to: str | None
+    official_url: str | None  # the official publication of the version
+
+    @model_validator(mode="after")
+    def _terms_in_order(self) -> "PoVersion":
+        terms = [_term_order(t) for t in (self.start_from, self.start_to) if t is not None]
+        if len(terms) == 2 and terms[0] > terms[1]:
+            raise ValueError(f"PO {self.year}: start_from is after start_to")
+        return self
+
+
+class Wording(ProfileModel):
+    text_de: str = Field(min_length=1)
+    text_en: str = Field(min_length=1)  # an information translation: the German text binds
+
+
+class Programme(ProfileModel):
+    label_de: str
+    label_en: str
+    degree: Literal["bachelor", "master"]
+    url_prefix: str  # the URL a programme's documents are under
+    po_versions: list[PoVersion] = Field(min_length=1)
+    po_change: Wording | None  # how a student moves to a newer version; null = not stated for the programme
+
+    @field_validator("po_versions")
+    @classmethod
+    def _one_row_per_year(cls, versions: list[PoVersion]) -> list[PoVersion]:
+        years = [v.year for v in versions]
+        if len(set(years)) != len(years):
+            raise ValueError("a PO version appears once per programme")
+        return versions
+
+
+class Office(ProfileModel):
+    label_de: str
+    label_en: str
+    url: str | None  # null = no page known
+
+
+class Roles(ProfileModel):
+    """roles.yaml: the programmes with their PO versions, the status-group table and the referral offices by topic."""
+
+    po_rule: Wording  # which version governs a student when the question names none
+    programmes: dict[str, Programme] = Field(min_length=1)
+    groups: dict[str, StatusGroup]
+    offices: dict[str, Office]
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "Roles":
+        if bad := [p for p in self.programmes if not PROGRAMME_ID.fullmatch(p)]:
+            raise ValueError(f"programme {bad[0]}: an id is lowercase words joined by hyphens")
+        for programme in self.programmes.values():
+            if not programme.url_prefix.startswith("https://"):
+                raise ValueError(f"{programme.label_de}: url_prefix is an https URL")
+        _check_part_of(self.groups)
+        return self
+
+
+class AcronymGroup(ProfileModel):
+    """Terms that stand for one thing: a matched term widens to the whole group."""
+
+    terms: tuple[str, ...] = Field(min_length=2)
+
+    @field_validator("terms")
+    @classmethod
+    def _plain_terms(cls, terms: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not t or t != t.strip() for t in terms):
+            raise ValueError("a term is non-empty and trimmed")
+        return terms
+
+
+class Acronyms(ProfileModel):
+    """acronyms.yaml: groups of terms, an acronym with its long form and variants; no term is in two groups."""
+
+    groups: tuple[AcronymGroup, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _terms_are_unique(self) -> "Acronyms":
+        seen: set[str] = set()
+        for group in self.groups:
+            for term in group.terms:
+                if term.casefold() in seen:
+                    raise ValueError(f"{term!r} is in two groups, or twice in one")
+                seen.add(term.casefold())
+        return self
