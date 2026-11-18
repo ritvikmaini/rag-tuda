@@ -24,8 +24,8 @@ class FakeSystem(stack.System):
         self.sleep = lambda seconds: setattr(self, "now", self.now + seconds)
         self.clock = lambda: self.now
 
-    def run(self, argv, cwd, env, timeout_s=0):
-        self.ran.append((argv, cwd, self.child_env(env)))
+    def run(self, argv, cwd, env, timeout_s=0, inherit=()):
+        self.ran.append((argv, cwd, self.child_env(env, inherit)))
         return self.codes.get(argv[0], 0)
 
     def popen(self, argv, cwd, env, log, inherit=()):
@@ -473,6 +473,20 @@ def test_the_real_system_runs_commands_and_talks_to_the_loopback(monkeypatch):
     assert system.output(("echo", "hi")) == "hi\n" and system.output(("false",)) is None
     with pytest.raises(stack.StackError, match="cannot be started"):
         system.run(("no-such-command-here",), "", {})
+
+
+@posix
+def test_a_run_gets_the_crawl_contact_only_when_the_step_names_it_and_the_user_has_it():
+    import os
+
+    def seen(system, expected, **inherit):
+        """Whether the child's RAG__CRAWL__CONTACT is `expected` ('unset': absent)."""
+        test = '[ "${RAG__CRAWL__CONTACT-unset}" = "$0" ]'
+        return system.run(("sh", "-c", test, expected), "", {}, **inherit) == 0
+
+    mine = stack.System({"PATH": os.environ["PATH"], "RAG__CRAWL__CONTACT": "me@example.org"})
+    assert seen(mine, "unset") and seen(mine, "me@example.org", inherit=stack.CRAWL_CONTACT)
+    assert seen(stack.System({"PATH": os.environ["PATH"]}), "unset", inherit=stack.CRAWL_CONTACT)
 
 
 @posix

@@ -129,11 +129,12 @@ def test_a_hosted_card_is_refused_without_groq_api_key(tmp_path, current):
 
 def test_the_key_reaches_the_backend_spawn_only_by_name(tmp_path, current):
     steps = stack.plan_up(current, facts(tmp_path, GROQ, ollama_up=True, groq_key=True), args(GROQ))
-    assert [s.name for s in steps if s.inherit] == ["backend"] and [s for s in steps if s.inherit][0].kind == "spawn"
+    keyed = [s for s in steps if "GROQ_API_KEY" in s.inherit]  # the index build inherits the crawl contact, not the key
+    assert [s.name for s in keyed] == ["backend"] and keyed[0].kind == "spawn"
     backend = next(s for s in steps if s.kind == "spawn" and s.name == "backend")
     assert backend.env["RAG__LLM_ANALYSIS_MODEL"] == "rag-l-groq-gpt-oss-120b-analysis"
     local = stack.plan_up(current, facts(tmp_path, ollama_up=True), args())
-    assert not [s for s in local if s.inherit]
+    assert not [s for s in local if "GROQ_API_KEY" in s.inherit]
 
 
 def test_a_remote_card_without_an_analysis_block_is_refused_before_anything_is_planned(tmp_path, current):
@@ -318,6 +319,14 @@ def test_the_crawl_contact_hint_is_printed_when_a_crawling_profile_has_none(tmp_
     assert not hint(
         stack.plan_up(current, facts(tmp_path, ollama_up=True, crawl_contact=True), args(profile="tu-informatik"))
     )
+
+
+def test_both_index_builds_may_inherit_the_crawl_contact_and_hold_it_in_no_plan(tmp_path, current):
+    for mode in ("native", "compose"):
+        steps = stack.plan_up(current, facts(tmp_path, ollama_up=True, hf=ALL_HF), args(mode=mode))
+        index = next(s for s in steps if s.name == "index-build")
+        assert index.inherit == ("RAG__CRAWL__CONTACT",), mode
+        assert not [s for s in steps if "RAG__CRAWL__CONTACT" in (s.env.keys() | {s.text if s.kind == "write" else ""})]
 
 
 # --- compose ---------------------------------------------------------------------------------------------------------------

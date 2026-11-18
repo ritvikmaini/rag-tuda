@@ -25,6 +25,9 @@ from rag_tuda.state import State
 PROJECT = "rag-tuda"
 HF_HOST = "huggingface.co"
 OLLAMA_HOST = "registry.ollama.ai"
+CRAWL_CONTACT = (
+    "RAG__CRAWL__CONTACT",
+)  # the user's own contact for the crawler's user agent: passed to the index build, never stored
 KEYS = ("GROQ_API_KEY",)  # provider keys: only a step that names one gets it
 KEEP_RAG_ENV = ("RAG_DEVICE",)  # the one RAG_ variable a child inherits; every other is set by the plan
 READY_WAIT_S = {"embedding": 900, "reranker": 900, "backend": 180}
@@ -327,7 +330,7 @@ def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
     )
     argv = _uv("--package", "indexer", "indexer", "build")
     text = f"building the index of the {args.profile} profile (indexer build)"
-    return [*steps, Step("run", name="index-build", text=text, argv=argv, cwd=root, env=env)]
+    return [*steps, Step("run", name="index-build", text=text, argv=argv, cwd=root, env=env, inherit=CRAWL_CONTACT)]
 
 
 def _service(
@@ -468,6 +471,7 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
                 text=f"building the index of the {args.profile} profile (indexer build)",
                 argv=(*compose, "--profile", "build", "run", "--rm", "indexer", "build"),
                 cwd=root,
+                inherit=CRAWL_CONTACT,  # compose.yaml hands it on to the indexer container
             )
         )
     steps.append(
@@ -566,9 +570,18 @@ class System:
             base.pop(name, None)
         return {**base, **{k: self.environ[k] for k in inherit if k in self.environ}, **extra}
 
-    def run(self, argv: tuple[str, ...], cwd: str, env: Mapping[str, str], timeout_s: float = 0) -> int:
+    def run(
+        self,
+        argv: tuple[str, ...],
+        cwd: str,
+        env: Mapping[str, str],
+        timeout_s: float = 0,
+        inherit: tuple[str, ...] = (),
+    ) -> int:
         try:
-            return subprocess.run(argv, cwd=cwd or None, env=self.child_env(env), timeout=timeout_s or None).returncode
+            return subprocess.run(
+                argv, cwd=cwd or None, env=self.child_env(env, inherit), timeout=timeout_s or None
+            ).returncode
         except OSError as exc:
             raise StackError(f"{argv[0]}: cannot be started ({exc.strerror})") from None
         except subprocess.TimeoutExpired:
@@ -670,7 +683,7 @@ def _write(step: Step, system: System, out: Callable[[str], None]) -> None:
 
 
 def _run(step: Step, system: System, out: Callable[[str], None]) -> None:
-    code = system.run(step.argv, step.cwd, step.env, step.timeout_s)
+    code = system.run(step.argv, step.cwd, step.env, step.timeout_s, step.inherit)
     if code != 0 and step.is_download:
         raise StackError(
             f"{step.name}: the download from {step.host} failed (exit {code}); the network may block {step.host}"

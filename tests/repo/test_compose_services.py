@@ -120,6 +120,7 @@ def test_the_indexer_reads_its_profile_and_overlay_and_the_images_are_built_with
     assert mounts["/app/overlay.yaml"] == "/rag/overlay.yaml"
     assert mounts["/app/profiles/other"].endswith("/profiles/other")
     assert indexer["environment"]["RAG_OVERLAY"] == "/app/overlay.yaml"
+    assert indexer["environment"]["RAG__CRAWL__CONTACT"] is None  # nobody set it: the bare user agent
     assert indexer["build"]["args"]["PROFILE"] == rendered["backend"]["build"]["args"]["PROFILE"] == "other"
 
 
@@ -237,3 +238,11 @@ def test_the_vllm_overlay_replaces_ollama_with_the_cards_server():
         assert f"--model {card.answer.model} " in command and "ports" not in rendered["vllm"]
         assert f"--max-model-len {card.answer.context_window} " in command
     assert "vllm" not in json.loads(render(BASE).stdout)["services"]
+
+
+@needs_compose
+def test_the_indexer_gets_the_users_crawl_contact_from_the_shell_that_runs_compose_and_the_file_holds_none(tmp_path):
+    env = {**os.environ, "RAG__CRAWL__CONTACT": "me@example.org"}
+    rendered = json.loads(render(BASE, args=("--profile", "build"), env=env).stdout)["services"]
+    assert rendered["indexer"]["environment"]["RAG__CRAWL__CONTACT"] == "me@example.org"
+    assert "RAG__CRAWL__CONTACT=" not in open(os.path.join(ROOT, BASE), encoding="utf-8").read()

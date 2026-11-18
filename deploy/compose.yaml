@@ -221,6 +221,8 @@ services:
       - TZ=Europe/Berlin
       - HF_HUB_DISABLE_XET=1
       - RAG_OVERLAY=/app/overlay.yaml
+      # the user's own crawl contact for the user agent: passed through when the shell that runs compose has it
+      - RAG__CRAWL__CONTACT
     secrets:
       - source: rag_indexer_password
         target: pg_vector_password

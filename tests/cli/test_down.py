@@ -18,7 +18,7 @@ class NoDocker(stack.System):
         super().__init__({})
         self.ran = ran
 
-    def run(self, argv, cwd, env, timeout_s=0):
+    def run(self, argv, cwd, env, timeout_s=0, inherit=()):
         self.ran.append(argv)
         return 0
 
