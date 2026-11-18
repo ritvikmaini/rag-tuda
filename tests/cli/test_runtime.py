@@ -1,139 +1,212 @@
+import json
+from pathlib import Path
+
 import pytest
 
-from rag_tuda import runtime, classes
+from rag_tuda import cards, runtime
 
-S, M, L, XL = classes.CLASSES
-TOKEN = "/tmp/token"
-
-COMMON = {"HF_HUB_OFFLINE": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1"}
+ROOT = Path(__file__).resolve().parents[2]
 
 
-def env(tier, mode="native", **kw):
-    return runtime.env(tier, mode, token_file=TOKEN, **kw)
+def card(name: str) -> dict:
+    return cards.named(name)
 
 
-def test_native_m():
-    assert env(M) == {
-        **COMMON,
-        "RAG__LLM__URL": "http://127.0.0.1:11434/v1",
-        "RAG__LLM__MODEL": "lcr-m",
-        "RAG__LLM__ANALYSIS_MODEL": "lcr-m",
-        "RAG__LLM__CONTEXT_WINDOW": "16000",
-        "RAG__LLM__FLAVOUR": "ollama",
+S4B = card("s-qwen3-4b-instruct-2507")
+M35 = card("m-qwen3.6-35b-a3b")
+GROQ = card("l-groq-gpt-oss-120b")
+XL = card("xl-vllm-example")
+
+
+def test_a_native_ollama_card_gets_a_derived_model_with_the_cards_window():
+    llm = runtime.resolve(S4B, "native")
+    assert llm.derived == llm.served == "rag-s-qwen3-4b-instruct-2507"
+    assert llm.base_tag == "qwen3:4b-instruct-2507-q4_K_M" and llm.pulls == (llm.base_tag,)
+    assert (llm.answer_url, llm.answer_model) == ("http://127.0.0.1:11434/v1", llm.derived)
+    assert llm.ollama_api == "http://127.0.0.1:11434" and llm.window == 8000 and llm.warms
+    assert runtime.derived_model_body(llm, S4B) == {
+        "model": "rag-s-qwen3-4b-instruct-2507",
+        "from": "qwen3:4b-instruct-2507-q4_K_M",
+        "parameters": {"num_ctx": 8000, "temperature": 0.1, "top_p": 0.9},
+        "stream": False,
+    }
+
+
+def test_the_window_is_the_cards_effective_window():
+    assert runtime.resolve(M35, "native").window == 16000
+    assert runtime.derived_model_body(runtime.resolve(M35, "native"), M35)["parameters"]["num_ctx"] == 16000
+
+
+def test_the_cards_sampling_and_extras_go_into_the_derived_model():
+    tuned = {**S4B, "sampling": {"temperature": 0.3, "top_p": 0.8, "extras": {"top_k": 20, "repeat_penalty": 1.05}}}
+    body = runtime.derived_model_body(runtime.resolve(tuned, "native"), tuned)
+    assert body["parameters"] == {
+        "num_ctx": 8000,
+        "temperature": 0.3,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repeat_penalty": 1.05,
+    }
+
+
+def test_the_sampling_defaults_are_the_backends():
+    from rag_core.settings.card import Sampling
+
+    assert runtime.SAMPLING == {"temperature": Sampling().temperature, "top_p": Sampling().top_p}
+
+
+def test_the_model_option_changes_the_base_not_the_served_name():
+    llm = runtime.resolve(S4B, "native", model="mistral-small3.2:24b")
+    assert llm.derived == "rag-s-qwen3-4b-instruct-2507" and llm.base_tag == "mistral-small3.2:24b"
+    assert llm.pulls == ("mistral-small3.2:24b",)
+    assert runtime.derived_model_body(llm, S4B)["from"] == "mistral-small3.2:24b"
+
+
+def test_a_foreign_server_is_not_managed():
+    llm = runtime.resolve(M35, "native", llm_url="http://gpu.lan:8080/v1")
+    assert (llm.url, llm.derived, llm.base_tag, llm.pulls, llm.ollama_api) == (
+        "http://gpu.lan:8080/v1",
+        None,
+        None,
+        (),
+        None,
+    )
+    assert (llm.served, llm.answer_model) == (None, "qwen3.6:35b-a3b")
+    assert runtime.derived_model_body(llm, M35) is None
+    named = runtime.resolve(M35, "native", llm_url="http://gpu.lan:8080/v1", model="my-model")
+    assert (named.served, named.answer_model) == ("my-model", "my-model")
+
+
+def test_a_hosted_card_keeps_its_answer_remote_and_runs_its_analysis_on_ollama():
+    llm = runtime.resolve(GROQ, "native")
+    assert (llm.provider, llm.derived, llm.warms) == ("groq", None, False)
+    assert llm.pulls == ("qwen3:4b-instruct-2507-q4_K_M",) and llm.ollama_api == "http://127.0.0.1:11434"
+
+
+def test_vllm_has_no_native_server_of_its_own():
+    with pytest.raises(ValueError, match="llm-url"):
+        runtime.resolve(XL, "native")
+    assert runtime.resolve(XL, "native", llm_url="http://10.0.0.5:8000/v1").url == "http://10.0.0.5:8000/v1"
+    assert runtime.resolve(XL, "compose").derived is None
+
+
+def test_the_compose_stack_serves_the_cards_own_model():
+    llm = runtime.resolve(S4B, "compose")
+    assert (llm.derived, llm.served, llm.url, llm.ollama_api) == (None, None, None, None)
+    assert llm.pulls == ("qwen3:4b-instruct-2507-q4_K_M",)
+    for kwargs in ({"llm_url": "http://x/v1"}, {"model": "m"}):
+        with pytest.raises(ValueError, match="native"):
+            runtime.resolve(S4B, "compose", **kwargs)
+    with pytest.raises(ValueError, match="hosted"):
+        runtime.resolve(GROQ, "compose")
+
+
+def test_a_bad_mode():
+    with pytest.raises(ValueError):
+        runtime.resolve(S4B, "swarm")
+
+
+def test_the_backend_environment():
+    llm = runtime.resolve(S4B, "native")
+    env = runtime.backend_env(llm, root="/repo", secrets="/repo/.rag/secrets/backend", profile="example")
+    assert env == {
+        "RAG_PROFILE": "/repo/profiles/example/profile.yaml",
+        "RAG_SECRETS_DIR": "/repo/.rag/secrets/backend",
+        "RAG_CARDS_DIR": "/repo/models/cards",
+        "RAG__CARD": "s-qwen3-4b-instruct-2507",
+        "RAG__LLM_MODEL": "rag-s-qwen3-4b-instruct-2507",
         "RAG__DATABASE__HOST": "127.0.0.1",
         "RAG__DATABASE__PORT": "55432",
         "RAG__MODEL_SERVERS__EMBEDDING_URL": "http://127.0.0.1:8701",
         "RAG__MODEL_SERVERS__RERANKER_URL": "http://127.0.0.1:8702",
-        "RAG__HTTP__TOKEN_FILE": TOKEN,
+        "RAG__COMPUTE__SLOT_WAIT_S": "30",
+        "RAG__TIMEOUTS__RETRIEVAL_S": "10",
+        "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
+        "RAG__TIMEOUTS__RERANKER_S": "15",
+        "RAG__HTTP__CORS_DOMAIN": "localhost",
+        "RAG__TRACING__URL": "",
+        "OPENAI_API_KEY": "not-needed",
+        "GUNICORN_BIND": "127.0.0.1:8700",
+        "UVICORN_WORKERS": "1",
+        "PYTHONUNBUFFERED": "1",
     }
+    foreign = runtime.resolve(S4B, "native", llm_url="http://gpu.lan/v1", model="m")
+    moved = runtime.backend_env(foreign, root="/repo", secrets="/s", profile="example")
+    assert (moved["RAG__LLM_URL"], moved["RAG__LLM_MODEL"]) == ("http://gpu.lan/v1", "m")
 
 
-def test_compose_m_uses_service_names():
-    e = env(M, "compose")
-    assert e["RAG__LLM__URL"] == "http://ollama:11434/v1"
-    assert e["RAG__DATABASE__HOST"] == "pgvector" and e["RAG__DATABASE__PORT"] == "5432"
-    assert e["RAG__MODEL_SERVERS__EMBEDDING_URL"] == "http://embedding:8000"
-    assert e["RAG__MODEL_SERVERS__RERANKER_URL"] == "http://reranker:8000"
-    assert e["RAG__LLM__FLAVOUR"] == "ollama"
-    assert not any("127.0.0.1" in v for v in e.values())
+def test_the_backend_environment_loads_with_the_services_settings(tmp_path):
+    """The values the native backend gets are accepted by the settings loader (an unknown or missing key would stop it)."""
+    from assistant_api.settings import load_settings
+
+    secrets = tmp_path / "secrets"
+    secrets.mkdir()
+    for name in ("pgdatabase", "vector_user", "pg_vector_password", "backend_token"):
+        (secrets / name).write_text("x", encoding="utf-8")
+    llm = runtime.resolve(M35, "native")
+    env = runtime.backend_env(llm, root=str(ROOT), secrets=str(secrets), profile="example")
+    settings = load_settings(env)
+    assert settings.card.answer.model == "rag-m-qwen3.6-35b-a3b"
+    assert settings.card.answer.url.startswith("http://127.0.0.1")
+    assert settings.overlay.database.port == 55432 and settings.overlay.http.cors_domain == "localhost"
 
 
-@pytest.mark.parametrize("mode", ["native", "compose"])
-@pytest.mark.parametrize("cls,name,ctx", [(S, "lcr-s", "8000"), (M, "lcr-m", "16000")])
-def test_ollama_classes(cls, name, ctx, mode):
-    e = env(cls, mode)
-    assert (e["RAG__LLM__MODEL"], e["RAG__LLM__ANALYSIS_MODEL"], e["RAG__LLM__CONTEXT_WINDOW"]) == (name, name, ctx)
-    assert e["RAG__LLM__FLAVOUR"] == "ollama"
-    assert {k: e[k] for k in COMMON} == COMMON
-
-
-def test_all_values_are_strings():
-    assert all(isinstance(v, str) for v in env(S).values())
-
-
-def test_xl_is_vllm_only():
-    e = env(XL, "compose")
-    assert e["RAG__LLM__FLAVOUR"] == "vllm"
-    assert e["RAG__LLM__MODEL"] == "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8"
-    assert e["RAG__LLM__ANALYSIS_MODEL"] == e["RAG__LLM__MODEL"]
-    assert e["RAG__LLM__URL"] == "http://vllm:8000/v1"
-    assert e["RAG__LLM__CONTEXT_WINDOW"] == "64000"
-    assert runtime.derived_model_body(runtime.resolve(XL, "compose")) is None
-    with pytest.raises(ValueError, match="vLLM"):
-        runtime.resolve(XL, "compose", flavour="ollama")
-
-
-def test_vllm_flavour_on_a_local_class():
-    e = env(M, "compose", flavour="vllm")
-    assert (e["RAG__LLM__MODEL"], e["RAG__LLM__URL"]) == ("Qwen/Qwen3.6-35B-A3B", "http://vllm:8000/v1")
-
-
-def test_vllm_has_no_native_server_of_its_own():
-    with pytest.raises(ValueError, match="llm-url|compose"):
-        env(XL, "native")
-    assert env(XL, "native", llm_url="http://10.0.0.5:8000/v1")["RAG__LLM__URL"] == "http://10.0.0.5:8000/v1"
-
-
-def test_llm_url_override_means_a_foreign_server():
-    e = env(M, llm_url="http://gpu.lan:8080/v1")
-    assert e["RAG__LLM__URL"] == "http://gpu.lan:8080/v1"
-    assert e["RAG__LLM__FLAVOUR"] == "openai"
-    assert e["RAG__LLM__MODEL"] == "Qwen/Qwen3.6-35B-A3B"
-    assert runtime.derived_model_body(runtime.resolve(M, "native", llm_url="http://gpu.lan:8080/v1")) is None
-
-
-def test_model_override_with_own_server():
-    e = env(M, llm_url="http://gpu.lan/v1", model="my-model")
-    assert e["RAG__LLM__MODEL"] == e["RAG__LLM__ANALYSIS_MODEL"] == "my-model"
-
-
-def test_model_override_on_ollama_changes_the_base_not_the_served_name():
-    llm = runtime.resolve(M, "native", model="mistral-small3.2:24b")
-    assert llm.model == "lcr-m" and llm.base_tag == "mistral-small3.2:24b"
-    assert runtime.derived_model_body(llm)["from"] == "mistral-small3.2:24b"
-
-
-def test_context_window_override():
-    assert env(S, context_window=16384)["RAG__LLM__CONTEXT_WINDOW"] == "16384"
-    body = runtime.derived_model_body(runtime.resolve(S, "native", context_window=16384))
-    assert body["parameters"]["num_ctx"] == 16384
-
-
-def test_openai_flavour_needs_a_url():
-    with pytest.raises(ValueError, match="llm-url"):
-        env(M, flavour="openai")
-
-
-def test_bad_arguments():
-    with pytest.raises(ValueError):
-        env(M, "swarm")
-    with pytest.raises(ValueError):
-        env(M, flavour="llamafile")
-    with pytest.raises(ValueError):
-        env(M, context_window=0)
-
-
-@pytest.mark.parametrize(
-    "cls,name,tag,ctx",
-    [
-        (S, "lcr-s", "qwen3:4b-instruct-2507-q4_K_M", 8000),
-        (M, "lcr-m", "qwen3.6:35b-a3b", 16000),
-    ],
-)
-def test_derived_model_body(cls, name, tag, ctx):
-    assert runtime.derived_model_body(runtime.resolve(cls, "native")) == {
-        "model": name,
-        "from": tag,
-        "parameters": {"num_ctx": ctx, "top_k": 50, "repeat_penalty": 1.05},
-    }
-
-
-def test_derived_model_body_values_are_passed_in():
-    body = runtime.derived_model_body(runtime.resolve(M, "native"), top_k=20, repeat_penalty=1.1)
-    assert body["parameters"] == {"num_ctx": 16000, "top_k": 20, "repeat_penalty": 1.1}
-
-
-def test_derived_model_is_the_same_in_both_modes():
-    assert runtime.derived_model_body(runtime.resolve(M, "native")) == runtime.derived_model_body(
-        runtime.resolve(M, "compose")
+def test_the_indexer_gets_the_six_folders_under_rag():
+    env = runtime.indexer_env(
+        root="/repo", rag="/repo/.rag", secrets="/repo/.rag/secrets/indexer", profile="p", overlay=None
     )
+    assert {k: v for k, v in env.items() if k.startswith("RAG__PATHS__")} == {
+        "RAG__PATHS__CRAWL_DIR": "/repo/.rag/crawl",
+        "RAG__PATHS__PDF_DIR": "/repo/.rag/crawl/pdfs",
+        "RAG__PATHS__EXTRACTED_DIR": "/repo/.rag/crawl/extracted",
+        "RAG__PATHS__STATE_DIR": "/repo/.rag/state",
+        "RAG__PATHS__MANIFEST_DIR": "/repo/.rag/state/documents",
+        "RAG__PATHS__SKIPPED_PDFS_LOG": "/repo/.rag/state/skipped_pdfs_page_limit.json",
+    }
+    assert env["RAG_SECRETS_DIR"] == "/repo/.rag/secrets/indexer" and "RAG_OVERLAY" not in env
+    with_overlay = runtime.indexer_env(root="/r", rag="/r/.rag", secrets="/s", profile="p", overlay="/o.yaml")
+    assert with_overlay["RAG_OVERLAY"] == "/o.yaml"
+
+
+def test_the_indexer_environment_loads_with_the_indexers_settings(tmp_path):
+    from indexer.settings import load_settings
+
+    overlay = runtime.overlay_text(str(ROOT), "example", {"gesetze": "documents"})
+    assert overlay is not None
+    (tmp_path / "overlay.yaml").write_text(overlay, encoding="utf-8")
+    env = runtime.indexer_env(
+        root=str(ROOT),
+        rag=str(tmp_path),
+        secrets=str(tmp_path),
+        profile="example",
+        overlay=str(tmp_path / "overlay.yaml"),
+    )
+    settings = load_settings(env)
+    assert settings.endpoints["gesetze"].dir == str(ROOT / "profiles" / "example" / "documents")
+    assert settings.overlay.paths.crawl_dir == str(tmp_path / "crawl") and settings.overlay.database.port == 55432
+
+
+def test_the_overlay_is_json_and_empty_without_folder_sources():
+    assert runtime.overlay_text("/r", "p", {}) is None
+    assert json.loads(runtime.overlay_text("/r", "p", {"gesetze": "documents"}) or "") == {
+        "connectors": {"gesetze": {"dir": "/r/profiles/p/documents"}}
+    }
+
+
+def test_the_migrate_environment():
+    assert runtime.migrate_env("/s") == {
+        "RAG_SECRETS_DIR": "/s",
+        "RAG_MIGRATE_HOST": "127.0.0.1",
+        "RAG_MIGRATE_PORT": "55432",
+    }
+
+
+def test_compose_env_names_the_card_the_window_the_token_and_the_roles_folder():
+    llm = runtime.resolve(M35, "compose")
+    text = runtime.compose_env_text(llm, token="tok", roles_dir="/repo/.rag/secrets/roles")
+    assert dict(line.split("=", 1) for line in text.splitlines()) == {
+        "RAG__CARD": "m-qwen3.6-35b-a3b",
+        "OLLAMA_CONTEXT_LENGTH": "16000",
+        "BACKEND_REFRESH_TOKEN": "tok",
+        "RAG_ROLES_DIR": "/repo/.rag/secrets/roles",
+    }

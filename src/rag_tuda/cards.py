@@ -48,3 +48,36 @@ def class_of_model(model: str, cards_dir: Path = CARDS_DIR) -> tuple[str, str | 
         if card.get("answer", {}).get("model") == model:
             return card["class"], None
     return "S", f"unknown model {model!r}: no card serves it, so it runs with class S values"
+
+
+def all_cards(cards_dir: Path = CARDS_DIR) -> list[dict]:
+    """Every card of the folder, by file name; a missing folder is an error naming it."""
+    if not cards_dir.is_dir():
+        raise ValueError(
+            f"model cards: the folder {cards_dir} does not exist (run rag from a checkout of the repository)"
+        )
+    return [load(path) for path in sorted(cards_dir.glob("*.toml"))]
+
+
+def fitting(facts: "Facts", cards_dir: Path = CARDS_DIR) -> list[dict]:
+    """The cards this machine can run: S always, M when the memory fits, L (hosted) always, XL with an NVIDIA GPU."""
+    from rag_tuda import classes  # classes reads the cards
+
+    local_limit = classes.pick_class(facts).name  # S below the memory line, M from it
+    fit = {"S": True, "M": local_limit == "M", "L": True, "XL": bool(facts.nvidia)}
+    return [card for card in all_cards(cards_dir) if fit.get(card["class"], False)]
+
+
+def choose(card: str | None, model: str | None, facts: "Facts") -> tuple[dict, str | None]:
+    """The card `rag up` runs and a warning, if any: the card named with --card; else the card that serves --model (an unknown
+    model gets class S, with a warning); else the default card of the hardware."""
+    from rag_tuda import classes
+
+    if card:
+        return named(card), None
+    if model:
+        for candidate in all_cards():
+            if candidate.get("answer", {}).get("model") == model:
+                return candidate, None
+        return named(classes.CLASSES[0].default_card or ""), class_of_model(model)[1]
+    return named(default_for(facts)), None
