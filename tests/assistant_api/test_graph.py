@@ -242,11 +242,16 @@ def test_a_429_waits_the_retry_after_within_the_deadline_then_answers(monkeypatc
         slept.append(seconds)
 
     monkeypatch.setattr("rag_core.adapters.chat_openai.asyncio.sleep", sleep)
+    timeouts = load_card(CARD).timeouts.model_copy(update={"idle_s": 60, "deadline_s": 120})
+    longer = {"timeouts": timeouts}
     llm = Raising(provider_error(429, retry_after="2"))
-    out = failed_run(llm)
+    out = failed_run(llm, card_update=longer)
     assert slept == [2.0] and llm.calls == 2 and out["generation"] == "Die Antwort"
     llm = Raising(provider_error(429, retry_after="500"))  # beyond the deadline and the silence limit: the busy message
-    assert failed_run(llm, deadline_in=30)["generation"] == load_messages().guard.busy and llm.calls == 1
+    busy = load_messages().guard.busy
+    assert failed_run(llm, card_update=longer, deadline_in=30)["generation"] == busy and llm.calls == 1
+    llm = Raising(provider_error(429, retry_after="25"))  # fits the 30 s left, but not with the 10 s margin
+    assert failed_run(llm, card_update=longer, deadline_in=30)["generation"] == busy and llm.calls == 1
 
 
 def test_usage_recorded_per_answer() -> None:

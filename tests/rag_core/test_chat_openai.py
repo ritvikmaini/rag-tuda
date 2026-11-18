@@ -338,6 +338,8 @@ def test_429_waits_retry_after_within_deadline(monkeypatch) -> None:
     cases: list[dict[str, Any]] = [
         {"deadline_in": 0.1},  # it would end after the deadline
         {"max_wait_s": 0.1},  # longer than the guard's silence limit
+        {"deadline_in": 10.1},  # inside the deadline, but without the margin the retried call needs
+        {"max_wait_s": 10.1},  # the same against the silence limit
         {"retries": 0},
     ]
     for kwargs in cases:

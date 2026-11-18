@@ -25,6 +25,7 @@ EXTRAS_PROVIDERS = frozenset({"vllm"})
 # the providers that read the cap from max_tokens only: langchain-openai sends max_completion_tokens, which they ignore
 MAX_TOKENS_PROVIDERS = frozenset({"ollama", "lmstudio"})
 RETRY_PAUSE_S = 1.0  # between two attempts after a dropped connection or a server error
+WAIT_MARGIN_S = 10.0  # what a wait must leave of the time left, so the retried call has time to answer
 
 BUSY, TIMEOUT, TOO_LONG = "busy", "timeout", "too_long"
 
@@ -150,8 +151,9 @@ def retry_wait(exc: BaseException) -> float | None:
 
 
 async def ainvoke_waiting(llm: Any, prompt: Any, *, retries: int, deadline_at: float | None, max_wait_s: float) -> Any:
-    """llm.ainvoke(prompt), repeated up to `retries` times after a failure that retry_wait() allows. A wait must end before
-    deadline_at (time.monotonic()) and last at most max_wait_s (the guard's silence limit); otherwise the failure is raised."""
+    """llm.ainvoke(prompt), repeated up to `retries` times after a failure that retry_wait() allows. A wait must end at least
+    WAIT_MARGIN_S before deadline_at (time.monotonic()) and before the guard's silence limit max_wait_s; otherwise the
+    failure is raised."""
     attempt = 0
     while True:
         try:
@@ -159,7 +161,7 @@ async def ainvoke_waiting(llm: Any, prompt: Any, *, retries: int, deadline_at: f
         except openai.APIError as exc:
             wait = retry_wait(exc)
             left = max_wait_s if deadline_at is None else min(max_wait_s, deadline_at - time.monotonic())
-            if attempt >= retries or wait is None or wait > left:
+            if attempt >= retries or wait is None or wait > left - WAIT_MARGIN_S:
                 raise
             attempt += 1
             await asyncio.sleep(wait)
