@@ -45,7 +45,7 @@ def test_no_backend_line_holds_a_question(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str, db: psycopg.Connection[Any]
 ) -> None:
     tag = "kanarie" + uuid.uuid4().hex[:12]
-    canary = "Wo steht der Fixturbrunnen " + tag
+    canary = harness.RETAKE.rstrip("?") + " " + tag
     answered, analysis_fails, answer_fails = canary + "?", canary + " zwei?", canary + " drei?"
     llm.script(
         {"purpose": "answer", "match": answered, "reply": "Antwort eins [1]."},

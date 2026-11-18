@@ -29,7 +29,7 @@ def test_a_question_works_right_after_a_database_restart(
         subprocess.run(COMPOSE + ["restart", "pgvector"], check=True, capture_output=True, timeout=180)
         harness.wait_until(lambda: health(container) == "healthy", 90)
         llm.script(harness.ANSWER_ONE)
-        reply = assistant.ask(harness.GARAGE, user, turn_id=str(uuid.uuid4()), formats="v1")
+        reply = assistant.ask(harness.THESIS, user, turn_id=str(uuid.uuid4()), formats="v1")
         assert reply.stream[-1]["type"] == "done" and reply.stream[-1]["content"]["outcome"] == "completed", reply.raw
         assert "Antwort eins" in reply.text
     finally:  # the stack is left as found; --no-recreate: the harness's port variable must not recreate a started container

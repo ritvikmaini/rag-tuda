@@ -8,8 +8,8 @@ import uuid
 import pytest
 from rag_testing import harness
 
-G = harness.GARAGE
-ORIGINAL = {"purpose": "answer", "match": G, "reply": "Die Garage hat zweiundvierzig Stellplätze [1]."}
+G = harness.THESIS
+ORIGINAL = {"purpose": "answer", "match": G, "reply": "Die Bearbeitungszeit beträgt fünf Monate [1]."}
 TABLE = {
     "purpose": "answer",
     "system": "Markdown-Tabelle",
@@ -87,8 +87,8 @@ def test_a_failed_or_empty_variant_puts_the_original_back(
     llm.script({"purpose": "answer", **broken})
     assert variant(assistant, user, turn, "shorter").first("variant") == {"name": "shorter", "ok": False}
     llm.script(ORIGINAL)
-    assistant.ask(harness.LIBRARY, user)
-    assert harness.history(llm, harness.LIBRARY) == harness.turn(G, "Die Garage hat zweiundvierzig Stellplätze.")
+    assistant.ask(harness.OFFICE_HOURS, user)
+    assert harness.history(llm, harness.OFFICE_HOURS) == harness.turn(G, "Die Bearbeitungszeit beträgt fünf Monate.")
 
 
 def test_a_stopped_variant_puts_the_original_back(
@@ -100,8 +100,10 @@ def test_a_stopped_variant_puts_the_original_back(
     stopped = assistant.ask(G, user, stop_after="chunk", formats="v1", variant="shorter", variant_of=turn)
     assert stopped.path == harness.VARIANT[:3]
     llm.script(ORIGINAL)
-    assistant.ask(harness.LIBRARY, user)  # waits for the slot, which the stopped variant frees after putting it back
-    assert harness.history(llm, harness.LIBRARY) == harness.turn(G, "Die Garage hat zweiundvierzig Stellplätze.")
+    assistant.ask(
+        harness.OFFICE_HOURS, user
+    )  # waits for the slot, which the stopped variant frees after putting it back
+    assert harness.history(llm, harness.OFFICE_HOURS) == harness.turn(G, "Die Bearbeitungszeit beträgt fünf Monate.")
 
 
 def test_a_switch_needs_no_model_and_a_missing_version_is_refused(
@@ -155,13 +157,13 @@ def test_a_switch_and_a_refusal_are_answered_while_another_question_holds_the_sl
     variant(assistant, user, turn, "shorter")
     slow = {
         "purpose": "answer",
-        "match": harness.LIBRARY,
+        "match": harness.OFFICE_HOURS,
         "reply": "eins zwei drei vier fünf sechs [1].",
         "token_delay_s": 0.8,
     }
     llm.script(slow, ORIGINAL)
-    thread, out = harness.in_thread(lambda: assistant.ask(harness.LIBRARY, user + "-other"))
-    harness.wait_until(lambda: any(c["question"] == harness.LIBRARY for c in llm.calls("answer")))
+    thread, out = harness.in_thread(lambda: assistant.ask(harness.OFFICE_HOURS, user + "-other"))
+    harness.wait_until(lambda: any(c["question"] == harness.OFFICE_HOURS for c in llm.calls("answer")))
     switch = select(assistant, user, turn, "original")
     refusal = assistant.ask(G, user, variant="shorter", variant_of=turn)  # formats off: refused before the slot
     thread.join()

@@ -12,7 +12,7 @@ SLOW = "eins zwei drei vier fünf sechs sieben acht [1]."
 def test_a_lookup_sends_the_five_steps_its_sources_the_answer_and_citations(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
-    reply = assistant.ask(harness.GARAGE, user)
+    reply = assistant.ask(harness.THESIS, user)
     assert reply.status == 200 and reply.path == harness.LOOKUP
     assert [f["content"]["step"] for f in reply.frames if f["type"] == "status"] == list(harness.STEPS)
     docs = reply.first("docs")  # one per parent section: the three kept children can share a parent
@@ -23,7 +23,7 @@ def test_with_formats_the_shape_follows_the_analysis(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
     llm.script({"purpose": "analysis", "reply": {"answer_shape": "table"}})
-    reply = assistant.ask(harness.GARAGE, user, formats="v1")
+    reply = assistant.ask(harness.THESIS, user, formats="v1")
     assert reply.path == harness.LOOKUP_FORMATS and reply.first("shape") == "table"
 
 
@@ -47,10 +47,10 @@ def test_a_question_over_the_limit_gets_one_chunk_and_the_limit_itself_passes(
 def test_a_question_while_the_slot_is_held_gets_busy(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
-    llm.script({"purpose": "answer", "match": harness.GARAGE, "reply": SLOW, "token_delay_s": 0.8})
-    thread, out = harness.in_thread(lambda: assistant.ask(harness.GARAGE, user))
+    llm.script({"purpose": "answer", "match": harness.THESIS, "reply": SLOW, "token_delay_s": 0.8})
+    thread, out = harness.in_thread(lambda: assistant.ask(harness.THESIS, user))
     harness.wait_until(lambda: bool(llm.calls("answer")))  # the first question holds the one slot
-    busy = assistant.ask(harness.LIBRARY, user + "-b")
+    busy = assistant.ask(harness.OFFICE_HOURS, user + "-b")
     thread.join()
     assert busy.frames == [
         {"type": "error", "content": harness.BUSY_ERROR},
@@ -63,7 +63,7 @@ def test_silence_ends_the_answer_with_the_timeout_message(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
     llm.script({"purpose": "answer", "first_delay_s": 8})
-    reply = assistant.ask(harness.GARAGE, user)
+    reply = assistant.ask(harness.THESIS, user)
     assert reply.path == harness.LOOKUP[:6] + ["error", "chunk*"]
     assert reply.first("error") == "timeout" and reply.text == harness.MSG_TIMEOUT
 
@@ -72,7 +72,7 @@ def test_the_deadline_ends_a_slow_answer_with_the_timeout_message(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
     llm.script({"purpose": "answer", "reply": " ".join(["Wort"] * 40), "token_delay_s": 1.5})
-    reply = assistant.ask(harness.GARAGE, user)
+    reply = assistant.ask(harness.THESIS, user)
     assert reply.path == harness.LOOKUP[:7] + ["error", "chunk*"]
     assert reply.first("error") == "timeout" and reply.frames[-1]["content"] == "\n\n" + harness.MSG_TIMEOUT
 
@@ -81,9 +81,9 @@ def test_a_client_stop_ends_the_stream_and_frees_the_slot(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
     llm.script({"purpose": "answer", "reply": SLOW, "token_delay_s": 1.0})
-    stopped = assistant.ask(harness.GARAGE, user, stop_after="chunk")
+    stopped = assistant.ask(harness.THESIS, user, stop_after="chunk")
     assert stopped.path == harness.LOOKUP[:7]
     llm.script()
     started = time.monotonic()
-    assert assistant.ask(harness.LIBRARY, user + "-next").path == harness.LOOKUP
+    assert assistant.ask(harness.OFFICE_HOURS, user + "-next").path == harness.LOOKUP
     assert time.monotonic() - started < 10

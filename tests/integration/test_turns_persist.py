@@ -32,13 +32,13 @@ def test_a_follow_up_after_a_restart_sees_the_first_turn(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str, db: psycopg.Connection[Any]
 ) -> None:
     llm.script(harness.ANSWER_ONE)
-    assistant.ask(harness.GARAGE, user, turn_id=str(uuid.uuid4()))
+    assistant.ask(harness.THESIS, user, turn_id=str(uuid.uuid4()))
     subprocess.run(COMPOSE + ["restart", "backend"], check=True, capture_output=True, timeout=180)
     url = backend_url()  # read again after the restart
     harness.wait_until(lambda: assistant_ready(url), 120)
     assistant.client.base_url = httpx.URL(url)  # the session's client (later tests too) follows the backend's port now
-    assistant.ask(harness.LIBRARY, user, turn_id=str(uuid.uuid4()))
-    assert harness.history(llm, harness.LIBRARY) == harness.turn(harness.GARAGE, "Antwort eins.")
+    assistant.ask(harness.OFFICE_HOURS, user, turn_id=str(uuid.uuid4()))
+    assert harness.history(llm, harness.OFFICE_HOURS) == harness.turn(harness.THESIS, "Antwort eins.")
     rows = db.execute(
         "SELECT outcome, usage FROM chat.turns WHERE conversation_id = %s ORDER BY created_at", (user,)
     ).fetchall()

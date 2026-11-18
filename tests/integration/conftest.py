@@ -52,7 +52,7 @@ def assistant(tokens: dict[str, str]) -> harness.Assistant:
 
 
 @pytest.fixture(scope="session")
-def indexer() -> Callable[[], subprocess.CompletedProcess[str]]:
+def indexer() -> Callable[..., subprocess.CompletedProcess[str]]:
     """indexer() runs `indexer build` in a one-off container of the harness project and returns the finished process."""
     return lambda: harness.build_index(GEN.parents[2])
 
@@ -117,17 +117,17 @@ def snapshot(owner_db: psycopg.Connection[Any]) -> Callable[..., dict[str, Any]]
 @pytest.fixture(scope="session")
 def first_build(
     assistant: harness.Assistant,
-    indexer: Callable[[], subprocess.CompletedProcess[str]],
+    indexer: Callable[..., subprocess.CompletedProcess[str]],
     db: psycopg.Connection[Any],
 ) -> dict[str, Any]:
     """The session's first build on the empty database, with what the assistant said before it and right after it.
     Every test that asks a question depends on it."""
     assert harness.live_generation(db) is None, "the harness database must start empty (just harness ends with down -v)"
-    before = assistant.ask(harness.GARAGE, "harness-before")
+    before = assistant.ask(harness.THESIS, "harness-before")
     build = indexer()
     if build.returncode == 0:
         assistant.wait_ready()  # the backend loads the new index by itself
-    after = assistant.ask(harness.GARAGE, "harness-after")
+    after = assistant.ask(harness.THESIS, "harness-after")
     return {"before": before, "build": build, "after": after}
 
 

@@ -75,13 +75,13 @@ DIRECT = ["status:analysing", "status:understood", "status:writing", "chunk*"]
 DIRECT_FORMATS = ["status:analysing", "status:understood", "shape", "status:writing", "chunk*"]
 VARIANT = ["shape", "status:writing", "chunk*", "citations", "variant"]
 
-# Questions the scripted model answers; none carries a year or a date
-GARAGE = "Wie viele Stellplätze hat die Garage im Fixturhof?"
-LIBRARY = "Wann hat die Bibliothek im Fixturhaus geöffnet?"
+# Questions the scripted model answers, about the fixture mini-site's regulations and study office; none carries a year or a date
+THESIS = "Wie lange dauert die Bearbeitung der Bachelor-Thesis?"
+OFFICE_HOURS = "Wann hat das Studienbüro Sprechstunde?"
 JOKE = "Erzähl mir einen Witz."  # the smoke's X16 question
-FOUNTAIN = "Wo steht der Fixturbrunnen im Fixturpark?"
+RETAKE = "Wie oft kann ich eine nicht bestandene Prüfung wiederholen?"
 OUT_OF_SCOPE = {"purpose": "analysis", "match": JOKE, "reply": {"intent": "out_of_scope"}}
-ANSWER_ONE = {"purpose": "answer", "match": GARAGE, "reply": "Antwort eins [1]."}
+ANSWER_ONE = {"purpose": "answer", "match": THESIS, "reply": "Antwort eins [1]."}
 
 
 def frames(raw: str) -> tuple[list[dict[str, Any]], int]:

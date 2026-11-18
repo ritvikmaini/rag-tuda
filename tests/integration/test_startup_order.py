@@ -52,7 +52,7 @@ def test_the_backend_loads_the_index_by_itself_once_the_database_is_back(
         harness.wait_until(lambda: assistant_ready(url), 90)  # no question in between: the heal task does it
         assistant.client.base_url = httpx.URL(url)
         llm.script(harness.ANSWER_ONE)
-        assistant.ask(harness.GARAGE, user, turn_id=str(uuid.uuid4()))
+        assistant.ask(harness.THESIS, user, turn_id=str(uuid.uuid4()))
         port = subprocess.run(
             COMPOSE + ["port", "pgvector", "5432"], check=True, capture_output=True, text=True, timeout=60
         ).stdout.strip()  # pgvector's host port as Docker publishes it now

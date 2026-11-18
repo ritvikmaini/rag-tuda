@@ -7,8 +7,8 @@ import uuid
 
 from rag_testing import harness
 
-G, L, F = harness.GARAGE, harness.LIBRARY, harness.FOUNTAIN
-FAIL_LIBRARY = {"purpose": "answer", "match": L, "fail": 500}
+G, L, F = harness.THESIS, harness.OFFICE_HOURS, harness.RETAKE
+FAIL_OFFICE_HOURS = {"purpose": "answer", "match": L, "fail": 500}
 
 
 def new_id() -> str:
@@ -28,7 +28,7 @@ def test_a_follow_up_sees_the_completed_turn_without_its_citation_marks(
 
 
 def test_a_failed_turn_is_left_out(ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str) -> None:
-    llm.script(FAIL_LIBRARY, harness.ANSWER_ONE)
+    llm.script(FAIL_OFFICE_HOURS, harness.ANSWER_ONE)
     assistant.ask(G, user, turn_id=new_id())
     assert "error" in assistant.ask(L, user, turn_id=new_id()).types
     assistant.ask(F, user, turn_id=new_id())
@@ -58,7 +58,7 @@ def test_an_edit_cuts_the_conversation_at_the_edited_question(
 def test_a_retry_replaces_the_failed_turn_without_a_duplicate(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
-    llm.script(FAIL_LIBRARY, harness.ANSWER_ONE)
+    llm.script(FAIL_OFFICE_HOURS, harness.ANSWER_ONE)
     assistant.ask(G, user, turn_id=new_id())
     failed = new_id()
     assistant.ask(L, user, turn_id=failed)
