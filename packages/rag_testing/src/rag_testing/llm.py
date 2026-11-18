@@ -115,6 +115,23 @@ def completion(text: str) -> dict[str, Any]:
     }
 
 
+def usage_chunk(prompt_tokens: int, completion_tokens: int) -> str:
+    """The last event of a streamed completion that asked for its usage (stream_options.include_usage): no choices."""
+    body = {
+        "id": "chatcmpl-fake",
+        "object": "chat.completion.chunk",
+        "created": 0,
+        "model": MODEL,
+        "choices": [],
+        "usage": {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        },
+    }
+    return "data: " + json.dumps(body) + "\n\n"
+
+
 def chunk(delta: Mapping[str, str], finish: str | None = None) -> str:
     """One server-sent event of a streamed completion."""
     body = {

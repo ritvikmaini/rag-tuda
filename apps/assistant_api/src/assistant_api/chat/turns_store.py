@@ -72,7 +72,7 @@ SELECT_VERSION = (
 FINISH = (
     "UPDATE chat.turns SET outcome = %s, standalone_question = %s, intent = %s, answer = %s, answer_shape = %s, "
     "retrieved_section_ids = %s, cited_section_ids = %s, prompts = %s, collection = %s, index_generation = %s, "
-    "config_hash = %s, stage_ms = %s, error = %s WHERE turn_id = %s"
+    "config_hash = %s, stage_ms = %s, usage = %s, error = %s WHERE turn_id = %s"
 )
 CONTEXT = "INSERT INTO chat.turn_context (turn_id, sections) VALUES (%s, %s) ON CONFLICT (turn_id) DO NOTHING"
 GENERATION = "SELECT generation FROM index_generations WHERE collection = %s AND status = 'live'"
@@ -257,6 +257,7 @@ class TurnStore:
         analysis = dict(getattr(r, "analysis", None) or {})
         candidates = list(getattr(r, "candidates", None) or [])
         sources = list(getattr(r, "sources", None) or [])
+        usage = dict(getattr(r, "usage", None) or {})
         retrieved = [str((d.metadata or {}).get("section_id") or "") for d in candidates]
         cited = (
             [str(s.get("section_id") or "") for s in select_sources_for_display(sources, answer, "cited")]
@@ -279,6 +280,7 @@ class TurnStore:
                     t.run.get("index_generation"),
                     t.run.get("config_hash"),
                     Jsonb(stage_ms(t)),
+                    Jsonb(usage) if usage else None,
                     t.error,
                     t.turn_id,
                 ),

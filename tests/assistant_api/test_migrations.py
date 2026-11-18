@@ -74,6 +74,7 @@ def test_the_first_migration_creates_spec_6_6_and_grants_before_it_creates() -> 
         "prompts jsonb",
         "index_generation int",
         "stage_ms jsonb",
+        "usage jsonb",
         "outcome text NOT NULL",
         "superseded_by uuid REFERENCES chat.turns (turn_id)",
         "created_at timestamptz NOT NULL DEFAULT now()",

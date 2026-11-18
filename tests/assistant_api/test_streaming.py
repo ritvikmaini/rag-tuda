@@ -293,6 +293,7 @@ def test_run_stream_records_the_turns_results():
                     "messages": [answer_msg],
                     "generation": "Antwort [1].",
                     "context_sources": [{"n": 1}],
+                    "usage": {"prompt_tokens": 120, "completion_tokens": 30},
                 }
             },
         },
@@ -326,6 +327,7 @@ def test_run_stream_records_the_turns_results():
     assert result.analysis["standalone_question"] == "S?" and result.requested_shape == "steps"
     assert result.retrieved_docs == ["raw"] and result.candidates == ["grouped"]
     assert result.answer == "Antwort [1]." and result.sources == [{"n": 1}] and result.first_chunk is not None
+    assert result.usage == {"prompt_tokens": 120, "completion_tokens": 30}  # the turn's usage, for the store
     events[-1]["data"]["output"] = {"messages": [], "generation": "Fallback", "context_sources": []}
     fallback = ss.StreamResult()
     run(fallback)

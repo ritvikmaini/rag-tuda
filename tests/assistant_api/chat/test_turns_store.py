@@ -57,8 +57,9 @@ def doc(text: str, section_id: str, score: float = 0.5) -> SimpleNamespace:
     )
 
 
-def result(answer, candidates=(), sources=(), shape="text", scope_fallback=False):
+def result(answer, candidates=(), sources=(), shape="text", scope_fallback=False, usage=None):
     return SimpleNamespace(
+        usage=usage or {},
         scope_fallback=scope_fallback,
         answer=answer,
         requested_shape=shape,
@@ -82,13 +83,14 @@ async def ask(
     turn_id=None,
     shape="text",
     scope_fallback=False,
+    usage=None,
 ):
     t = ts.TurnRecord(turn_id=turn_id or str(uuid.uuid4()), conversation_id=conversation, question=question)
     await store.begin(t, replace_from, kept)
     past = None
     if outcome not in ("too_long", "busy"):
         past = await store.history(t, replace_from, kept)
-    t.result = result(answer if outcome == "completed" else None, candidates, sources, shape, scope_fallback)
+    t.result = result(answer if outcome == "completed" else None, candidates, sources, shape, scope_fallback, usage)
     t.run = {"collection": "example", "index_generation": 1, "config_hash": "abc", "prompts": {"rag-generation": 2}}
     await store.finish(t, outcome)
     return t, past
@@ -287,6 +289,23 @@ def test_finish_writes_the_row_and_one_context_for_a_completed_lookup():
     rows = run(work)
     assert rows[0] == ("completed", ["p1", "p2"], ["p1"], {"rag-generation": 2}, "example", 1, "abc", True, 1)
     assert rows[1][0] == "failed" and rows[1][-1] == 0
+
+
+def test_usage_recorded_per_answer():
+    """The provider's token counts of the answer call are the turn's usage; a turn without them stores null."""
+    conv = "usage-" + uuid.uuid4().hex
+
+    async def work(store):
+        counted, _ = await ask(store, conv, "Frage", usage={"prompt_tokens": 120, "completion_tokens": 30})
+        silent, _ = await ask(store, conv, "Frage zwei")
+        async with store.pool.connection() as conn:
+            rows = await (
+                await conn.execute("SELECT turn_id::text, usage FROM chat.turns WHERE conversation_id = %s", (conv,))
+            ).fetchall()
+        return counted.turn_id, silent.turn_id, dict(rows)
+
+    counted, silent, usage = run(work)
+    assert usage[counted] == {"prompt_tokens": 120, "completion_tokens": 30} and usage[silent] is None
 
 
 def test_a_duplicate_turn_id_is_recorded_once():

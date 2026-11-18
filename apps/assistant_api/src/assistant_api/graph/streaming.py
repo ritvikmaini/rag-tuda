@@ -101,6 +101,7 @@ class StreamResult:
     answer: str | None = None  # the model's answer text; None for a fallback text
     first_chunk: float | None = None  # time.monotonic() at the first chunk sent (for ttft)
     scope_fallback: bool = False  # a strong hit answered an out-of-scope question
+    usage: dict[str, int] = field(default_factory=dict)  # the answer call's prompt_tokens and completion_tokens
 
 
 async def run_stream(
@@ -172,6 +173,7 @@ async def run_stream(
             output = event["data"].get("output") or {}
             generation = output.get("generation") or ""
             result.sources = list(output.get("context_sources") or [])
+            result.usage = dict(output.get("usage") or {})
             produced = output.get("messages") or []
             text = str(produced[-1].content) if produced else ""
             # the answer kept and the answer sent are the same text; the generation is the chunks, the text the stored one

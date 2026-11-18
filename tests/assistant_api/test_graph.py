@@ -248,6 +248,12 @@ def test_a_429_waits_the_retry_after_within_the_deadline_then_answers(monkeypatc
     assert failed_run(llm, deadline_in=30)["generation"] == load_messages().guard.busy and llm.calls == 1
 
 
+def test_usage_recorded_per_answer() -> None:
+    out = failed_run(Raising())
+    assert out["usage"] == {"prompt_tokens": 120, "completion_tokens": 30}
+    assert failed_run(Recording())["usage"] == {}  # a provider that returns none records none
+
+
 def load_messages() -> Messages:
     import yaml
 

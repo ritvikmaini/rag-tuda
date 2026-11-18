@@ -40,6 +40,8 @@ def test_a_follow_up_after_a_restart_sees_the_first_turn(
     assistant.ask(harness.LIBRARY, user, turn_id=str(uuid.uuid4()))
     assert harness.history(llm, harness.LIBRARY) == harness.turn(harness.GARAGE, "Antwort eins.")
     rows = db.execute(
-        "SELECT outcome FROM chat.turns WHERE conversation_id = %s ORDER BY created_at", (user,)
+        "SELECT outcome, usage FROM chat.turns WHERE conversation_id = %s ORDER BY created_at", (user,)
     ).fetchall()
     assert [r[0] for r in rows] == ["completed", "completed"]
+    # the provider's token counts of each answer, as the fake reports them in the last event of the stream
+    assert all(set(r[1]) == {"prompt_tokens", "completion_tokens"} and r[1]["completion_tokens"] > 0 for r in rows)

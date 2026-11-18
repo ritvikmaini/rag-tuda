@@ -101,6 +101,14 @@ def past_event_reply(answer: str, context: str, today: date, texts: Any) -> str 
     return text + (" [%s]" % cites[0] if cites else "") + "."
 
 
+def usage_of(response: Any) -> dict[str, int]:
+    """The tokens the provider counted for the call (prompt and completion), empty when it returned no usage."""
+    usage = getattr(response, "usage_metadata", None) or {}
+    if "input_tokens" not in usage or "output_tokens" not in usage:
+        return {}
+    return {"prompt_tokens": int(usage["input_tokens"]), "completion_tokens": int(usage["output_tokens"])}
+
+
 def with_decoding_limits(llm: Any, quirks: Any, provider: str) -> Any:
     """The answer model with the card's logit bias and bad words bound to its requests where the provider accepts them (the
     model's own extra_body is kept, since a bound extra_body replaces it)."""
@@ -242,6 +250,7 @@ def make_generate(deps: GraphDeps):
                 deadline_at=(config.get("configurable") or {}).get("deadline_at"),
                 max_wait_s=deps.card.timeouts.idle_s,
             )
+            usage = usage_of(response)
             if holds_answer(state):
                 try:
                     reply = past_event_reply(
@@ -281,7 +290,7 @@ def make_generate(deps: GraphDeps):
                         response = AIMessage(content=answer + "\n\n" + text)
                 except Exception as exc:  # the note never costs an answer: the model's is sent
                     logger.warning(f"[StatusGroups] note_failed={type(exc).__name__}")
-            return {"messages": [response], "generation": response.content, "context_sources": sources}
+            return {"messages": [response], "generation": response.content, "context_sources": sources, "usage": usage}
         except Exception as e:
             status = getattr(e, "status_code", None)
             logger.error(f"Error during LLM invocation: {type(e).__name__}" + (f" status={status}" if status else ""))

@@ -30,6 +30,7 @@ UPGRADE = (
   index_generation int,
   config_hash text,
   stage_ms jsonb,
+  usage jsonb,
   outcome text NOT NULL,
   error text,
   superseded_by uuid REFERENCES chat.turns (turn_id),

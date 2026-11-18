@@ -73,6 +73,8 @@ def llm_app() -> FastAPI:
                     await asyncio.sleep(between)
                 yield llm.chunk({"content": piece})
             yield llm.chunk({}, finish="stop")
+            if (body.get("stream_options") or {}).get("include_usage"):
+                yield llm.usage_chunk(llm.count_tokens(body), len(llm.pieces(text)))
             yield "data: [DONE]\n\n"
 
         return StreamingResponse(events(), media_type="text/event-stream")

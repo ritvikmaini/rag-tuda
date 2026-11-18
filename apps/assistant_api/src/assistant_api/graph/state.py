@@ -36,6 +36,7 @@ class AgentState(TypedDict):
     answer_shape: str  # text | table | checklist | steps | mindmap: the shape of the answer on screen
     variant: Optional[str]  # set only while a variant of the last answer runs
     answer_versions: dict  # versions of the last answer: name -> {"text", "shape"}
+    usage: dict  # the provider's token counts of the answer call: prompt_tokens, completion_tokens (empty without)
     scope_fallback: bool  # an out-of-scope question whose best passage was strong enough, answered from the documents
 
 

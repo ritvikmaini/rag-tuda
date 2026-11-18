@@ -63,7 +63,7 @@ def build_chat_openai(
     http_async_client: httpx.AsyncClient | None = None,
 ) -> ChatOpenAI:
     """Bounded waits on the model server: up to read_timeout_s between two streamed chunks (the guard bounds the whole
-    answer). The API key comes from OPENAI_API_KEY (compose: not-needed).
+    answer). A streamed answer asks for the usage of the call. The API key comes from OPENAI_API_KEY (compose: not-needed).
     The options travel as extra_body (langchain-openai 1.x warns when they come through model_kwargs; the body is the same)."""
     options: dict[str, Any] = {"base_url": base_url, "max_tokens": int(max_tokens)}
     if body := extra_body(provider, reasoning, extras):
@@ -74,6 +74,7 @@ def build_chat_openai(
         model=model,
         temperature=temperature,
         top_p=top_p,
+        stream_usage=True,
         timeout=httpx.Timeout(connect=5.0, read=read_timeout_s, write=10.0, pool=10.0),
         max_retries=max_retries,
         **options,

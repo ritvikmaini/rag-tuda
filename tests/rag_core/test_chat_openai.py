@@ -1,6 +1,7 @@
 """The chat model's construction: the request bodies carry the options their provider accepts and no others; the reasoning
 level reaches each provider as its own switch; a failed call is told apart by class and status; a rate limit is waited out
-within the deadline; a reasoning-only chunk reaches the stream; the analysis model sends its bound max_tokens."""
+within the deadline; a streamed answer reports its usage, reasoning-only chunks included; the analysis model sends its bound
+max_tokens."""
 
 import asyncio
 import json
@@ -120,7 +121,13 @@ def test_the_request_bodies_carry_the_model_the_cap_and_the_sampling_options(mon
         "repetition_penalty": 1.05,
     }
     assert asyncio.run(calls(new)) == [
-        {**common, "temperature": 0.1, "max_completion_tokens": 900, "stream": True},
+        {
+            **common,
+            "temperature": 0.1,
+            "max_completion_tokens": 900,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+        },
         {**common, "temperature": 0.1, "max_completion_tokens": 900, "stream": False},
         {**common, "temperature": 0.0, "max_completion_tokens": 400, "stream": False},
     ]
@@ -183,7 +190,7 @@ def test_the_analysis_model_sends_its_bound_cap_and_returns_the_text(monkeypatch
     assert bodies[0]["messages"] == [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
 
 
-def test_a_reasoning_only_chunk_reaches_the_stream_with_no_text(monkeypatch) -> None:
+def test_a_reasoning_only_chunk_reaches_the_stream_with_no_text_and_the_usage_is_reported(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
     deltas = (
         {"role": "assistant", "content": None, "reasoning_content": "denke nach"},
@@ -196,6 +203,8 @@ def test_a_reasoning_only_chunk_reaches_the_stream_with_no_text(monkeypatch) -> 
     chunks = asyncio.run(run())
     assert [c.text for c in chunks if c.text] == ["Antwort"]
     assert chunks[0].text == "" and "denke nach" not in "".join(c.text for c in chunks)  # a chunk, no shown text
+    usage = sum((c for c in chunks[1:]), chunks[0]).usage_metadata or {}
+    assert (usage["input_tokens"], usage["output_tokens"]) == (11, 3)
 
 
 def status_error(status: int, code: str | None = None, headers: dict | None = None) -> openai.APIStatusError:
