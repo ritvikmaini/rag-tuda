@@ -95,7 +95,7 @@ services:
       - PYTHONUNBUFFERED=1
       - HF_HUB_DISABLE_XET=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - REQUIRE_CUDA=1
+      - RAG_DEVICE=cuda
     deploy:
       resources:
         limits:
@@ -127,7 +127,7 @@ services:
       - TZ=Europe/Berlin
       - HF_HUB_DISABLE_XET=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-      - REQUIRE_CUDA=1
+      - RAG_DEVICE=cuda
     deploy:
       resources:
         limits:

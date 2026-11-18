@@ -1,6 +1,6 @@
 """The reranker server by import: settings from the environment, the pinned load (fake torch, Hugging Face and
 sentence-transformers), length-sorted scoring, the rerank endpoint, one GPU job at a time, the client-left stop, the
-start-up reference pair, the routes, the fatal CUDA exit and REQUIRE_CUDA. No GPU and no model."""
+start-up reference pair, the routes, the fatal CUDA exit and the device choice. No GPU and no model."""
 
 import asyncio
 import json
@@ -73,7 +73,12 @@ def test_settings_come_from_the_environment():
         main.Settings.from_env({**env, "RERANKER_REVISION": "main"})
 
 
-def fake_libraries(monkeypatch, cuda, half_fails=False):
+@pytest.fixture(autouse=True)
+def no_device_override(monkeypatch):
+    monkeypatch.delenv("RAG_DEVICE", raising=False)
+
+
+def fake_libraries(monkeypatch, cuda, half_fails=False, mps=False):
     calls = {}
 
     class Param:
@@ -110,6 +115,7 @@ def fake_libraries(monkeypatch, cuda, half_fails=False):
 
     torch = types.ModuleType("torch")
     torch.cuda = types.SimpleNamespace(is_available=lambda: cuda)
+    torch.backends = types.SimpleNamespace(mps=types.SimpleNamespace(is_available=lambda: mps))
     monkeypatch.setitem(sys.modules, "torch", torch)
     monkeypatch.setitem(sys.modules, "huggingface_hub", types.SimpleNamespace(snapshot_download=snapshot_download))
     monkeypatch.setitem(sys.modules, "sentence_transformers", types.SimpleNamespace(CrossEncoder=CrossEncoder))
@@ -132,6 +138,12 @@ def test_a_failed_fp16_conversion_keeps_fp32_and_the_cpu_stays_fp32(monkeypatch)
     calls = fake_libraries(monkeypatch, cuda=False)
     assert (main.load_model(SETTINGS).device, main.load_model(SETTINGS).dtype) == ("cpu", "float32")
     assert "to" not in calls
+
+
+def test_fp16_on_mps(monkeypatch):
+    calls = fake_libraries(monkeypatch, cuda=False, mps=True)
+    model = main.load_model(SETTINGS)
+    assert calls["to"] == [("mps", "torch.float16")] and (model.dtype, model.device) == ("float16", "mps")
 
 
 # --- length-sorted scoring ----------------------------
@@ -285,6 +297,7 @@ def test_info_liveness_and_the_routes_that_are_gone(tmp_path):
             "revision": REV,
             "max_length": 512,
             "dtype": "float16",
+            "device": "cuda",
         }
         assert c.get("/healthz").json() == {"status": "ok"}
         assert c.get("/health").status_code == 404
@@ -292,7 +305,7 @@ def test_info_liveness_and_the_routes_that_are_gone(tmp_path):
         assert gone + [c.get(p).status_code for p in ("/docs", "/redoc", "/openapi.json")] == [404] * 5
 
 
-# --- the fatal CUDA exit and REQUIRE_CUDA ---------------------------------------------------
+# --- the fatal CUDA exit and the device choice ---------------------------------------------------
 def fake_torch_errors(monkeypatch):
     """torch with the two error classes the rule tells apart (torch 2.11: both are RuntimeErrors)"""
     torch = types.ModuleType("torch")
@@ -369,23 +382,45 @@ def test_stop_self_asks_uvicorn_to_stop_at_once_and_ends_the_process_after_the_g
     assert exited == [1]
 
 
-def test_require_cuda_refuses_to_start_on_the_cpu_before_any_download(monkeypatch):
-    monkeypatch.setenv("REQUIRE_CUDA", "1")
-    calls = fake_libraries(monkeypatch, cuda=False)
-    with pytest.raises(RuntimeError, match="REQUIRE_CUDA=1"):
+@pytest.mark.parametrize(
+    "env, cuda, mps, device",
+    [
+        ({}, True, True, "cuda"),
+        ({}, False, True, "mps"),
+        ({}, False, False, "cpu"),
+        ({"RAG_DEVICE": ""}, False, True, "mps"),  # empty counts as unset
+        ({"RAG_DEVICE": "cpu"}, True, True, "cpu"),  # the setting wins over the order
+        ({"RAG_DEVICE": "mps"}, True, True, "mps"),
+        ({"RAG_DEVICE": " CUDA "}, True, False, "cuda"),
+    ],
+)
+def test_device_order(env, cuda, mps, device):
+    assert main.pick_device(env, cuda, mps) == device
+
+
+def test_a_device_that_is_not_available_or_not_known_is_an_error_never_a_fallback():
+    with pytest.raises(RuntimeError, match="RAG_DEVICE=cuda but cuda is not available"):
+        main.pick_device({"RAG_DEVICE": "cuda"}, False, True)
+    with pytest.raises(RuntimeError, match="RAG_DEVICE=mps but mps is not available"):
+        main.pick_device({"RAG_DEVICE": "mps"}, True, False)
+    with pytest.raises(ValueError, match="RAG_DEVICE=tpu is not one of cuda, mps, cpu"):
+        main.pick_device({"RAG_DEVICE": "tpu"}, True, True)
+
+
+def test_a_missing_device_stops_the_load_before_any_download(monkeypatch):
+    monkeypatch.setenv("RAG_DEVICE", "cuda")
+    calls = fake_libraries(monkeypatch, cuda=False, mps=True)
+    with pytest.raises(RuntimeError, match="RAG_DEVICE=cuda"):
         main.load_model(SETTINGS)
     assert "snapshot" not in calls
     calls = fake_libraries(monkeypatch, cuda=True)
     assert main.load_model(SETTINGS).device == "cuda" and "snapshot" in calls
 
 
-def test_without_require_cuda_the_cpu_is_fine(monkeypatch):
-    for value in (None, "0", "true"):  # only "1" counts
-        monkeypatch.delenv("REQUIRE_CUDA", raising=False)
-        if value is not None:
-            monkeypatch.setenv("REQUIRE_CUDA", value)
-        fake_libraries(monkeypatch, cuda=False)
-        assert main.load_model(SETTINGS).device == "cpu"
+def test_the_device_setting_picks_the_device_the_model_loads_on(monkeypatch):
+    monkeypatch.setenv("RAG_DEVICE", "cpu")
+    calls = fake_libraries(monkeypatch, cuda=True, mps=True)
+    assert main.load_model(SETTINGS).device == "cpu" and "to" not in calls
 
 
 def test_a_failing_predict_logs_no_query_text(tmp_path, caplog):

@@ -5,8 +5,9 @@ when the queue stays full for 5 s, 504 after 60 s); GET /info (model, revisions,
 (the start-up reference check), /healthz, /metrics (queue gauges). The settings come from
 the environment the Dockerfile sets; the model loads in the lifespan from its pinned snapshot in the Hugging Face cache,
 never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone) answers 500, turns
-/readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. With REQUIRE_CUDA=1 the model
-does not load on the CPU. Run: uvicorn --factory embedding_server.main:create_app"""
+/readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. The device is RAG_DEVICE
+(cuda, mps or cpu; unset: the first available in that order), and a device that is not available stops the start.
+Run: uvicorn --factory embedding_server.main:create_app"""
 
 import asyncio
 import json
@@ -40,6 +41,24 @@ READY_COSINE = 0.9999  # fp16 output is not bit-stable, so no exact checksum
 REFERENCE = Path(__file__).with_name("reference.json")
 
 FATAL_GRACE_S = 30.0  # after SIGTERM, a daemon timer ends the process this much later if the shutdown hangs
+
+DEVICES = ("cuda", "mps", "cpu")
+
+
+def pick_device(env: Mapping[str, str], cuda_ok: bool, mps_ok: bool) -> str:
+    """RAG_DEVICE (cuda, mps or cpu) when set: a device that is not available is an error, never a fallback. Unset: cuda, then
+    mps, then cpu."""
+    available = {"cuda": cuda_ok, "mps": mps_ok, "cpu": True}
+    wanted = env.get("RAG_DEVICE", "").strip().lower()
+    if not wanted:
+        return next(device for device in DEVICES if available[device])
+    if wanted not in available:
+        raise ValueError("RAG_DEVICE=%s is not one of %s" % (wanted, ", ".join(DEVICES)))
+    if not available[wanted]:
+        raise RuntimeError(
+            "RAG_DEVICE=%s but %s is not available: no fallback, the container restarts" % (wanted, wanted)
+        )
+    return wanted
 
 
 def is_fatal(e: BaseException) -> bool:
@@ -126,15 +145,13 @@ def release_cached_memory(n_texts: int, device: str, empty_cache: Callable[[], N
 
 def load_model(settings: Settings) -> Loaded:
     """The model from its pinned snapshot (a missing snapshot fails the start), through langchain-huggingface
-    (its embed_documents turns newlines into spaces), max_seq_length 512, fp16 on CUDA (a failed conversion keeps fp32 and
-    says so)."""
+    (its embed_documents turns newlines into spaces), max_seq_length 512, fp16 on CUDA and MPS, fp32 on the CPU (a failed
+    conversion keeps fp32 and says so)."""
     import torch
     from huggingface_hub import snapshot_download
     from langchain_huggingface import HuggingFaceEmbeddings
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == "cpu" and os.environ.get("REQUIRE_CUDA") == "1":
-        raise RuntimeError("REQUIRE_CUDA=1 but CUDA is not available: no CPU fallback, the container restarts")
+    device = pick_device(os.environ, torch.cuda.is_available(), torch.backends.mps.is_available())
     logger.info("Embedding source: local HuggingFace (device: %s)", device)
     logger.info(
         "Loading embedding model: %s at %s (code %s)", settings.model, settings.revision, settings.code_revision
@@ -144,10 +161,10 @@ def load_model(settings: Settings) -> Loaded:
     embeddings = HuggingFaceEmbeddings(model_name=path, model_kwargs=model_kwargs(settings, device))
     model = embeddings._client
     model.max_seq_length = min(model.max_seq_length or MAX_SEQ_LENGTH, MAX_SEQ_LENGTH)
-    if device == "cuda":
+    if device != "cpu":
         try:
             model.half()
-            logger.info("Using fp16 for embedding model (CUDA)")
+            logger.info("Using fp16 for embedding model (%s)", device)
         except Exception as e:
             logger.warning("fp16 conversion failed, embedding model stays fp32: %s", e)
     logger.info("Embedding model loaded successfully.")
@@ -297,6 +314,7 @@ def create_app(
             "code_revision": current.code_revision,
             "dimension": loaded.dimension,
             "dtype": loaded.dtype,
+            "device": loaded.device,
             "max_seq_length": MAX_SEQ_LENGTH,
         }
 

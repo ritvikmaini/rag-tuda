@@ -5,8 +5,8 @@ over the queries (multi-query). One job on the GPU at a time: a waiting request 
 MULTI_QUERY_WAIT_S, and a job stops between queries when its client has left. GET /info, /readyz (the start-up reference
 pair), /healthz. The settings come from the environment the Dockerfile sets; the model loads in the lifespan from its
 pinned snapshot, never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone)
-answers 500, turns /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. With
-REQUIRE_CUDA=1 the model does not load on the CPU.
+answers 500, turns /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. The device is
+RAG_DEVICE (cuda, mps or cpu; unset: the first available in that order), and a device that is not available stops the start.
 Run: uvicorn --factory reranker_server.main:create_app"""
 
 import asyncio
@@ -35,6 +35,24 @@ READY_DIFFERENCE = 1e-3  # the reference pair's score may differ by at most this
 REFERENCE = Path(__file__).with_name("reference.json")
 
 FATAL_GRACE_S = 30.0  # after SIGTERM, a daemon timer ends the process this much later if the shutdown hangs
+
+DEVICES = ("cuda", "mps", "cpu")
+
+
+def pick_device(env: Mapping[str, str], cuda_ok: bool, mps_ok: bool) -> str:
+    """RAG_DEVICE (cuda, mps or cpu) when set: a device that is not available is an error, never a fallback. Unset: cuda, then
+    mps, then cpu."""
+    available = {"cuda": cuda_ok, "mps": mps_ok, "cpu": True}
+    wanted = env.get("RAG_DEVICE", "").strip().lower()
+    if not wanted:
+        return next(device for device in DEVICES if available[device])
+    if wanted not in available:
+        raise ValueError("RAG_DEVICE=%s is not one of %s" % (wanted, ", ".join(DEVICES)))
+    if not available[wanted]:
+        raise RuntimeError(
+            "RAG_DEVICE=%s but %s is not available: no fallback, the container restarts" % (wanted, wanted)
+        )
+    return wanted
 
 
 def is_fatal(e: BaseException) -> bool:
@@ -100,27 +118,25 @@ def length_sorted_predict(predict, pairs, batch_size):
 
 
 def load_model(settings: Settings) -> Loaded:
-    """The CrossEncoder from its pinned snapshot (a missing snapshot fails the start), 512 tokens per pair, fp16 on CUDA (a
-    failed conversion keeps fp32 and says so), converted on the CPU before the move. No remote code."""
+    """The CrossEncoder from its pinned snapshot (a missing snapshot fails the start), 512 tokens per pair, fp16 on CUDA and MPS,
+    fp32 on the CPU (a failed conversion keeps fp32 and says so), converted on the CPU before the move. No remote code."""
     import torch
     from huggingface_hub import snapshot_download
     from sentence_transformers import CrossEncoder
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == "cpu" and os.environ.get("REQUIRE_CUDA") == "1":
-        raise RuntimeError("REQUIRE_CUDA=1 but CUDA is not available: no CPU fallback, the container restarts")
+    device = pick_device(os.environ, torch.cuda.is_available(), torch.backends.mps.is_available())
     logger.info("Reranker source: local CrossEncoder (device: %s)", device)
     logger.info("Loading reranking model: %s at %s", settings.model, settings.revision)
     path = snapshot_download(settings.model, revision=settings.revision, local_files_only=True)
     # on the CPU: s-t 4 would move the fp32 weights to the GPU in __init__, where the card has no room for them
     model = CrossEncoder(path, max_length=MAX_LENGTH, device="cpu")
-    if device == "cuda":
+    if device != "cpu":
         try:
             model.model = model.model.half()  # fp16 halves the GPU memory (~2 GB vs ~3.5 GB for bge-reranker-v2-m3)
-            logger.info("Converted reranker model to fp16 (CUDA)")
+            logger.info("Converted reranker model to fp16 (%s)", device)
         except Exception as e:
             logger.warning("fp16 conversion failed, the reranker stays fp32: %s", e)
-        model.model.to(device)  # the GPU only ever holds the fp16 weights
+        model.model.to(device)  # the accelerator only ever holds the fp16 weights
     logger.info("Reranking model loaded successfully.")
     return Loaded(model.predict, str(next(model.model.parameters()).dtype).removeprefix("torch."), device)
 
@@ -244,6 +260,7 @@ def create_app(
             "revision": current.revision,
             "max_length": MAX_LENGTH,
             "dtype": app.state.loaded.dtype,
+            "device": app.state.loaded.device,
         }
 
     @app.get("/readyz")
