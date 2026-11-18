@@ -22,8 +22,8 @@ evals (a job container, never running on its own): probe runs, the gate and the 
 ```
 
 The stream (format 1) sends `meta` first, then `status` (five steps), `docs`, `chunk`, `citations` and `error` frames, and
-`done` last; each frame is `data: <json>` followed by a blank line. The production compose file publishes no host port;
-everything is reached on the compose network or with `docker exec`.
+`done` last; each frame is `data: <json>` followed by a blank line. The compose file publishes one host port, the backend's
+`127.0.0.1:8700`; everything else is reached on the compose network or with `docker exec`.
 
 ## Repository layout
 
@@ -42,8 +42,10 @@ everything is reached on the compose network or with `docker exec`.
 
 ## Setup
 
-The stack needs Docker with compose and, for the model servers and vLLM, a Linux host with an NVIDIA GPU (16 GB). The compose
-file names the project `rag-tuda`, so containers are `rag-tuda-<service>-1` and volumes `rag-tuda_<name>`.
+The stack needs Docker with compose on Linux or WSL2. `deploy/compose.yaml` runs on the CPU with Ollama; add
+`-f deploy/compose.nvidia.yaml` for NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve
+the language model with vLLM instead of Ollama. The compose file names the project `rag-tuda`, so containers are
+`rag-tuda-<service>-1` and volumes `rag-tuda_<name>`.
 
 ```sh
 git clone <this repository> rag-tuda; cd rag-tuda
@@ -52,7 +54,10 @@ PYTHONPATH=src python -m rag_tuda.state init    # the secret files under secrets
 docker compose --env-file .env -f deploy/compose.yaml up -d pgvector
 docker compose --env-file .env -f deploy/compose.yaml --profile migrate run --rm migrate
 docker compose --env-file .env -f deploy/compose.yaml up -d
+docker compose --env-file .env -f deploy/compose.yaml exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
+
+Ollama starts without a model, so the last command downloads the default card's model (about 2.5 GB) once.
 
 Then build the first index: `docker compose --env-file .env -f deploy/compose.yaml --profile build run --rm indexer build`.
 The backend reports healthy (`/readyz`) only once an index is published.
