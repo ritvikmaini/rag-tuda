@@ -24,16 +24,12 @@ def build_index(
     wiring: Wiring, embedding: Any, sources: Mapping[str, DocumentSource], out: Callable[[str], None]
 ) -> int:
     """One build of every source the profile lists: collect, extract, chunk, gate, embed, write, verify, swap the live views
-    to the new generation and housekeep. Then the stats file and the counts per source; a held lock,
-    a refusing gate or any failed step leaves the live index as it was and exits 1."""
+    to the new generation and housekeep, then the stats file (still under the lock) and the counts per source; a held
+    lock, a database that cannot be reached, a refusing gate or any failed step leaves the live index as it was and exits 1."""
     settings, target, connect = wiring.settings, wiring.target, wiring.connect
     lock = gen.BuildLock(target, "cli build", connect)
     try:
         lock.acquire()
-    except gen.BuildBusy as exc:
-        out(f"busy: {exc}")
-        return 1
-    try:
         built = build.build_corpus(settings, sources, None, False, embedding=embedding)
         published = asyncio.run(
             build.write_and_publish(
@@ -47,6 +43,14 @@ def build_index(
                 prov=build.provenance(settings, built["embedding"]),
             )
         )
+        documents = {name: report["documents"] for name, report in built["sources"].items()}
+        gates.record_build_stats(
+            settings.overlay.paths.state_dir,
+            {"parents": built["parents"], "children": built["children"], "documents": documents},
+        )
+    except gen.BuildBusy as exc:
+        out(f"busy: {exc}")
+        return 1
     except build.BuildRefused as exc:
         out(f"refused: {exc}")
         return 1
@@ -56,11 +60,6 @@ def build_index(
         return 1
     finally:
         lock.release()
-    documents = {name: report["documents"] for name, report in built["sources"].items()}
-    gates.record_build_stats(
-        settings.overlay.paths.state_dir,
-        {"parents": built["parents"], "children": built["children"], "documents": documents},
-    )
     for name, count in documents.items():
         out(f"source {name}: {count} documents")
     counts, embeddings, changes = published["index_counts"], published["embeddings"], published["changes"]

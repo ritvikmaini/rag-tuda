@@ -29,17 +29,21 @@ class Conn:
 
 class Lock:
     busy = False
+    fails = None  # an exception acquire raises (the database is down)
+    at_release = []  # what each release saw: whether the stats file existed
 
     def __init__(self, target, holder, connect_fn):
         self.holder = holder
 
     def acquire(self):
+        if Lock.fails:
+            raise Lock.fails
         if Lock.busy:
             raise gen.BuildBusy("process-corpus", "2026-10-12T10:00:00")
         return self
 
     def release(self):
-        pass
+        Lock.at_release.append(Lock.stats.exists())
 
 
 @pytest.fixture
@@ -47,6 +51,9 @@ def run(db_settings, fakes, monkeypatch):
     """run() -> (exit code, printed lines) of `indexer build`; the swap's arguments are in run.published, a failure of build_corpus is set with run.error."""
     monkeypatch.setattr(gen, "BuildLock", Lock)
     monkeypatch.setattr(Lock, "busy", False)
+    monkeypatch.setattr(Lock, "fails", None)
+    monkeypatch.setattr(Lock, "at_release", [])
+    monkeypatch.setattr(Lock, "stats", fakes.stats, raising=False)
     published = []
 
     def build_corpus(settings, sources, limit, reuse_inputs, *, embedding):
@@ -109,6 +116,17 @@ def test_build_command_exits_1_and_swaps_nothing_when_busy_refused_or_failed(run
     run.error = RuntimeError("connector down")
     assert run() == (1, ["failed: RuntimeError: connector down"])
     assert run.published == [] and not run.stats.exists()
+
+
+def test_a_database_that_is_down_is_a_failed_line_not_a_traceback(run):
+    Lock.fails = ConnectionError("connection refused")
+    assert run() == (1, ["failed: ConnectionError: connection refused"])
+    assert run.published == []
+
+
+def test_the_stats_are_written_before_the_lock_is_released(run):
+    assert run()[0] == 0
+    assert Lock.at_release == [True]
 
 
 def test_help_lists_the_commands_without_settings(monkeypatch):
