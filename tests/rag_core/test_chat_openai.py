@@ -1,6 +1,6 @@
 """The chat model's construction: the request bodies carry the options their provider accepts and no others; the reasoning
 level reaches each provider as its own switch; a failed call is told apart by class and status; a rate limit is waited out
-within the deadline; the analysis model sends its bound max_tokens."""
+within the deadline; a reasoning-only chunk reaches the stream; the analysis model sends its bound max_tokens."""
 
 import asyncio
 import json
@@ -181,6 +181,21 @@ def test_the_analysis_model_sends_its_bound_cap_and_returns_the_text(monkeypatch
     assert reply == "{}"
     assert bodies[0].get("max_completion_tokens", bodies[0].get("max_tokens")) == 400
     assert bodies[0]["messages"] == [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
+
+
+def test_a_reasoning_only_chunk_reaches_the_stream_with_no_text(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    deltas = (
+        {"role": "assistant", "content": None, "reasoning_content": "denke nach"},
+        {"content": "Antwort"},
+    )
+
+    async def run():
+        return [chunk async for chunk in new(0.1, [], deltas=deltas).astream(MESSAGES)]
+
+    chunks = asyncio.run(run())
+    assert [c.text for c in chunks if c.text] == ["Antwort"]
+    assert chunks[0].text == "" and "denke nach" not in "".join(c.text for c in chunks)  # a chunk, no shown text
 
 
 def status_error(status: int, code: str | None = None, headers: dict | None = None) -> openai.APIStatusError:

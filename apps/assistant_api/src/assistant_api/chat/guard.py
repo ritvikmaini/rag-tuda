@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 
 _DONE = object()
 # The pipeline yields PROGRESS while it works without sending anything (slot acquired,
-# analysis, retrieval, reranking): it counts as activity for the silence limit and is
-# never forwarded to the page.
+# analysis, retrieval, reranking, a model chunk without text such as a reasoning model's
+# thinking): it counts as activity for the silence limit and is never forwarded to the page.
 PROGRESS = ": progress"
 CANCEL_WAIT_S = 5.0  # how long the guard waits for the cancelled pipeline to clean up
 GERMAN = {

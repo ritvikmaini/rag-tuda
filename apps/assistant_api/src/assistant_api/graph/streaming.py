@@ -141,9 +141,11 @@ async def run_stream(
             clean = strip_foreign(chunk_content, strip_cjk)
             dropped += len(chunk_content) - len(clean)
             chunk_content = clean
-            if held:
-                yield PROGRESS  # activity for the guard; the answer, perhaps replaced, follows at generate's end
-            elif chunk_content:
+            if held or not chunk_content:
+                # any chunk of the model is activity for the guard, a reasoning chunk without text included (nothing is shown
+                # or stored of it); a held answer, perhaps replaced, follows at generate's end
+                yield PROGRESS
+            else:
                 streamed_any = True
                 streamed += chunk_content
                 if result.first_chunk is None:

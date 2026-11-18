@@ -422,6 +422,41 @@ def test_foreign_script_characters_are_dropped_from_the_chunks_and_the_stored_an
     assert len(warnings) == 1 and "中" not in warnings[0]
 
 
+def test_any_chunk_resets_idle_timer():
+    """A chunk without text (a reasoning model thinking) is activity for the guard, though nothing of it is shown."""
+    from assistant_api.chat.guard import PROGRESS
+
+    def seen(chunk):
+        event = {"event": "on_chat_model_stream", "name": "x", "metadata": {"langgraph_node": "generate"}}
+        event["data"] = {"chunk": chunk}
+
+        class Chain:
+            async def astream_events(self, *args, **kwargs):
+                yield event
+
+        async def run():
+            stream = ss.run_stream(
+                Chain(),
+                {},
+                {},
+                formats_on=False,
+                variant=None,
+                sources_mode="before",
+                none_text="",
+                result=ss.StreamResult(),
+                user="u",
+                strip_cjk=True,
+            )
+            return [f async for f in stream]
+
+        return asyncio.run(run())
+
+    thinking = AIMessageChunk(content="", additional_kwargs={"reasoning_content": "denke"})
+    assert seen(thinking) == [PROGRESS]  # activity, no frame: the reasoning text is neither sent nor kept
+    assert seen(AIMessageChunk(content=[{"type": "reasoning", "reasoning": "hm"}])) == [PROGRESS]
+    assert seen(AIMessageChunk(content="Text")) == [fr.Chunk(content="Text")]
+
+
 def test_a_failure_after_part_of_the_answer_follows_the_part_with_the_fallback_text():
     def sent(streamed_text):
         events = [
