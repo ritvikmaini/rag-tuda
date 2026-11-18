@@ -3,7 +3,8 @@
 The files sit beside the profile (`options["profile_dir"]` of the context). The core set is every host marked core; the
 full set adds the full hosts and, on a core host with a `full` block, swaps that block's sitemap, prefixes, exclusions and
 depth in for the host's own. The fetcher is made for the context: its user agent carries the user's crawl contact when
-there is one, it caches under the crawl folder, and frozen inputs make it answer from the cache alone."""
+there is one, it caches under the crawl folder, frozen inputs make it answer from the cache alone, and the overlay's routes
+(the harness's) send the requests of a host to another origin."""
 
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import httpx
 from rag_core.ports.sources import SourceContext
 from rag_core.settings import load_profile
 from rag_core.settings.profile import CrawlHost, Roles, Sources
@@ -19,6 +21,7 @@ from indexer.crawl.cache import Cache
 from indexer.crawl.discover import Source
 from indexer.crawl.extract import Selectors
 from indexer.crawl.fetch import Fetcher, Response, Skipped
+from indexer.crawl.routes import Routed
 
 
 @dataclass(frozen=True)
@@ -79,7 +82,10 @@ def active_hosts(sources: Sources, full: bool) -> dict[str, Host]:
 def make_fetcher(
     ctx: SourceContext, hosts: Iterable[str], *, since: date | None = None, **options: Any
 ) -> RecordingFetcher:
-    """A fetcher for `hosts` (nothing else is fetched) that caches under the crawl folder; `options` are Fetcher's own."""
+    """A fetcher for `hosts` (nothing else is fetched) that caches under the crawl folder; `options` are Fetcher's own. The
+    overlay's routes, when there are any, decide where the requests go."""
+    if routes := ctx.options.get("routes"):
+        options.setdefault("client", httpx.Client(transport=Routed(routes), timeout=30.0))
     return RecordingFetcher(
         hosts,
         contact=ctx.options.get("contact"),

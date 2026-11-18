@@ -108,6 +108,7 @@ def context(
             "resume": False,
             **(options or {}),
             "contact": settings.overlay.crawl.contact or None,
+            "routes": settings.overlay.crawl.routes,
             "profile_dir": str(settings.profile_dir),
         },
     )

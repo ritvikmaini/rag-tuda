@@ -37,10 +37,11 @@ class ConnectorsSection(OverlaySection):
 
 
 class CrawlSection(OverlaySection):
-    """How the crawler introduces itself. The contact is the user's own (RAG__CRAWL__CONTACT, never a file of the repo);
-    without one the user agent says "student research prototype"."""
+    """How the crawler introduces itself and, for the harness, where it is sent. The contact is the user's own
+    (RAG__CRAWL__CONTACT, never a file of the repo); without one the user agent says "student research prototype"."""
 
     contact: str | None = None
+    routes: dict[str, str] = {}  # host -> origin that answers for it (indexer.crawl.routes); none: the real network
 
 
 class PathsSection(OverlaySection):
