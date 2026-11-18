@@ -1,12 +1,16 @@
 """The fetcher against the fixture mini-site served in-process: host policy, robots.txt handling, the `<meta name="robots">`
 page rule, the rate limit (a fake clock, nothing sleeps) and the user agent. No request leaves the process."""
 
+import hashlib
+from datetime import date
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from rag_testing import serve
 from rag_testing.minisite import pages
 
+from indexer.crawl.cache import Cache
 from indexer.crawl.fetch import Fetcher, Response, Skipped, user_agent
 from indexer.crawl.robots import Robots
 
@@ -16,6 +20,10 @@ CONTACT = "dummy@example.invalid"
 HUB = f"http://{FACULTY}{pages.BSC_HUB}.de.jsp"
 PO_PDF = f"http://{FACULTY}{pages.PO_2023_PDF}"
 APB = f"http://{INTERN}{pages.APB_ORIGINAL_PDF}"
+PO_PDF_SHA256 = "be6f4a46d0307d9cb0855af0f2e404b1d5b1fcd8dce6347a58d7489759da666a"  # the generated PDF is deterministic
+STUDIENBUERO = f"http://{FACULTY}{pages.STUDIENBUERO}/index.de.jsp"
+PRUEFUNGEN = f"http://{FACULTY}{pages.STUDIENBUERO}/pruefungen/index.de.jsp"
+TODAY = date(2026, 11, 17)
 
 
 class Net:
@@ -68,6 +76,31 @@ class Clock:
 def fetcher(net, clock=None, hosts=(FACULTY, INTERN), **kw):
     clock = clock or Clock()
     return Fetcher(hosts, contact=CONTACT, client=net.client, clock=clock, sleep=clock.sleep, **kw)
+
+
+def caching(net, tmp_path, today=TODAY, **kw):
+    """A fetcher with a cache under tmp_path/crawl and a fixed date."""
+    return fetcher(net, cache=Cache(tmp_path / "crawl"), today=lambda: today, **kw)
+
+
+class Broken(httpx.SyncByteStream):
+    """A body that stops after `sent` bytes: with an error (the connection dropped) or silently (a short body)."""
+
+    def __init__(self, body, sent, fail):
+        self.body, self.sent, self.fail = body, sent, fail
+
+    def __iter__(self):
+        yield self.body[: self.sent]
+        if self.fail:
+            raise httpx.ReadError("connection reset")
+
+
+def truncated(body, fail):
+    return lambda r: httpx.Response(
+        200,
+        headers={"content-type": "application/pdf", "content-length": str(len(body))},
+        stream=Broken(body, len(body) // 2, fail),
+    )
 
 
 def test_rate_limit_one_per_second_per_host():
@@ -223,3 +256,151 @@ def test_a_redirect_inside_the_allow_list_is_followed():
     net = Net({HUB: lambda r: httpx.Response(301, headers={"location": target})})
     result = fetcher(net).get(HUB)
     assert isinstance(result, Response) and result.final_url == target and result.url == HUB
+
+
+# the cache, conditional requests, interrupted PDFs, resume
+
+
+def test_the_cache_keeps_body_date_validators_and_hash(tmp_path):
+    net = Net(
+        {
+            HUB: lambda r: httpx.Response(
+                200,
+                text="<html><body>x</body></html>",
+                headers={"content-type": "text/html", "etag": '"v1"', "last-modified": "modified-1"},
+            )
+        }
+    )
+    got = caching(net, tmp_path).get(HUB)
+    assert isinstance(got, Response)
+    assert got.content_hash == hashlib.sha256(got.body).hexdigest() and got.fetched == "2026-11-17"
+    entry = Cache(tmp_path / "crawl").entry(HUB)
+    assert entry is not None
+    assert (entry.fetched, entry.etag, entry.last_modified) == ("2026-11-17", '"v1"', "modified-1")
+    assert entry.content_hash == got.content_hash
+    assert (
+        got.path is not None and got.path.parent == tmp_path / "crawl" / FACULTY and got.path.read_bytes() == got.body
+    )
+
+
+def test_the_cache_lives_under_the_given_folder_not_the_working_directory(tmp_path, monkeypatch):
+    elsewhere = tmp_path / "cwd"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    caching(Net(), tmp_path).get(HUB)
+    assert list(elsewhere.iterdir()) == []
+    assert (tmp_path / "crawl" / FACULTY).is_dir()
+
+
+def test_a_validator_makes_the_next_request_conditional(tmp_path):
+    served = []
+
+    def page(request):
+        served.append(dict(request.headers))
+        if request.headers.get("if-none-match") == '"v1"' and request.headers.get("if-modified-since") == "Mon":
+            return httpx.Response(304)
+        return httpx.Response(
+            200, text="<html>one</html>", headers={"content-type": "text/html", "etag": '"v1"', "last-modified": "Mon"}
+        )
+
+    net = Net({HUB: page})
+    first = caching(net, tmp_path).get(HUB)
+    second = caching(net, tmp_path, date(2026, 11, 18)).get(HUB)
+    assert "if-none-match" not in served[0]
+    assert isinstance(first, Response) and isinstance(second, Response)
+    assert second.from_cache and not second.changed and second.body == first.body
+    assert second.fetched == "2026-11-18" and Cache(tmp_path / "crawl").entry(HUB).fetched == "2026-11-18"
+
+
+def test_without_validators_the_hash_decides(tmp_path):
+    net = Net()
+    first = caching(net, tmp_path).get(HUB)
+    again = caching(net, tmp_path, date(2026, 11, 18)).get(HUB)
+    assert "if-none-match" not in net.log[-1].headers and "if-modified-since" not in net.log[-1].headers
+    assert isinstance(again, Response) and not again.from_cache and not again.changed
+    assert again.content_hash == first.content_hash
+
+    changed = Net({HUB: lambda r: httpx.Response(200, text="<html>new</html>", headers={"content-type": "text/html"})})
+    new = caching(changed, tmp_path, date(2026, 11, 19)).get(HUB)
+    assert isinstance(new, Response) and new.changed and new.content_hash != first.content_hash
+    assert Cache(tmp_path / "crawl").entry(HUB).content_hash == new.content_hash
+
+
+def test_a_page_that_turns_noai_leaves_the_cache(tmp_path):
+    cache = Cache(tmp_path / "crawl")
+    url = f"http://{FACULTY}{pages.NOAI_PAGE}"
+    cache.store(url, url, b"<html>old</html>", "text/html", None, None, "2026-11-01")
+    assert isinstance(caching(Net(), tmp_path).get(url), Skipped)
+    assert cache.entry(url) is None
+    assert not any(p.suffix == ".body" for p in (tmp_path / "crawl").rglob("*"))
+
+
+def test_a_pdf_is_kept_as_a_complete_file(tmp_path):
+    got = caching(Net(), tmp_path).get(PO_PDF)
+    assert isinstance(got, Response) and got.path is not None
+    assert got.content_hash == PO_PDF_SHA256 == hashlib.sha256(pages.PO_2023).hexdigest()
+    assert got.path.suffix == ".pdf" and hashlib.sha256(got.path.read_bytes()).hexdigest() == PO_PDF_SHA256
+    assert sorted(p.suffix for p in got.path.parent.iterdir()) == [".json", ".pdf"]  # the entry and the file
+
+
+@pytest.mark.parametrize("fail", [True, False], ids=["connection dropped", "short body"])
+def test_interrupted_pdf_is_not_registered(tmp_path, fail):
+    net = Net({PO_PDF: truncated(pages.PO_2023, fail)})
+    result = caching(net, tmp_path, retries=1).get(PO_PDF)
+    assert isinstance(result, Skipped) and result.reason == "unreachable"
+    assert len([r for r in net.log if str(r.url) == PO_PDF]) == 2
+    crawl = tmp_path / "crawl"
+    assert Cache(crawl).entry(PO_PDF) is None
+    assert [p for p in crawl.rglob("*") if p.is_file() and p.suffix in (".pdf", ".part", ".json")] == []
+
+
+def test_an_interrupted_download_keeps_the_pdf_it_would_have_replaced(tmp_path):
+    ok = caching(Net(), tmp_path).get(PO_PDF)
+    assert isinstance(ok, Response) and ok.path is not None
+    broken = Net({PO_PDF: truncated(pages.PO_2023, True)})
+    assert isinstance(caching(broken, tmp_path, date(2026, 11, 18), retries=0).get(PO_PDF), Skipped)
+    entry = Cache(tmp_path / "crawl").entry(PO_PDF)
+    assert entry is not None and entry.content_hash == PO_PDF_SHA256 and ok.path.read_bytes() == pages.PO_2023
+
+
+def test_a_pdf_url_that_serves_a_page_is_not_kept(tmp_path):
+    net = Net(
+        {PO_PDF: lambda r: httpx.Response(200, text="<html>Fehler</html>", headers={"content-type": "application/pdf"})}
+    )
+    result = caching(net, tmp_path).get(PO_PDF)
+    assert isinstance(result, Skipped) and result.reason == "not a pdf"
+    assert Cache(tmp_path / "crawl").entry(PO_PDF) is None
+
+
+def test_resume_does_not_refetch_what_the_interrupted_crawl_fetched(tmp_path):
+    urls = [HUB, STUDIENBUERO, PRUEFUNGEN, PO_PDF]
+    first = Net()
+    f = caching(first, tmp_path)
+    [f.get(u) for u in urls[:2]]  # the crawl stops here
+
+    second = Net()
+    resumed = caching(second, tmp_path, since=TODAY)
+    got = [resumed.get(u) for u in urls]
+    assert all(isinstance(g, Response) for g in got)
+    assert [g.from_cache for g in got] == [True, True, False, False]
+    assert [p for p in second.paths() if p != "/robots.txt"] == [
+        f"{pages.STUDIENBUERO}/pruefungen/index.de.jsp",
+        pages.PO_2023_PDF,
+    ]
+
+
+def test_resume_still_applies_the_robots_rules(tmp_path):
+    url = f"http://{FACULTY}{pages.LOGIN_PAGE}"
+    Cache(tmp_path / "crawl").store(url, url, b"<html>x</html>", "text/html", None, None, "2026-11-17")
+    result = caching(Net(), tmp_path, since=TODAY).get(url)
+    assert isinstance(result, Skipped) and result.reason == "robots"
+
+
+def test_a_cache_entry_without_its_file_is_a_miss(tmp_path):
+    cache = Cache(tmp_path / "crawl")
+    entry = cache.store(HUB, HUB, b"<html>x</html>", "text/html", None, None, "2026-11-17")
+    cache.file(entry).unlink()
+    assert cache.entry(HUB) is None
+    meta = next((tmp_path / "crawl").rglob("*.json"))
+    meta.write_text("{not json", encoding="utf-8")
+    assert cache.entry(HUB) is None
