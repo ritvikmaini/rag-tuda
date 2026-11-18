@@ -216,7 +216,8 @@ def test_context_length_error_maps_to_trim(caplog) -> None:
     )
     with pytest.raises(Exception, match="never read"):  # a rejected parameter at Groq is no context error
         failed_run(Raising(provider_error(400)), card_update={"answer": groq})
-    assert "[ContextBudget] request still exceeded" in caplog.text
+    assert "[ContextBudget] request rejected as too long: code=context_length_exceeded type=None" in caplog.text
+    assert "exceeded the context window" not in caplog.text
 
 
 def test_errors_map_to_the_busy_and_timeout_messages_and_others_are_raised() -> None:

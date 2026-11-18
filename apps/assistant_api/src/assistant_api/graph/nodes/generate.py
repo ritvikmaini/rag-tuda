@@ -303,7 +303,11 @@ def make_generate(deps: GraphDeps):
             if failure is None:
                 raise
             if failure == TOO_LONG:
-                logger.error("[ContextBudget] request still exceeded the context window after fitting")
+                # every 400 of a local server reads as too long: the provider's own code and type tell what it really was
+                logger.error(
+                    f"[ContextBudget] request rejected as too long: code={getattr(e, 'code', None)} "
+                    f"type={getattr(e, 'type', None)}"
+                )
             return {"messages": [], "generation": texts[failure]}
 
     return generate
