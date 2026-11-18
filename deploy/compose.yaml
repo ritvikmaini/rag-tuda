@@ -3,7 +3,8 @@
 #   docker compose --env-file .env -f deploy/compose.yaml <command> <service>
 # Variables, each with a default so the file renders without an env file: RAG__CARD (the backend's model card),
 # OLLAMA_CONTEXT_LENGTH (the card's window), RAG_ROLES_DIR (the folder of the database secret files, <name>.txt),
-# BACKEND_REFRESH_TOKEN (the backend's Bearer token).
+# BACKEND_REFRESH_TOKEN (the backend's Bearer token), RAG_PROFILE (the profile the images are built with) and
+# RAG_INDEXER_OVERLAY (the indexer's overlay file; the default names the example profile's law texts).
 # This file runs on the CPU with Ollama as the language model server; the only host port is the backend's, on 127.0.0.1.
 #   -f deploy/compose.nvidia.yaml   adds the GPUs to the embedding, reranker and Ollama services
 #   -f deploy/compose.vllm.yaml     replaces Ollama by vLLM (name it last)
@@ -30,7 +31,7 @@ services:
       context: ..
       dockerfile: apps/assistant_api/Dockerfile
       args:
-        PROFILE: example
+        PROFILE: ${RAG_PROFILE:-example}
     logging: *default-logging
     ports:
       - "127.0.0.1:8700:8000"
@@ -204,7 +205,7 @@ services:
   #   docker compose --env-file .env -f deploy/compose.yaml --profile build run --rm indexer build ---
   indexer:
     profiles: [build]
-    build: {context: .., dockerfile: apps/indexer/Dockerfile}
+    build: {context: .., dockerfile: apps/indexer/Dockerfile, args: {PROFILE: "${RAG_PROFILE:-example}"}}
     logging: *default-logging
     volumes:
       - ../data:/app/data
@@ -212,10 +213,14 @@ services:
       - ~/.cache/huggingface:/root/.cache/huggingface
       - ~/.cache/docling:/root/.cache/docling
       - ~/.EasyOCR:/root/.EasyOCR
+      # the profile's own files (the folder sources read them) and the overlay that names the folders
+      - ../profiles/${RAG_PROFILE:-example}:/app/profiles/${RAG_PROFILE:-example}:ro
+      - ${RAG_INDEXER_OVERLAY:-./env/compose-indexer.yaml}:/app/overlay.yaml:ro
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
       - HF_HUB_DISABLE_XET=1
+      - RAG_OVERLAY=/app/overlay.yaml
     secrets:
       - source: rag_indexer_password
         target: pg_vector_password

@@ -1,0 +1,4 @@
+# The compose indexer's overlay for the example profile: its one folder source reads the law texts that compose.yaml mounts
+# from profiles/example. `rag up --mode compose` writes the same file for the chosen profile into .rag/.
+connectors:
+  gesetze: {dir: /app/profiles/example/documents}

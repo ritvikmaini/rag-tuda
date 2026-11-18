@@ -108,6 +108,28 @@ def test_the_stack_takes_the_card_the_window_and_the_secret_folder_from_the_env_
     assert files["rag_app_user"].endswith("deploy/pgvector/roles/rag_app.txt")  # the role names are tracked
 
 
+@needs_compose
+def test_the_indexer_reads_its_profile_and_overlay_and_the_images_are_built_with_the_profile(tmp_path):
+    env = tmp_path / "chosen.env"
+    env.write_text("RAG_PROFILE=other\nRAG_INDEXER_OVERLAY=/rag/overlay.yaml\n", encoding="utf-8")
+    result = render(BASE, args=("--env-file", str(env), "--profile", "build"))
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(result.stdout)["services"]
+    indexer = rendered["indexer"]
+    mounts = {v["target"]: v["source"] for v in indexer["volumes"]}
+    assert mounts["/app/overlay.yaml"] == "/rag/overlay.yaml"
+    assert mounts["/app/profiles/other"].endswith("/profiles/other")
+    assert indexer["environment"]["RAG_OVERLAY"] == "/app/overlay.yaml"
+    assert indexer["build"]["args"]["PROFILE"] == rendered["backend"]["build"]["args"]["PROFILE"] == "other"
+
+
+def test_the_default_overlay_names_the_example_profiles_law_texts():
+    with open(os.path.join(ROOT, "deploy/env/compose-indexer.yaml"), encoding="utf-8") as fh:
+        overlay = yaml.safe_load(fh)
+    assert overlay == {"connectors": {"gesetze": {"dir": "/app/profiles/example/documents"}}}
+    assert os.path.isdir(os.path.join(ROOT, "profiles/example/documents"))
+
+
 def test_the_job_reads_runs_through_a_read_only_mount_and_writes_inside_its_container():
     # the job's non-root user cannot write a bind mount owned by the host user; every command writes into the
     # container's own out_dir, and the result is copied out with docker cp
