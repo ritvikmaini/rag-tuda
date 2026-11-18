@@ -30,7 +30,7 @@ from rag_core.domain.language import detect
 
 from indexer.crawl.fetch import Fetcher, Response, Skipped
 
-__all__ = ["Source", "discover", "normalise"]
+__all__ = ["Source", "discover", "in_scope", "normalise", "stays_in_scope"]
 
 GERMAN_ONLY_NOTICE = "The content of this page is only available in German"
 MAX_SITEMAP_NESTING = 3
@@ -114,6 +114,11 @@ def _listed(source: Source, url: str) -> bool:
     )
 
 
+def in_scope(source: Source, url: str) -> bool:
+    """Whether `url`, in any spelling (it is normalised first), is of the source's origin, under a prefix and under no exclusion."""
+    return _listed(source, normalise(url))
+
+
 def _sitemap_urls(fetcher: Fetcher, url: str, seen: set[str], nesting: int = 0) -> Iterator[str]:
     if url in seen or nesting > MAX_SITEMAP_NESTING:
         return
@@ -149,7 +154,7 @@ def _links(reply: Response) -> Iterator[str]:
             continue
 
 
-def _stays_in_scope(source: Source, reply: Response, url: str) -> bool:
+def stays_in_scope(source: Source, reply: Response, url: str) -> bool:
     """False when the request for `url` ended, after redirects, outside the source's scope (a seed is in scope)."""
     final = normalise(reply.final_url)
     return final == url or _listed(source, final) or final in map(normalise, source.seeds)
@@ -166,7 +171,7 @@ def _follow(source: Source, fetcher: Fetcher, found: dict[str, None]) -> None:
             if _path(url).lower().endswith(".pdf"):
                 continue
             reply = fetcher.get(url)
-            if isinstance(reply, Skipped) or not _stays_in_scope(source, reply, url):
+            if isinstance(reply, Skipped) or not stays_in_scope(source, reply, url):
                 found.pop(url, None)
                 continue
             for link in map(normalise, _links(reply)):
@@ -179,11 +184,7 @@ def _follow(source: Source, fetcher: Fetcher, found: dict[str, None]) -> None:
 
 def _english_page(source: Source, fetcher: Fetcher, url: str) -> bool:
     reply = fetcher.get(url)
-    if (
-        isinstance(reply, Skipped)
-        or not _stays_in_scope(source, reply, url)
-        or "html" not in reply.content_type.lower()
-    ):
+    if isinstance(reply, Skipped) or not stays_in_scope(source, reply, url) or "html" not in reply.content_type.lower():
         return False
     try:
         tree = html.fromstring(reply.body)

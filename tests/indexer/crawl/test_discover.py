@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from rag_testing import serve
 from rag_testing.minisite import pages
 
-from indexer.crawl.discover import Source, discover, normalise
+from indexer.crawl.discover import Source, discover, in_scope, normalise
 from indexer.crawl.fetch import Fetcher
 
 FACULTY = "faculty.test"
@@ -208,6 +208,15 @@ def test_dot_segments_cannot_lead_out_of_a_prefix():
     extra = {SITEMAP: ("application/xml", f'<urlset xmlns="{ns}">{listing}</urlset>')}
     source = src(FACULTY, prefixes=(STUDIUM,), exclude=(pages.EXCLUDED_HUB,), sitemaps=(SITEMAP,))
     assert run(source, Net(extra))[0] == [f"{base}/studium_fb20/ok.de.jsp"]
+
+
+def test_in_scope_checks_the_normalised_url_against_origin_prefixes_and_exclusions():
+    source = src(FACULTY, prefixes=(STUDIUM,), exclude=(pages.EXCLUDED_HUB,))
+    base = f"http://{FACULTY}"
+    assert in_scope(source, f"{base}/studium_fb20/in/../ok.de.jsp#top")
+    assert not in_scope(source, f"{base}/studium_fb20/%2e%2e/intern/a.de.jsp")
+    assert not in_scope(source, f"{base}{pages.EXCLUDED_HUB}.de.jsp")
+    assert not in_scope(source, f"http://{INTERN}/studium_fb20/ok.de.jsp")
 
 
 def test_a_link_with_dot_segments_is_checked_and_requested_as_normalised():
