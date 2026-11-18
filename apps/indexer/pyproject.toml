@@ -23,6 +23,10 @@ dependencies = [
 [project.scripts]
 indexer = "indexer.cli:main"
 
+# found by the indexer through this entry point group (indexer.sources.discover)
+[project.entry-points."rag_core.connectors"]
+folder = "indexer.connectors.folder:Folder"
+
 [tool.uv.sources]
 rag-core = { workspace = true }
 
@@ -38,6 +42,5 @@ DEP002 = [
     "pgvector",
     "psycopg",
     "python-box",
-    "pyyaml",
     "torch",
 ]
