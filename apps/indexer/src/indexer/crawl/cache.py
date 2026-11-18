@@ -2,7 +2,7 @@
 `ETag` and `Last-Modified` the server sent, the content type, the URL the body came from and the SHA-256 of the body.
 
 The body file is named after its hash (`<key>-<hash>.body`, `.pdf` for a PDF), so an entry always points at one complete
-file: a body is written to a `.part` file and renamed, then the entry is replaced the same way, then the previous body is
+file: a body is written to a `.part` file (`part`) and renamed (`adopt`), then the entry is replaced the same way, then the previous body is
 removed. A crash between the steps leaves the previous entry and its file in use. An entry whose file is missing, or whose
 JSON cannot be read, is a miss."""
 
@@ -70,15 +70,38 @@ class Cache:
         fetched: str,
     ) -> Entry:
         """Keep `body` as the content of `url`, replacing the previous one."""
-        digest = hashlib.sha256(body).hexdigest()
+        part = self.part(url)
+        part.write_bytes(body)
+        return self.adopt(
+            url, final_url, part, hashlib.sha256(body).hexdigest(), content_type, etag, last_modified, fetched
+        )
+
+    def part(self, url: str) -> Path:
+        """Where a download of `url` is written before `adopt` makes it the cached body."""
         stem = self._stem(url)
         stem.parent.mkdir(parents=True, exist_ok=True)
-        suffix = ".pdf" if body.startswith(b"%PDF-") else ".body"
-        entry = Entry(
-            url, final_url, content_type, digest, fetched, etag, last_modified, f"{stem.name}-{digest[:16]}{suffix}"
-        )
-        if not self.file(entry).is_file():
-            write_atomic(self.file(entry), body)
+        return stem.with_name(stem.name + ".part")
+
+    def adopt(
+        self,
+        url: str,
+        final_url: str,
+        part: Path,
+        digest: str,
+        content_type: str,
+        etag: str | None,
+        last_modified: str | None,
+        fetched: str,
+    ) -> Entry:
+        """Make the complete download `part` (its SHA-256 is `digest`) the content of `url`; `part` is consumed."""
+        with part.open("rb") as f:
+            suffix = ".pdf" if f.read(5) == b"%PDF-" else ".body"
+        name = f"{self._stem(url).name}-{digest[:16]}{suffix}"
+        entry = Entry(url, final_url, content_type, digest, fetched, etag, last_modified, name)
+        if self.file(entry).is_file():
+            part.unlink()
+        else:
+            os.replace(part, self.file(entry))
         self._write(entry)
         self._sweep(entry)
         return entry

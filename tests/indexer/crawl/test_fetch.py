@@ -49,7 +49,7 @@ class Net:
         self.times.append(self.clock() if self.clock else 0.0)
         if str(request.url) in self.overrides:
             return self.overrides[str(request.url)](request)
-        app = self.apps.get(request.url.host)
+        app = self.apps.get(request.url.host.removesuffix("."))
         if app is None:
             raise httpx.ConnectError("no such host", request=request)
         reply = app.get(
@@ -79,6 +79,7 @@ class Clock:
 
 def fetcher(net, clock=None, hosts=(FACULTY, INTERN), **kw):
     clock = clock or Clock()
+    kw.setdefault("monotonic", clock)
     return Fetcher(hosts, contact=CONTACT, client=net.client, clock=clock, sleep=clock.sleep, **kw)
 
 
@@ -479,3 +480,154 @@ def test_a_generation_that_is_not_a_file_name_is_refused(tmp_path, generation):
 
 def test_snapshots_sit_beside_the_crawl_folder():
     assert snapshots_dir("/x/.rag/crawl") == Path("/x/.rag/snapshots")
+
+
+# bounds on one response, hosts written oddly, malformed headers, redirects
+
+
+class Drip(httpx.SyncByteStream):
+    """A body that never ends: one chunk every `every` seconds of the fake clock."""
+
+    def __init__(self, clock, every, chunk=b"x"):
+        self.clock, self.every, self.chunk, self.sent = clock, every, chunk, 0
+
+    def __iter__(self):
+        while self.sent < 10_000:
+            self.sent += 1
+            self.clock.now += self.every
+            yield self.chunk
+
+
+class Unread(httpx.SyncByteStream):
+    def __iter__(self):
+        raise AssertionError("the body was read")
+        yield b""
+
+
+def served(content_type, stream, **headers):
+    return lambda r: httpx.Response(200, headers={"content-type": content_type, **headers}, stream=stream)
+
+
+def test_a_slow_drip_response_hits_the_total_deadline(tmp_path):
+    clock = Clock()
+    drip = Drip(clock, every=10.0)
+    net = Net({HUB: served("text/html", drip)})
+    result = caching(net, tmp_path, clock=clock, deadline=35.0, retries=2).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "too slow"
+    assert drip.sent == 4  # the fourth chunk arrived at 40 s
+    assert len([r for r in net.log if str(r.url) == HUB]) == 1  # no retry
+    assert Cache(tmp_path / "crawl").entry(HUB) is None
+
+
+def test_a_slow_drip_pdf_leaves_no_part_file(tmp_path):
+    clock = Clock()
+    net = Net({PO_PDF: served("application/pdf", Drip(clock, 10.0, b"%PDF-1.4 "))})
+    result = caching(net, tmp_path, clock=clock, deadline=35.0).get(PO_PDF)
+    assert isinstance(result, Skipped) and result.reason == "too slow"
+    assert [p for p in (tmp_path / "crawl").rglob("*") if p.is_file()] == []
+
+
+def test_a_content_length_over_the_limit_is_refused_before_the_body_is_read(tmp_path):
+    net = Net({HUB: served("text/html", Unread(), **{"content-length": "5000"})})
+    result = caching(net, tmp_path, page_limit=1000).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "too large"
+    assert Cache(tmp_path / "crawl").entry(HUB) is None
+
+
+def test_a_body_over_the_limit_without_a_content_length_is_cut_off(tmp_path):
+    clock = Clock()
+    drip = Drip(clock, 0.0, b"y" * 400)
+    net = Net({HUB: served("text/html", drip)})
+    result = caching(net, tmp_path, clock=clock, page_limit=1000).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "too large"
+    assert drip.sent == 3  # 1200 bytes > 1000
+    assert Cache(tmp_path / "crawl").entry(HUB) is None
+
+
+def test_pdfs_have_their_own_larger_limit(tmp_path):
+    ok = caching(Net(), tmp_path, page_limit=1000, pdf_limit=10_000).get(PO_PDF)  # 2406 bytes
+    assert isinstance(ok, Response) and ok.content_hash == PO_PDF_SHA256 and ok.body == pages.PO_2023
+    over = caching(Net(), tmp_path / "other", pdf_limit=1000).get(PO_PDF)
+    assert isinstance(over, Skipped) and over.reason == "too large"
+    assert [p for p in (tmp_path / "other" / "crawl").rglob("*") if p.is_file()] == []
+
+
+def test_a_pdf_streams_into_the_cache_and_leaves_no_part_file(tmp_path):
+    got = caching(Net(), tmp_path).get(PO_PDF)
+    assert isinstance(got, Response) and got.path is not None
+    assert not list((tmp_path / "crawl").rglob("*.part"))
+    again = caching(Net(), tmp_path, date(2026, 11, 18)).get(PO_PDF)
+    assert isinstance(again, Response) and not again.changed and again.path == got.path
+    assert not list((tmp_path / "crawl").rglob("*.part"))
+
+
+def test_a_robots_txt_over_the_limit_disallows_the_host(tmp_path):
+    net = Net(robots_served(200, "User-agent: *\n" + "# padding\n" * 500))
+    result = caching(net, tmp_path, page_limit=1000).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "robots"
+
+
+@pytest.mark.parametrize("host", ["www.darmstadt.de.", "WWW.Darmstadt.DE.", "h-da.de.", "www.h-da.de."])
+def test_a_trailing_dot_does_not_get_past_the_never_fetched_hosts(host):
+    net = Net()
+    f = Fetcher((host, host.rstrip(".")), client=net.client, clock=Clock(), sleep=Clock().sleep)
+    result = f.get(f"https://{host}/anything")
+    assert isinstance(result, Skipped) and result.reason == "host never fetched"
+    assert net.log == []
+
+
+def test_a_redirect_to_a_trailing_dot_host_is_refused():
+    net = Net({HUB: lambda r: httpx.Response(302, headers={"location": "https://www.darmstadt.de./x"})})
+    result = fetcher(net, hosts=(FACULTY, "www.darmstadt.de.")).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "host never fetched"
+    assert {r.url.host for r in net.log} == {FACULTY}
+
+
+def test_a_trailing_dot_on_an_allowed_host_still_matches():
+    assert isinstance(fetcher(Net(), hosts=(FACULTY + ".",)).get(HUB), Response)
+    assert isinstance(fetcher(Net()).get(HUB.replace(FACULTY, FACULTY + ".")), Response)
+
+
+def test_a_malformed_content_length_is_skipped():
+    net = Net({HUB: served("text/html", httpx.ByteStream(b"<html></html>"), **{"content-length": "12x"})})
+    result = fetcher(net).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "bad content-length"
+
+
+@pytest.mark.parametrize("location", ["http://[::1", "http://faculty.test:notaport/"])
+def test_a_malformed_location_is_skipped(location):
+    net = Net({HUB: lambda r: httpx.Response(302, headers={"location": location})})
+    result = fetcher(net).get(HUB)
+    assert isinstance(result, Skipped)
+
+
+def test_a_malformed_url_is_skipped():
+    result = fetcher(Net()).get("http://[::1")
+    assert isinstance(result, Skipped) and result.reason == "not an http url"
+
+
+def test_a_malformed_location_in_robots_txt_disallows_the_host():
+    net = Net({f"http://{FACULTY}/robots.txt": lambda r: httpx.Response(302, headers={"location": "http://[::1"})})
+    result = fetcher(net).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "robots"
+
+
+def test_a_redirect_to_a_path_robots_disallows_is_not_followed():
+    login = f"http://{FACULTY}{pages.LOGIN_PAGE}"
+    net = Net({HUB: lambda r: httpx.Response(302, headers={"location": login})})
+    result = fetcher(net).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "robots" and result.url == HUB
+    assert login not in {str(r.url) for r in net.log}
+
+
+def test_the_rate_limit_holds_across_a_redirect():
+    clock = Clock()
+    target = f"http://{FACULTY}{pages.STUDIENBUERO}/index.de.jsp"
+    net = Net({HUB: lambda r: httpx.Response(302, headers={"location": target})}, clock=clock)
+    assert isinstance(fetcher(net, clock).get(HUB), Response)
+    assert [r.url.path for r in net.log] == [
+        "/robots.txt",
+        f"{pages.BSC_HUB}.de.jsp",
+        f"{pages.STUDIENBUERO}/index.de.jsp",
+    ]
+    assert net.times == [1000.0, 1001.0, 1002.0]

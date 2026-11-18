@@ -5,7 +5,13 @@ A URL is fetched only when its host is on the caller's allow-list and not one of
 host's robots.txt allows it for this user agent, and (for a page) when its `<meta name="robots">` carries none of `noindex`,
 `noai` or `none`. Requests to one host are at least `interval` seconds apart; the clock and the sleep are injected. A
 server error or a dropped connection is retried `retries` times, each retry through the rate limit. Redirects are followed
-by hand, and every hop passes the same checks as the first URL.
+by hand, and every hop passes the same checks as the first URL. Host names are compared lower-cased, in their IDNA form and
+without a trailing dot. A fetcher is for one thread: the rate limit and the robots rules are plain dictionaries.
+
+One response is bounded in time and size, or the URL is skipped (no retry, nothing cached): `deadline` seconds in total
+(a monotonic clock, apart from the rate limit's), `page_limit` bytes for anything but a PDF and for robots.txt, `pdf_limit`
+bytes for a PDF. A Content-Length above the limit is refused before the body is read. A PDF goes to a `.part` file in the
+cache as it arrives, never into memory beside it.
 
 robots.txt is read once per host (RFC 9309): a 4xx answer allows everything; a server error, no answer, a 429 or a 200 that
 is an HTML page (a soft 404 that is not a robots file) disallows everything.
@@ -23,7 +29,7 @@ from dataclasses import dataclass
 from datetime import date
 from importlib.metadata import version
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import SplitResult, urljoin, urlsplit
 
 import httpx
 from lxml import html
@@ -38,7 +44,10 @@ NEVER_FETCHED = ("www.darmstadt.de", "h-da.de")
 BLOCKING_META = frozenset({"noindex", "noai", "none"})
 REDIRECTS = frozenset({301, 302, 303, 307, 308})
 MAX_REDIRECTS = 5
-MAX_BYTES = 100 * 1024 * 1024
+PAGE_LIMIT = 5 * 1024 * 1024
+PDF_LIMIT = 100 * 1024 * 1024
+DEADLINE = 120.0
+PDF_MAGIC = b"%PDF-"
 log = logging.getLogger(__name__)
 
 
@@ -73,6 +82,12 @@ class _Reply:
     status: int
     headers: httpx.Headers
     body: bytes
+    file: Path | None = None  # a PDF streamed into the cache's `.part` file; `body` is empty then
+    digest: str = ""  # of that file
+
+
+class _Refused(Exception):
+    """A response that is dropped for a reason that retrying cannot change."""
 
 
 @dataclass(frozen=True)
@@ -84,12 +99,33 @@ class Skipped:
     detail: str = ""
 
 
+def _parts(url: str) -> SplitResult | None:
+    try:
+        return urlsplit(url)
+    except ValueError:  # an unbalanced bracket in the host, say
+        return None
+
+
+def _normal(host: str) -> str:
+    """A host name as compared: lower case, IDNA (as httpx sends it), one trailing dot removed."""
+    try:
+        host = host.lower().encode("idna").decode("ascii")
+    except UnicodeError:
+        return ""
+    return host.removesuffix(".")
+
+
 def _host(url: str) -> str:
-    return (urlsplit(url).hostname or "").lower()
+    parts = _parts(url)
+    return _normal(parts.hostname or "") if parts else ""
 
 
 def _never_fetched(host: str) -> bool:
     return any(host == h or host.endswith("." + h) for h in NEVER_FETCHED)
+
+
+def _is_pdf(url: str, content_type: str) -> bool:
+    return "pdf" in content_type.lower() or (_parts(url) or urlsplit("")).path.lower().endswith(".pdf")
 
 
 def blocking_meta(body: bytes) -> str | None:
@@ -118,24 +154,31 @@ class Fetcher:
         interval: float = 1.0,
         retries: int = 2,
         timeout: float = 30.0,
+        deadline: float = DEADLINE,
+        page_limit: int = PAGE_LIMIT,
+        pdf_limit: int = PDF_LIMIT,
+        monotonic: Callable[[], float] = time.monotonic,
         cache: Cache | None = None,
         since: date | None = None,
         today: Callable[[], date] = date.today,
     ):
-        self.allowed_hosts = frozenset(h.lower() for h in allowed_hosts)
+        self.allowed_hosts = frozenset(_normal(h) for h in allowed_hosts)
         self.user_agent = user_agent(contact)
         self._client = client or httpx.Client(timeout=timeout)
         self._clock, self._sleep, self._interval, self._retries = clock, sleep, interval, retries
         self._last_request: dict[str, float] = {}
         self._robots: dict[str, Robots] = {}
+        self._deadline, self._page_limit, self._pdf_limit, self._monotonic = deadline, page_limit, pdf_limit, monotonic
         self._cache, self._since, self._today = cache, since, today
 
     def get(self, url: str) -> Response | Skipped:
         """Fetch `url`, or say why not."""
         asked = url
+        if skipped := self._refuse(asked, asked):
+            return skipped
         cached = self._cache.entry(asked) if self._cache else None
         if cached and self._since and cached.fetched >= self._since.isoformat():
-            return self._refuse(asked, asked) or self._cached(cached, changed=False)
+            return self._cached(cached, changed=False)
         headers = {}
         if cached and cached.etag:
             headers["If-None-Match"] = cached.etag
@@ -148,7 +191,10 @@ class Fetcher:
             if isinstance(reply, str):
                 return Skipped(asked, reply)
             if reply.status in REDIRECTS and reply.headers.get("location"):
-                url = urljoin(url, reply.headers["location"])
+                try:
+                    url = urljoin(url, reply.headers["location"])
+                except ValueError:
+                    return Skipped(asked, "bad redirect", reply.headers["location"])
                 continue
             if reply.status == 304 and cached and self._cache:
                 entry = self._cache.touch(
@@ -162,25 +208,26 @@ class Fetcher:
 
     def _keep(self, asked: str, url: str, reply: "_Reply", cached: Entry | None) -> Response | Skipped:
         content_type = reply.headers.get("content-type", "")
-        if "pdf" in content_type.lower() or urlsplit(url).path.lower().endswith(".pdf"):
-            if not reply.body.startswith(b"%PDF-"):
-                return Skipped(asked, "not a pdf", content_type)
-        elif "html" in content_type.lower() and (token := blocking_meta(reply.body)):
+        if reply.file is None and "html" in content_type.lower() and (token := blocking_meta(reply.body)):
             if self._cache:
                 self._cache.drop(asked)
             return Skipped(asked, "meta robots", token)
-        digest = hashlib.sha256(reply.body).hexdigest()
+        digest = reply.digest or hashlib.sha256(reply.body).hexdigest()
         etag, modified = reply.headers.get("etag"), reply.headers.get("last-modified")
         fetched = self._today().isoformat()
-        entry, changed = None, True
-        if self._cache and cached and cached.content_hash == digest:
-            entry, changed = self._cache.touch(cached, fetched, etag, modified), False
+        same = bool(cached and cached.content_hash == digest)
+        entry = None
+        if self._cache and cached and same:
+            entry = self._cache.touch(cached, fetched, etag, modified)
+            if reply.file:
+                reply.file.unlink()
+        elif self._cache and reply.file:
+            entry = self._cache.adopt(asked, url, reply.file, digest, content_type, etag, modified, fetched)
         elif self._cache:
             entry = self._cache.store(asked, url, reply.body, content_type, etag, modified, fetched)
         path = self._cache.file(entry) if self._cache and entry else None
-        return Response(
-            asked, url, reply.status, reply.body, content_type, digest, fetched, etag, modified, path, changed
-        )
+        body = path.read_bytes() if reply.file and path else reply.body
+        return Response(asked, url, reply.status, body, content_type, digest, fetched, etag, modified, path, not same)
 
     def _cached(self, entry: Entry, *, changed: bool) -> Response:
         assert self._cache
@@ -201,10 +248,11 @@ class Fetcher:
 
     def robots(self, url: str) -> Robots:
         """The rules of the host of `url`, read on first use."""
-        host = _host(url)
+        host, parts = _host(url), _parts(url)
         if host not in self._robots:
-            parts = urlsplit(url)
-            self._robots[host] = self._read_robots(f"{parts.scheme}://{parts.netloc}/robots.txt")
+            self._robots[host] = (
+                self._read_robots(f"{parts.scheme}://{parts.netloc}/robots.txt") if parts else Robots.disallow_all()
+            )
         return self._robots[host]
 
     def _host_refusal(self, host: str) -> str | None:
@@ -213,8 +261,8 @@ class Fetcher:
         return None if host in self.allowed_hosts else "host not allowed"
 
     def _refuse(self, url: str, asked: str) -> Skipped | None:
-        host = _host(url)
-        if urlsplit(url).scheme not in ("http", "https") or not host:
+        host, parts = _host(url), _parts(url)
+        if parts is None or parts.scheme not in ("http", "https") or not host:
             return Skipped(asked, "not an http url", url)
         if reason := self._host_refusal(host):
             return Skipped(asked, reason, host)
@@ -227,8 +275,14 @@ class Fetcher:
         for _ in range(MAX_REDIRECTS):  # RFC 9309: follow redirects, here only to hosts that may be fetched
             if not (isinstance(reply, _Reply) and reply.status in REDIRECTS and reply.headers.get("location")):
                 break
-            url = urljoin(url, reply.headers["location"])
+            try:
+                url = urljoin(url, reply.headers["location"])
+            except ValueError:
+                return Robots.disallow_all()
             reply = "refused" if self._host_refusal(_host(url)) else self._send(url)
+        if isinstance(reply, _Reply) and reply.file:
+            reply.file.unlink(missing_ok=True)  # robots.txt served as a PDF is not a robots file
+            return Robots.disallow_all()
         if isinstance(reply, str) or reply.status >= 500 or reply.status == 429 or 300 <= reply.status < 400:
             log.warning("robots.txt of %s is unreadable: nothing is fetched from that host", url)
             return Robots.disallow_all()
@@ -256,20 +310,54 @@ class Fetcher:
             except httpx.HTTPError as exc:
                 log.info("GET %s failed: %s", url, exc)
                 continue
-            except OverflowError:
-                return "too large"
+            except _Refused as exc:
+                return str(exc)
             if last.status < 500 and last.status != 429:
                 break
         return last or "unreachable"
 
     def _once(self, url: str, headers: dict[str, str]) -> _Reply:
+        started = self._monotonic()
         with self._client.stream("GET", url, headers={"User-Agent": self.user_agent, **headers}) as reply:
-            body = bytearray()
-            for chunk in reply.iter_bytes():
-                body += chunk
-                if len(body) > MAX_BYTES:
-                    raise OverflowError(url)
-            expected = reply.headers.get("content-length")
-            if expected and "content-encoding" not in reply.headers and int(expected) != len(body):
-                raise httpx.ReadError("the body is shorter than its content-length")
-            return _Reply(reply.status_code, reply.headers, bytes(body))
+            status = reply.status_code
+            pdf = 200 <= status < 300 and _is_pdf(url, reply.headers.get("content-type", ""))
+            limit = self._pdf_limit if pdf else self._page_limit
+            declared = reply.headers.get("content-length")
+            try:
+                size = int(declared) if declared is not None else None
+            except ValueError:
+                raise _Refused("bad content-length") from None
+            if size is not None and not 0 <= size <= limit:
+                raise _Refused("too large")
+            part = self._cache.part(url) if pdf and self._cache else None
+            chunks: list[bytes] = []
+            digest, head, total = hashlib.sha256(), b"", 0
+            try:
+                out = part.open("wb") if part else None
+                try:
+                    for chunk in reply.iter_bytes():
+                        if self._monotonic() - started > self._deadline:
+                            raise _Refused("too slow")
+                        total += len(chunk)
+                        if total > limit:
+                            raise _Refused("too large")
+                        head = (head + chunk)[: len(PDF_MAGIC)] if len(head) < len(PDF_MAGIC) else head
+                        if pdf and len(head) >= len(PDF_MAGIC) and head != PDF_MAGIC:
+                            raise _Refused("not a pdf")
+                        if out:
+                            out.write(chunk)
+                            digest.update(chunk)
+                        else:
+                            chunks.append(chunk)
+                finally:
+                    if out:
+                        out.close()
+                if pdf and head != PDF_MAGIC:
+                    raise _Refused("not a pdf")
+                if size is not None and "content-encoding" not in reply.headers and size != total:
+                    raise httpx.ReadError("the body is shorter than its content-length")
+            except BaseException:
+                if part:
+                    part.unlink(missing_ok=True)
+                raise
+            return _Reply(status, reply.headers, b"".join(chunks), part, digest.hexdigest() if part else "")
