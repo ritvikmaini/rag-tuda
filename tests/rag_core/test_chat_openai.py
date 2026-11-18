@@ -241,6 +241,7 @@ def test_failures_are_told_apart_by_class_and_status_never_by_message() -> None:
     assert failure_of(status_error(413), "ollama") == TOO_LONG
     assert failure_of(status_error(400, "context_length_exceeded"), "groq") == TOO_LONG
     assert failure_of(status_error(400), "vllm") == TOO_LONG  # vLLM's context error has no code of its own
+    assert failure_of(status_error(400), "ollama") == TOO_LONG  # so is Ollama's: 400 and no code
     assert failure_of(status_error(400), "groq") is None  # a rejected parameter is no context error
     assert failure_of(status_error(500), "vllm") is None
     request = httpx.Request("POST", URL)

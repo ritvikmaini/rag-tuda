@@ -114,7 +114,7 @@ def response_format(structured_output: str, provider: str, schema: Mapping[str, 
 
 def failure_of(exc: BaseException, provider: str) -> str | None:
     """BUSY, TIMEOUT or TOO_LONG for a failed call, None for any other. A prompt is too long when the server says 413, names
-    the context length in the error code, or (vLLM, which has no code for it) rejects the request with 400."""
+    the context length in the error code, or (vLLM and Ollama, which have no code for it) reject the request with 400."""
     if isinstance(exc, (openai.APITimeoutError, httpx.TimeoutException, TimeoutError)):
         return TIMEOUT
     if isinstance(exc, openai.RateLimitError):
@@ -122,7 +122,7 @@ def failure_of(exc: BaseException, provider: str) -> str | None:
     if isinstance(exc, openai.APIStatusError):
         if exc.status_code == 413 or exc.code == "context_length_exceeded":
             return TOO_LONG
-        if exc.status_code == 400 and provider == "vllm":
+        if exc.status_code == 400 and provider in ("vllm", "ollama"):
             return TOO_LONG
     return None
 
