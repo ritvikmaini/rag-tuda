@@ -18,7 +18,7 @@ from rag_core.settings.profile import CrawlHost, Roles, Sources
 from indexer.crawl.cache import Cache
 from indexer.crawl.discover import Source
 from indexer.crawl.extract import Selectors
-from indexer.crawl.fetch import Fetcher
+from indexer.crawl.fetch import Fetcher, Response, Skipped
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,20 @@ class Host:
     entry: CrawlHost
     source: Source
     selectors: Selectors
+
+
+class RecordingFetcher(Fetcher):
+    """A fetcher that remembers every URL it skipped and why, whoever asked (discovery drops such a URL without a word)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.skipped: dict[str, Skipped] = {}
+
+    def get(self, url: str) -> Response | Skipped:
+        reply = super().get(url)
+        if isinstance(reply, Skipped):
+            self.skipped[reply.url] = reply
+        return reply
 
 
 def load_sources(ctx: SourceContext) -> Sources:
@@ -62,9 +76,11 @@ def active_hosts(sources: Sources, full: bool) -> dict[str, Host]:
     return hosts
 
 
-def make_fetcher(ctx: SourceContext, hosts: Iterable[str], *, since: date | None = None, **options: Any) -> Fetcher:
+def make_fetcher(
+    ctx: SourceContext, hosts: Iterable[str], *, since: date | None = None, **options: Any
+) -> RecordingFetcher:
     """A fetcher for `hosts` (nothing else is fetched) that caches under the crawl folder; `options` are Fetcher's own."""
-    return Fetcher(
+    return RecordingFetcher(
         hosts,
         contact=ctx.options.get("contact"),
         cache=Cache(ctx.paths["crawl_dir"]),
