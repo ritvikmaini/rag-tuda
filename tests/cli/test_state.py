@@ -11,7 +11,6 @@ import pytest
 from rag_tuda import state
 
 posix = pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
-ROLES = ("rag_owner", "rag_indexer", "rag_app")
 COMPOSE = Path(__file__).resolve().parents[2] / "deploy" / "compose.ci.yaml"
 # the generated files the compose file's top-level `secrets:` names, read from the file itself
 CI_SECRET_FILES = re.findall(r"^  \w+: \{file: \./ci/\.generated/(\S+?)\}$", COMPOSE.read_text(encoding="utf-8"), re.M)
@@ -28,21 +27,63 @@ def test_ensure_creates_layout(tmp_path):
     assert s.dir == rag
     assert (rag / "token").read_text() == s.token
     assert len(s.token) >= 43  # token_urlsafe(32)
-    assert sorted(p.name for p in (rag / "secrets").iterdir()) == sorted(ROLES)
-    assert set(s.passwords) == set(ROLES)
-    for role in ROLES:
-        assert (rag / "secrets" / role).read_text() == s.passwords[role]
-    assert len(set(s.passwords.values()) | {s.token}) == 4
+    assert sorted(p.name for p in (rag / "secrets").iterdir()) == ["backend", "indexer", "migrate", "roles"]
+    assert sorted(p.name for p in (rag / "secrets" / "roles").iterdir()) == sorted(
+        [f"{name}.txt" for name in (*state.PASSWORDS, "pgdatabase", "vector_user")]
+    )
+    assert set(s.passwords) == set(state.PASSWORDS)
+    for name in state.PASSWORDS:
+        assert (rag / "secrets" / "roles" / f"{name}.txt").read_text() == s.passwords[name]
+    assert len({*s.passwords.values(), s.token}) == 5
+    assert (rag / "logs").is_dir() and (rag / "pids").is_dir()
     assert json.loads((rag / "state.json").read_text())["first_run_done"] is False
 
 
+def read(path):
+    return path.read_text(encoding="utf-8")
+
+
+def test_each_native_process_gets_its_own_role_under_the_names_the_services_open(tmp_path):
+    s = state.ensure(tmp_path)
+    secrets = tmp_path / ".rag" / "secrets"
+    assert sorted(p.name for p in (secrets / "backend").iterdir()) == [
+        "backend_token",
+        "pg_vector_password",
+        "pgdatabase",
+        "vector_user",
+    ]
+    assert sorted(p.name for p in (secrets / "indexer").iterdir()) == [
+        "pg_vector_password",
+        "pgdatabase",
+        "vector_user",
+    ]
+    assert sorted(p.name for p in (secrets / "migrate").iterdir()) == ["pgdatabase", "rag_migrator_password"]
+    assert read(secrets / "backend" / "vector_user") == "rag_app"
+    assert read(secrets / "backend" / "pg_vector_password") == s.passwords["rag_app_password"]
+    assert read(secrets / "backend" / "backend_token") == s.token
+    assert read(secrets / "indexer" / "vector_user") == "rag_indexer"
+    assert read(secrets / "indexer" / "pg_vector_password") == s.passwords["rag_indexer_password"]
+    assert read(secrets / "migrate" / "rag_migrator_password") == s.passwords["rag_migrator_password"]
+    for folder in ("backend", "indexer", "migrate"):
+        assert read(secrets / folder / "pgdatabase") == read(secrets / "roles" / "pgdatabase.txt") == "vector_db"
+    assert s.secrets_dir("indexer") == secrets / "indexer"
+
+
+def test_the_role_names_are_the_ones_the_database_scripts_create():
+    roles = Path(__file__).resolve().parents[2] / "deploy" / "pgvector" / "roles"
+    assert {name: read(roles / f"{role}.txt") for name, role in state.SERVICE_ROLES.items()} == state.SERVICE_ROLES
+
+
 @posix
-def test_modes(tmp_path):
+def test_secret_file_modes(tmp_path):
     state.ensure(tmp_path)
     rag = tmp_path / ".rag"
     assert mode(rag) == 0o700
-    assert mode(rag / "secrets") == 0o700
-    for f in [rag / "token", rag / "state.json", *(rag / "secrets").iterdir()]:
+    for folder in [p for p in rag.rglob("*") if p.is_dir()]:
+        assert mode(folder) == 0o700, folder
+    files = [p for p in rag.rglob("*") if p.is_file()]
+    assert len(files) >= 16
+    for f in files:
         assert mode(f) == 0o600, f
 
 
@@ -75,12 +116,23 @@ def test_idempotent_never_rotates(tmp_path):
 
 def test_fills_only_what_is_missing(tmp_path):
     first = state.ensure(tmp_path)
-    (tmp_path / ".rag" / "secrets" / "rag_app").unlink()
+    secrets = tmp_path / ".rag" / "secrets"
+    (secrets / "roles" / "rag_app_password.txt").unlink()
+    (secrets / "indexer" / "vector_user").unlink()
     second = state.ensure(tmp_path)
     assert second.token == first.token
-    assert second.passwords["rag_owner"] == first.passwords["rag_owner"]
-    assert second.passwords["rag_app"] != first.passwords["rag_app"]
-    assert len(second.passwords["rag_app"]) >= 43
+    assert second.passwords["rag_indexer_password"] == first.passwords["rag_indexer_password"]
+    assert second.passwords["rag_app_password"] != first.passwords["rag_app_password"]
+    assert len(second.passwords["rag_app_password"]) >= 43
+    assert read(secrets / "indexer" / "vector_user") == "rag_indexer"
+    assert read(secrets / "backend" / "pg_vector_password") == second.passwords["rag_app_password"]  # the copy follows
+
+
+def test_a_copy_follows_its_source(tmp_path):
+    state.ensure(tmp_path)
+    (tmp_path / ".rag" / "secrets" / "backend" / "backend_token").write_text("stale")
+    s = state.ensure(tmp_path)
+    assert read(tmp_path / ".rag" / "secrets" / "backend" / "backend_token") == s.token
 
 
 @posix
@@ -146,7 +198,7 @@ def test_the_repo_ignores_every_file_init_writes(tmp_path):
     written = [
         p for p in work.rglob("*") if p.is_file() and ".git" not in p.relative_to(work).parts and p.name != ".gitignore"
     ]
-    assert len(written) >= 12
+    assert len(written) >= 25
     for path in written:
         rel = path.relative_to(work).as_posix()
         assert subprocess.run(["git", "check-ignore", "-q", rel], cwd=work).returncode == 0, rel

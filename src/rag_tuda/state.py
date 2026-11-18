@@ -1,8 +1,10 @@
-"""The `.rag/` state directory: the API token, the three database role passwords and `state.json`; and the secret files of
-the CI compose stack (`ci_secrets`).
+"""The `.rag/` state directory: the API token, the database passwords, the secret files of each native process, the pid files
+and logs, and `state.json`; and the secret files of the CI compose stack (`ci_secrets`).
 
 Everything private is created with mode 0600 inside a 0700 directory; every writer is idempotent and never rotates a secret
-that already exists."""
+that already exists. The passwords live once, in `secrets/roles/` under the names compose reads (`<name>.txt`); each native
+process gets its own folder of copies under the names the service opens (RAG_SECRETS_DIR), the way compose maps a service's
+role onto them."""
 
 import argparse
 import json
@@ -11,12 +13,17 @@ import secrets
 from dataclasses import dataclass
 from pathlib import Path
 
-ROLES = ("rag_owner", "rag_indexer", "rag_app")
+PASSWORDS = ("pg_vector_password", "rag_indexer_password", "rag_app_password", "rag_migrator_password")
+DATABASE = "vector_db"  # the database and the bootstrap role are fixed names; the init scripts and compose name them
+BOOTSTRAP_ROLE = "vector_user"
+SERVICE_ROLES = {"backend": "rag_app", "indexer": "rag_indexer"}  # deploy/pgvector/roles/*.txt
 DEFAULT_PORT = 8700
 DEFAULT_STATE = {
     "mode": None,
-    "class": None,
+    "card": None,
+    "profile": None,
     "model": None,
+    "llm_url": None,
     "ports": {"app": 8700, "embedding": 8701, "reranker": 8702, "postgres": 55432},
     "first_run_done": False,
 }
@@ -28,6 +35,10 @@ class State:
     token: str
     passwords: dict[str, str]
     data: dict
+
+    def secrets_dir(self, name: str) -> Path:
+        """`roles` (the compose files), or one native process: backend, indexer or migrate."""
+        return self.dir / "secrets" / name
 
 
 def _private_dir(path: Path) -> None:
@@ -42,6 +53,12 @@ def _write_new(path: Path, text: str) -> None:
     path.chmod(0o600)
 
 
+def write_private(path: Path, text: str) -> None:
+    """The file with this content and mode 0600, in a 0700 folder; the content is replaced."""
+    _private_dir(path.parent)
+    _write_new(path, text)
+
+
 def _secret(path: Path, make=lambda: secrets.token_urlsafe(32)) -> str:
     """The file's content, or `make()` written to it when it is missing or empty."""
     value = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
@@ -52,12 +69,35 @@ def _secret(path: Path, make=lambda: secrets.token_urlsafe(32)) -> str:
     return value
 
 
+def _copy(path: Path, value: str) -> None:
+    """A derived file: written when it is missing or differs from its source."""
+    if not path.is_file() or path.read_text(encoding="utf-8") != value:
+        _write_new(path, value)
+    path.chmod(0o600)
+
+
 def ensure(root: str | Path) -> State:
     rag = Path(root) / ".rag"
-    _private_dir(rag)
-    _private_dir(rag / "secrets")
+    for folder in ("", "secrets", "logs", "pids"):
+        _private_dir(rag / folder)
     token = _secret(rag / "token")
-    passwords = {role: _secret(rag / "secrets" / role) for role in ROLES}
+    roles = rag / "secrets" / "roles"
+    _private_dir(roles)
+    passwords = {name: _secret(roles / f"{name}.txt") for name in PASSWORDS}
+    _secret(roles / "pgdatabase.txt", lambda: DATABASE)
+    _secret(roles / "vector_user.txt", lambda: BOOTSTRAP_ROLE)
+    # one folder per native process: backend and indexer open the same file names, each holding its own role
+    for service, role in SERVICE_ROLES.items():
+        folder = rag / "secrets" / service
+        _private_dir(folder)
+        _copy(folder / "pgdatabase", DATABASE)
+        _copy(folder / "vector_user", role)
+        _copy(folder / "pg_vector_password", passwords[f"{role}_password"])
+    _copy(rag / "secrets" / "backend" / "backend_token", token)
+    migrate = rag / "secrets" / "migrate"
+    _private_dir(migrate)
+    _copy(migrate / "pgdatabase", DATABASE)
+    _copy(migrate / "rag_migrator_password", passwords["rag_migrator_password"])
     state_file = rag / "state.json"
     if not state_file.is_file():
         _write_new(state_file, json.dumps(DEFAULT_STATE, indent=2) + "\n")
