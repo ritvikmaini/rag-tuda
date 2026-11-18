@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from rag_tuda import cli, doctor as d, classes
+from rag_tuda import cards, classes, cli, doctor, doctor as d
 
 BARE = re.compile(r"qwen3:(4b|30b)(?![-\w])")
 CASES = {
@@ -126,7 +126,7 @@ def test_cli_exit_code_and_json(monkeypatch, capsys, scenario):
 
 def test_cli_rejects_other_subcommands():
     with pytest.raises(SystemExit):
-        cli.main(["up"])
+        cli.main(["frobnicate"])
 
 
 def test_gather_on_this_machine_writes_nothing():
@@ -154,3 +154,25 @@ def test_console_script_runs():
     out = subprocess.run([script, "doctor", "--json"], capture_output=True, text=True)
     assert out.returncode in (0, 1)
     json.loads(out.stdout)
+
+
+def test_doctor_lists_the_cards_that_fit(scenario, capsys):
+    text = doctor.report(scenario("m2_16"), classes.pick_class(scenario("m2_16")))
+    assert "Cards that fit (rag up --card <name>):" in text
+    assert (
+        "  s-qwen3-4b-instruct-2507  class S, ollama, 2.5 GB download" in text
+        and "m-qwen3.6-35b-a3b  class M" not in text
+    )
+
+
+def test_doctor_without_the_cards_folder_says_so_instead_of_a_traceback(monkeypatch, scenario, capsys, tmp_path):
+    monkeypatch.setattr(cards, "CARDS_DIR", tmp_path / "nowhere")
+    monkeypatch.setattr(
+        classes,
+        "_classes",
+        lambda: (_ for _ in ()).throw(ValueError(f"card {tmp_path}/nowhere/x.toml: cannot be read")),
+    )
+    monkeypatch.setattr(doctor, "gather", lambda: scenario("m2_16"))
+    assert cli.main(["doctor"]) == 1
+    captured = capsys.readouterr()
+    assert "cannot be read" in captured.err and captured.out == ""

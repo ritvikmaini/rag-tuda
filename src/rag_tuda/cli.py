@@ -14,8 +14,13 @@ DEFAULT_URL = "http://127.0.0.1:8700"
 
 def _doctor(args: argparse.Namespace) -> int:
     facts = doctor.gather()
-    cls = classes.pick_class(facts)
-    print(doctor.report_json(facts, cls) if args.json else doctor.report(facts, cls))
+    try:
+        cls = classes.pick_class(facts)
+        text = doctor.report_json(facts, cls) if args.json else doctor.report(facts, cls)
+    except ValueError as exc:  # the model cards are missing or unreadable
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(text)
     return 1 if doctor.problems(facts) else 0
 
 

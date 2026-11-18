@@ -10,7 +10,7 @@ import subprocess
 import urllib.request
 from dataclasses import asdict, dataclass
 
-from rag_tuda import classes
+from rag_tuda import cards, classes
 from rag_tuda.classes import SizeClass
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/version"
@@ -309,6 +309,12 @@ def _hardware_line(f: Facts) -> str:
     return f"GPU: none usable for models (CPU, AMD or Intel graphics); RAM {f.ram_gb:.1f} GB"
 
 
+def card_line(card: dict) -> str:
+    gb = card.get("download_gb")
+    size = f"{gb:g} GB download" if gb else "no download"
+    return f"  {card['name']}  class {card['class']}, {card['answer']['provider']}, {size}"
+
+
 def report(f: Facts, cls: SizeClass) -> str:
     where = "WSL2" if f.is_wsl else {"darwin": "macOS", "linux": "Linux", "windows": "Windows"}.get(f.os, f.os)
     lines = [
@@ -316,6 +322,8 @@ def report(f: Facts, cls: SizeClass) -> str:
         _hardware_line(f),
         f"Class: {cls.name} ({cls.rule}); usable memory {classes.usable_gb(f):.1f} GB",
         f"Default card: {cls.default_card or 'none (pick one with --card)'}",
+        "Cards that fit (rag up --card <name>):",
+        *map(card_line, cards.fitting(f)),
         "Models:",
         f"  answer (Ollama): {cls.ollama_tag + f' ({cls.download_gb:g} GB, {cls.window_tokens // 1000}k context)' if cls.ollama_tag else 'none defined for this class'}",
         f"  answer (vLLM, NVIDIA, opt-in): {cls.vllm_model}",
@@ -348,6 +356,15 @@ def report_json(f: Facts, cls: SizeClass) -> str:
             "facts": asdict(f),
             "class": asdict(cls),
             "default_card": cls.default_card,
+            "cards": [
+                {
+                    "name": c["name"],
+                    "class": c["class"],
+                    "provider": c["answer"]["provider"],
+                    "download_gb": c.get("download_gb"),
+                }
+                for c in cards.fitting(f)
+            ],
             "usable_gb": round(classes.usable_gb(f), 1),
             "fixed_models": [asdict(m) for m in classes.FIXED_MODELS],
             "download_total_gb": round(classes.download_total_gb(cls), 1),
