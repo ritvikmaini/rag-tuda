@@ -2,7 +2,10 @@
 page rule, the rate limit (a fake clock, nothing sleeps) and the user agent. No request leaves the process."""
 
 import hashlib
+import json
+import os
 from datetime import date
+from pathlib import Path
 
 import httpx
 import pytest
@@ -12,6 +15,7 @@ from rag_testing.minisite import pages
 
 from indexer.crawl.cache import Cache
 from indexer.crawl.fetch import Fetcher, Response, Skipped, user_agent
+from indexer.crawl.manifest import ManifestDoc, snapshots_dir, write_manifest
 from indexer.crawl.robots import Robots
 
 FACULTY = "faculty.test"
@@ -404,3 +408,74 @@ def test_a_cache_entry_without_its_file_is_a_miss(tmp_path):
     meta = next((tmp_path / "crawl").rglob("*.json"))
     meta.write_text("{not json", encoding="utf-8")
     assert cache.entry(HUB) is None
+
+
+# the snapshot manifest
+
+
+def crawl(f, urls):
+    return [
+        ManifestDoc.of(got, {"kind": "pdf" if got.url.endswith(".pdf") else "page"})
+        for u in urls
+        if isinstance(got := f.get(u), Response)
+    ]
+
+
+def test_resume_gives_same_manifest(tmp_path):
+    urls = [HUB, STUDIENBUERO, PRUEFUNGEN, PO_PDF, APB]
+    straight = write_manifest("g1", crawl(caching(Net(), tmp_path / "a"), urls), directory=tmp_path / "a" / "snapshots")
+
+    interrupted = caching(Net(), tmp_path / "b")
+    crawl(interrupted, urls[:3])  # the process dies here
+    net = Net()
+    resumed = write_manifest(
+        "g1", crawl(caching(net, tmp_path / "b", since=TODAY), urls), directory=tmp_path / "b" / "snapshots"
+    )
+
+    assert resumed.read_bytes() == straight.read_bytes()
+    assert [p for p in net.paths() if p != "/robots.txt"] == [pages.PO_2023_PDF]  # only the rest was requested
+    assert {u["content_hash"] for u in json.loads(resumed.read_text(encoding="utf-8"))["documents"]} >= {PO_PDF_SHA256}
+
+
+def test_the_manifest_lists_url_hash_date_and_metadata_by_url(tmp_path):
+    docs = [
+        ManifestDoc("https://b.example/x", "h2", "2026-11-17", {"programme": None}),
+        ManifestDoc("https://a.example/y", "h1", "2026-11-16", {"title": "Prüfungsordnung", "po_version": [2023]}),
+    ]
+    path = write_manifest("2026-11-17-001", docs, directory=tmp_path)
+    assert path == tmp_path / "2026-11-17-001.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["generation"] == "2026-11-17-001"
+    assert data["documents"] == [
+        {
+            "url": "https://a.example/y",
+            "content_hash": "h1",
+            "fetched": "2026-11-16",
+            "metadata": {"title": "Prüfungsordnung", "po_version": [2023]},
+        },
+        {"url": "https://b.example/x", "content_hash": "h2", "fetched": "2026-11-17", "metadata": {"programme": None}},
+    ]
+    assert "Prüfungsordnung" in path.read_text(encoding="utf-8")  # written as UTF-8, not escaped
+
+
+def test_a_failed_manifest_write_leaves_the_previous_one(tmp_path, monkeypatch):
+    first = write_manifest("g", [ManifestDoc("https://a.example/", "h1", "2026-11-17", {})], directory=tmp_path)
+    before = first.read_bytes()
+
+    def fail(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(os, "replace", fail)
+    with pytest.raises(OSError, match="disk full"):
+        write_manifest("g", [ManifestDoc("https://a.example/", "h2", "2026-11-18", {})], directory=tmp_path)
+    assert first.read_bytes() == before and sorted(p.name for p in tmp_path.iterdir()) == ["g.json"]
+
+
+@pytest.mark.parametrize("generation", ["", "../x", "a/b", "."])
+def test_a_generation_that_is_not_a_file_name_is_refused(tmp_path, generation):
+    with pytest.raises(ValueError, match="generation"):
+        write_manifest(generation, [], directory=tmp_path)
+
+
+def test_snapshots_sit_beside_the_crawl_folder():
+    assert snapshots_dir("/x/.rag/crawl") == Path("/x/.rag/snapshots")
