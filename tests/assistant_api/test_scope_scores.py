@@ -179,3 +179,8 @@ def test_the_secrets_folder_is_left_to_the_settings_rule(monkeypatch) -> None:
     monkeypatch.setattr(scope_scores, "load_settings", lambda environ, secrets_dir: seen.append(secrets_dir) or 1 / 0)
     assert scope_scores.main(["--sets", "set_a"], environ={}) == 1
     assert seen == [None]  # RAG_SECRETS_DIR, else /run/secrets, is the settings' rule
+
+
+def test_a_missing_setting_is_logged_with_its_message(tmp_path: Path, caplog) -> None:
+    assert scope_scores.main(["--sets", "set_a"], environ={}, secrets_dir=tmp_path) == 1
+    assert "SettingsError: RAG_PROFILE: not set" in caplog.text  # a setting error names a key, never a value

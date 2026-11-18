@@ -10,6 +10,7 @@ from typing import Any
 
 from rag_core.adapters.embedding_http import EmbeddingClient
 from rag_core.ports.sources import DocumentSource
+from rag_core.settings import SettingsError
 
 from indexer import build, gates
 from indexer.index import generations as gen
@@ -131,6 +132,21 @@ def main(
     if args in (["--help"], ["-h"]):
         out(USAGE)
         return 0
+    try:
+        return _dispatch(args, settings, connect_fn, embedding, sources, out)
+    except SettingsError as exc:  # a missing secret file or a bad setting: the message names the key or file
+        out(f"failed: {exc}")
+        return 1
+
+
+def _dispatch(
+    args: list[str],
+    settings: Settings | None,
+    connect_fn: Callable[..., Any] | None,
+    embedding: Any,
+    sources: Mapping[str, DocumentSource] | None,
+    out: Callable[[str], None],
+) -> int:
     wiring = wire(settings, connect_fn)
     if args == ["build"]:
         try:

@@ -44,6 +44,14 @@ def test_a_missing_secret_is_named():
         connect_direct(section(password=None), "indexer")
 
 
+def test_a_missing_password_names_its_secret_file_and_the_variable():
+    with pytest.raises(SettingsError) as error:
+        connect_direct(section(password=None), "indexer")
+    assert "pg_vector_password" in str(error.value) and "RAG__DATABASE__PASSWORD" in str(error.value)
+    with pytest.raises(SettingsError, match="pgdatabase"):
+        credentials(section(name=None))
+
+
 def test_credentials_are_the_settings_secrets_stripped():
     assert credentials(section()) == ("rag_indexer", "pw", "example")
 

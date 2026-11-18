@@ -26,6 +26,7 @@ from rag_core.adapters.pg_index import open_index
 from rag_core.domain.access import ANONYMOUS
 from rag_core.domain.doc_scores import sort_score
 from rag_core.domain.resilience import dispose_engines
+from rag_core.settings import SettingsError
 
 from assistant_api.graph.history import question_message
 from assistant_api.graph.nodes.analyse import make_analyse
@@ -121,6 +122,9 @@ def main(argv: Sequence[str], *, environ: Mapping[str, str] = os.environ, secret
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         return asyncio.run(run(args, environ, secrets_dir))
+    except SettingsError as exc:  # names a key or a file, never a value
+        logger.error("[ScopeScores] could not run: SettingsError: %s", exc)
+        return 1
     except Exception as exc:  # the class only: a message may echo a question
         logger.error("[ScopeScores] could not run: %s", type(exc).__name__)
         return 1

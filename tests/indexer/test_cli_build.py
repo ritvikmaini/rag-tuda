@@ -116,3 +116,9 @@ def test_help_lists_the_commands_without_settings(monkeypatch):
     lines = []
     assert cli.main(["--help"], out=lines.append) == 0
     assert lines == [cli.USAGE] and "build" in cli.USAGE
+
+
+def test_a_missing_database_secret_file_is_named_and_exits_1(settings, fakes, monkeypatch):
+    out = []
+    code = cli.main(["build"], settings=settings, embedding=fakes.Embedding(None), sources={}, out=out.append)
+    assert code == 1 and "pgdatabase" in out[-1]

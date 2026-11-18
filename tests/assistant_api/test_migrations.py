@@ -329,3 +329,10 @@ def test_the_secrets_folder_defaults_to_the_environments(tmp_path: Path) -> None
     (tmp_path / "pgdatabase").write_text("vector_db\n", encoding="utf-8")
     url = migrate.migrator_url({"RAG_SECRETS_DIR": str(tmp_path)})
     assert (url.password, url.database) == ("p", "vector_db")
+
+
+def test_a_missing_password_file_is_named_and_the_step_exits_1(tmp_path: Path, capsys) -> None:
+    (tmp_path / "pgdatabase").write_text("vector_db\n", encoding="utf-8")
+    assert migrate.main({}, tmp_path) == 1
+    out = capsys.readouterr().out
+    assert out.startswith("[Migrate] ") and str(tmp_path / "rag_migrator_password") in out

@@ -88,6 +88,12 @@ def secret(file: str) -> Any:
     return Field(default=None, json_schema_extra={_SECRET_FILE: file})
 
 
+def secret_file_name(model: type[BaseModel], key: str) -> str | None:
+    """The file a model's secret field `key` is read from (see secret()); None for a field that is no secret."""
+    field = model.model_fields.get(key)
+    return _secret_file(field) if field is not None else None
+
+
 def env_key(name: str) -> tuple[str, str] | None:
     """RAG__<SECTION>__<KEY> -> (section, key) in lower case; None for a variable without the prefix. A variable with the
     prefix but without a section or a key raises SettingsError, except the card variables (CARD_VARIABLES): None."""

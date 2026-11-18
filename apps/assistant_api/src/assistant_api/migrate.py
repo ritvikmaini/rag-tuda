@@ -20,7 +20,7 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import URL
 
-from rag_core.settings import secrets_path
+from rag_core.settings import SettingsError, secrets_path
 
 MIGRATIONS = Path(__file__).with_name("migrations")
 ROLE = "rag_migrator"
@@ -32,7 +32,10 @@ def migrator_url(environ: Mapping[str, str], secrets_dir: str | Path | None = No
     folder = secrets_path(environ, secrets_dir)
 
     def secret(name: str) -> str:
-        return (folder / name).read_text(encoding="utf-8").strip()
+        try:
+            return (folder / name).read_text(encoding="utf-8").strip()
+        except OSError:
+            raise SettingsError(f"the secret file {folder / name} cannot be read (it must exist)") from None
 
     return URL.create(
         "postgresql+psycopg",
@@ -70,7 +73,11 @@ def pending(cfg: Config, current: tuple[str, ...]) -> list[str]:
 def main(
     environ: Mapping[str, str] = os.environ, secrets_dir: str | Path | None = None, argv: Sequence[str] = ()
 ) -> int:
-    url = migrator_url(environ, secrets_dir)
+    try:
+        url = migrator_url(environ, secrets_dir)
+    except SettingsError as exc:
+        print(f"[Migrate] {exc}")
+        return 1
     cfg = alembic_config(url)
     if "--pending" in argv:
         at = current(url)
