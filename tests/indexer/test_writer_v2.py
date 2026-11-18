@@ -227,7 +227,7 @@ def test_the_typed_columns_follow_the_interfaces_rule(settings):
             writer.document_id("example.pdfs", "https://docs.example.org/d.pdf"),
             "rag",
             "example.pdfs",
-            "internal",
+            "public",
             "Dienstanweisung",
             2023,
             None,
@@ -383,6 +383,27 @@ def test_typed_columns_written(settings):
     assert (row["valid_from"], row["po_version"]) == (datetime.date(2022, 1, 13), [2015])
 
 
+def test_a_bare_string_is_one_value_not_its_letters(settings):
+    """A programme or PO version given as one string is a one-item array; it is never split into characters."""
+    one = parent("p1", ["x"], programme="bsc-informatik", degree="bachelor", po_version="2023")
+    (row,) = sections_of(writer.rows([one], settings.profile)[0])
+    assert (row["programme"], row["degree"], row["po_version"]) == (["bsc-informatik"], ["bachelor"], [2023])
+
+
+@pytest.mark.parametrize(
+    "written, stored",
+    [("false", False), ("False", False), ("true", True), ("TRUE", True), (False, False), (True, True)],
+)
+def test_archived_from_text_is_read_as_a_flag(settings, written, stored):
+    (row,) = sections_of(writer.rows([parent("p1", ["x"], archived=written)], settings.profile)[0])
+    assert row["archived"] is stored
+
+
+def test_an_archived_value_that_is_no_flag_is_refused(settings):
+    with pytest.raises(ValueError, match="archived"):
+        writer.rows([parent("p1", ["x"], archived="vielleicht")], settings.profile)
+
+
 def test_null_not_empty_array(settings):
     """A document that applies to all has NULL, never an empty array; archived is false and lang the profile's."""
     for empty in ({}, {"degree": (), "programme": [], "po_version": None, "regulation": "", "twin_key": ""}):
@@ -396,7 +417,7 @@ def test_null_not_empty_array(settings):
 
 @pytest.mark.parametrize(
     "connector, audience",
-    [("example.web", "public"), ("example.pdfs", "internal"), ("example.maps", "public")],
+    [("example.web", "public"), ("example.pdfs", "public"), ("example.maps", "public")],
 )
 def test_a_section_takes_the_source_and_audience_of_its_connector(settings, connector, audience):
     meta = {

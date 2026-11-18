@@ -90,8 +90,20 @@ def _date(value):
 
 
 def _array(value, cast):
-    """A list of the value's items as `cast` makes them, or None for an absent or empty value: NULL, never an empty array."""
+    """A list of the value's items as `cast` makes them, or None for an absent or empty value: NULL, never an empty array.
+    A bare string is one item, not its characters."""
+    if isinstance(value, str):
+        value = [value] if value else None
     return [cast(v) for v in value] if value else None
+
+
+def _flag(value):
+    """A flag as a bool: a bool, or the text "true" or "false" in any case; bool("false") would be true."""
+    if isinstance(value, str):
+        if value.strip().lower() not in ("true", "false"):
+            raise ValueError(f"archived: {value!r} is neither true nor false")
+        return value.strip().lower() == "true"
+    return bool(value)
 
 
 def _json_default(value):
@@ -127,7 +139,7 @@ def _typed(meta, prefix, profile, source):
         "degree": _array(meta.get("degree"), str),
         "programme": _array(meta.get("programme"), str),
         "po_version": _array(meta.get("po_version"), int),
-        "archived": bool(meta.get("archived")),
+        "archived": _flag(meta.get("archived")),
         "valid_from": _date(meta.get("valid_from")),
         "lang": meta.get("lang") or profile.identity.language,
         "twin_key": meta.get("twin_key") or None,
