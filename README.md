@@ -29,18 +29,27 @@ The stream (format 1) sends `meta` first, then `status` (five steps), `docs`, `c
 
 | Folder | What it holds |
 |---|---|
-| `src/rag_tuda/` | the command line (`doctor`, `ask`, `add`) and the `.rag/` state (`python -m rag_tuda.state init` writes the token and the database role passwords); standard library only |
+| `src/rag_tuda/` | the command line (`doctor`, `up`, `down`, `ask`, `add`) and the `.rag/` state (the token, the database role passwords, one secret folder per native process, pid files, logs); standard library only |
 | `apps/` | `assistant_api` (the backend: FastAPI app and runtime, settings, the LangGraph graph, its own image); `indexer` (settings, connectors found by entry point, generations, the one-shot `indexer build` command and its status, housekeep, rollback and compare commands); `evals` (probe runner, gate, stats, compare, rescore, smoke; its own job image) |
 | `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes; never in a service image), workspace members |
 | `profiles/` | `example/`: `profile.yaml`, `messages.de.yaml`, `prompts/`, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/` |
 | `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
-| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
+| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `compose.native.yaml` (Postgres alone on `127.0.0.1:55432`, for the native stack), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
 | `web/page/` | the chat client: static files, the vendored libraries, its unit and browser tests |
 | `tests/` | unit, contract (`contracts/`), harness (`integration/`) and repository tests |
 | `secrets/` | credential files, never in git |
 | `data/` | runtime data, not in git |
 
 ## Setup
+
+`uv run rag doctor` checks the machine and lists the model cards it can run. On a Mac, `uv run rag up --profile example --card
+s-qwen3-4b-instruct-2507 --yes` starts Postgres in Docker on `127.0.0.1:55432`, migrates, starts the embedding (8701) and
+reranker (8702) servers and the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`), builds the
+index when there is none, creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints
+the link. Ollama must be running (`ollama serve`). A model that is already on the machine (the pinned snapshots in the Hugging Face
+cache, the Ollama tag) is not downloaded again; a second `up` changes nothing, and `uv run rag down` stops everything (safe to
+repeat, data stays; `--purge` also deletes `.rag/crawl` and `.rag/snapshots`). On Linux or WSL2, `--mode compose` runs the compose
+files below with the card, its window and the secrets taken from `.rag/` (build, then migrate, then up).
 
 The stack needs Docker with compose on Linux or WSL2. `deploy/compose.yaml` runs on the CPU with Ollama; add
 `-f deploy/compose.nvidia.yaml` for NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve
