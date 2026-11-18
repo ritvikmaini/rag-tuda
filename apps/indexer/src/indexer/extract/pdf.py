@@ -326,6 +326,7 @@ def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir
             + ", ".join(f"{f['file']} ({f['pages']} pages)" for f in skipped_page_limit_files)
         )
         try:
+            os.makedirs(os.path.dirname(skipped_log) or ".", exist_ok=True)
             with open(skipped_log, "w", encoding="utf-8") as f:
                 json.dump(
                     {

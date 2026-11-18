@@ -59,6 +59,24 @@ def test_the_ocr_budget_and_the_page_limit_come_from_the_profile(tmp_path, monke
     assert json.loads((tmp_path / "skipped.json").read_text(encoding="utf-8"))["max_ocr_pages"] == 2
 
 
+def test_the_skipped_log_is_written_into_a_folder_that_does_not_exist_yet(tmp_path, monkeypatch):
+    monkeypatch.setattr(pdf, "ocr_session", lambda **options: None)
+    import pypdfium2
+
+    document = pypdfium2.PdfDocument.new()
+    for _ in range(3):
+        document.new_page(200, 200)
+    document.save(str(tmp_path / "big.pdf"))
+    log = tmp_path / "state" / "skipped.json"
+    pdf.extract_pdfs(
+        inventory=[_entry(tmp_path, "big")],
+        extraction=_extraction(max_ocr_pages=2),
+        extracted_dir=str(tmp_path),
+        skipped_log=str(log),
+    )
+    assert json.loads(log.read_text(encoding="utf-8"))["skipped"][0]["file"] == "big.pdf"
+
+
 def test_a_cached_entry_is_counted_and_not_extracted_again(tmp_path, monkeypatch):
     monkeypatch.setattr(pdf, "ocr_session", lambda **options: None)
     monkeypatch.setattr(pdf, "_assess_cached_entry", lambda *args: 0)
