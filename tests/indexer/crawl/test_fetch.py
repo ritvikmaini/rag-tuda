@@ -394,6 +394,19 @@ def test_resume_does_not_refetch_what_the_interrupted_crawl_fetched(tmp_path):
     ]
 
 
+def test_an_offline_fetcher_answers_from_the_cache_alone_and_sends_nothing(tmp_path):
+    caching(Net(), tmp_path).get(HUB)
+    net = Net()
+    offline = caching(net, tmp_path, offline=True)
+    cached = offline.get(HUB)
+    assert isinstance(cached, Response) and cached.from_cache and "Prüfungsordnung 2023".encode() in cached.body
+    missing = offline.get(STUDIENBUERO)
+    assert isinstance(missing, Skipped) and missing.reason == "not cached"
+    refused = offline.get("https://www.darmstadt.de/")
+    assert isinstance(refused, Skipped) and refused.reason == "host never fetched"
+    assert net.log == []  # not even robots.txt
+
+
 def test_resume_still_applies_the_robots_rules(tmp_path):
     url = f"http://{FACULTY}{pages.LOGIN_PAGE}"
     Cache(tmp_path / "crawl").store(url, url, b"<html>x</html>", "text/html", None, None, "2026-11-17")

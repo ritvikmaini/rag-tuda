@@ -19,7 +19,8 @@ is an HTML page (a soft 404 that is not a robots file) disallows everything.
 With a cache, a URL whose entry has a validator is asked conditionally (`If-None-Match`, `If-Modified-Since`; a 304 keeps the
 cached body); without one the new body's hash is compared with the cached hash. `since` resumes an interrupted crawl: a URL
 cached on or after that date is answered from the cache without a request (robots.txt still applies). A PDF is cached only
-as a complete file that starts with `%PDF-`; a download that breaks off leaves the cache as it was."""
+as a complete file that starts with `%PDF-`; a download that breaks off leaves the cache as it was. An `offline` fetcher
+sends no request at all, not even for robots.txt: it answers a URL from the cache or skips it ("not cached")."""
 
 import hashlib
 import logging
@@ -161,6 +162,7 @@ class Fetcher:
         cache: Cache | None = None,
         since: date | None = None,
         today: Callable[[], date] = date.today,
+        offline: bool = False,
     ):
         self.allowed_hosts = frozenset(_normal(h) for h in allowed_hosts)
         self.user_agent = user_agent(contact)
@@ -169,11 +171,13 @@ class Fetcher:
         self._last_request: dict[str, float] = {}
         self._robots: dict[str, Robots] = {}
         self._deadline, self._page_limit, self._pdf_limit, self._monotonic = deadline, page_limit, pdf_limit, monotonic
-        self._cache, self._since, self._today = cache, since, today
+        self._cache, self._since, self._today, self._offline = cache, since, today, offline
 
     def get(self, url: str) -> Response | Skipped:
         """Fetch `url`, or say why not."""
         asked = url
+        if self._offline:
+            return self._answer_offline(asked)
         if skipped := self._refuse(asked, asked):
             return skipped
         cached = self._cache.entry(asked) if self._cache else None
@@ -205,6 +209,15 @@ class Fetcher:
                 return Skipped(asked, f"http {reply.status}")
             return self._keep(asked, url, reply, cached)
         return Skipped(asked, "too many redirects")
+
+    def _answer_offline(self, url: str) -> Response | Skipped:
+        parts, host = _parts(url), _host(url)
+        if parts is None or parts.scheme not in ("http", "https") or not host:
+            return Skipped(url, "not an http url", url)
+        if reason := self._host_refusal(host):
+            return Skipped(url, reason, host)
+        entry = self._cache.entry(url) if self._cache else None
+        return self._cached(entry, changed=False) if entry else Skipped(url, "not cached")
 
     def _keep(self, asked: str, url: str, reply: "_Reply", cached: Entry | None) -> Response | Skipped:
         content_type = reply.headers.get("content-type", "")
