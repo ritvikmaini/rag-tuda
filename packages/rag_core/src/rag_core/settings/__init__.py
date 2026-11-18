@@ -29,6 +29,7 @@ CARD_VARIABLES = frozenset(
     {"RAG__CARD", "RAG__CARD_FILE", "RAG__LLM_URL"}
 )  # select or adjust the model card; no section key
 _SECRET_FILE = "secret_file"
+DEFAULT_SECRETS_DIR = "/run/secrets"
 
 Layer = dict[tuple[str, str], tuple[object, str]]  # (section, key) -> (value, the source's name)
 
@@ -74,6 +75,12 @@ def load_profile(model: type[ProfileType], path: str | Path) -> ProfileType:
             for error in exc.errors(include_url=False, include_input=False)
         ]
         raise SettingsError("; ".join(problems)) from None
+
+
+def secrets_path(environ: Mapping[str, str] = os.environ, secrets_dir: str | Path | None = None) -> Path:
+    """The folder of the secret files: the argument, else RAG_SECRETS_DIR, else /run/secrets (compose mounts them there; a
+    native run points RAG_SECRETS_DIR at its own folder)."""
+    return Path(secrets_dir or environ.get("RAG_SECRETS_DIR") or DEFAULT_SECRETS_DIR)
 
 
 def secret(file: str) -> Any:
@@ -160,7 +167,7 @@ def load(
 ) -> SettingsModel:
     """The settings model filled from its layers (module docstring)."""
     sections = _sections(model)
-    secrets_dir = secrets_dir or environ.get("RAG_SECRETS_DIR") or "/run/secrets"
+    secrets_dir = secrets_path(environ, secrets_dir)
     merged: Layer = {}
     layers = (
         _overlay_layer(overlay) if overlay else {},

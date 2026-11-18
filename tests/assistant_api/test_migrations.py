@@ -322,3 +322,10 @@ def test_0001_goes_down_and_up_and_pending_sees_it() -> None:
             command.upgrade(cfg, "head")
         assert conn.execute(turns).fetchone() == ("chat.turns",)
         assert migrate.current(url) == ("0001",)
+
+
+def test_the_secrets_folder_defaults_to_the_environments(tmp_path: Path) -> None:
+    (tmp_path / "rag_migrator_password").write_text("p\n", encoding="utf-8")
+    (tmp_path / "pgdatabase").write_text("vector_db\n", encoding="utf-8")
+    url = migrate.migrator_url({"RAG_SECRETS_DIR": str(tmp_path)})
+    assert (url.password, url.database) == ("p", "vector_db")

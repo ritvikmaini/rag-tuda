@@ -9,16 +9,20 @@ from typing import Any
 
 from langfuse import Langfuse
 
+from rag_core.settings import secrets_path
+
 
 def init_langfuse(
-    url: str, secrets_dir: str | Path = "/run/secrets", max_retries: int = 5, retry_delay: float = 2.0
+    url: str, secrets_dir: str | Path | None = None, max_retries: int = 5, retry_delay: float = 2.0
 ) -> tuple[Any | None, bool]:
     """(client, authenticated). A client whose auth check failed is still returned: it traces once Langfuse answers.
-    None only when the setup failed (no key files)."""
+    None only when the setup failed (no key files). The key files are read from secrets_dir, else RAG_SECRETS_DIR, else
+    /run/secrets."""
     client: Any | None = None
     try:
-        public_key = (Path(secrets_dir) / "langfuse_public_key").read_text().strip()
-        secret_key = (Path(secrets_dir) / "langfuse_secret_key").read_text().strip()
+        folder = secrets_path(os.environ, secrets_dir)
+        public_key = (folder / "langfuse_public_key").read_text().strip()
+        secret_key = (folder / "langfuse_secret_key").read_text().strip()
         os.environ["LANGFUSE_PUBLIC_KEY"] = public_key  # the SDK's handler reads the client it finds through these
         os.environ["LANGFUSE_SECRET_KEY"] = secret_key
         os.environ["LANGFUSE_HOST"] = url

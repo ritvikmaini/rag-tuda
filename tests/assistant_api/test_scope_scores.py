@@ -172,3 +172,10 @@ def test_a_run_that_cannot_start_exits_1_and_logs_only_the_error_class(tmp_path:
     assert scope_scores.main(["--sets", "set_a,set_b", "--limit", "1"], environ={}, secrets_dir=tmp_path) == 1
     assert "could not run: SettingsError" in caplog.text
     assert capsys.readouterr().out == ""
+
+
+def test_the_secrets_folder_is_left_to_the_settings_rule(monkeypatch) -> None:
+    seen = []
+    monkeypatch.setattr(scope_scores, "load_settings", lambda environ, secrets_dir: seen.append(secrets_dir) or 1 / 0)
+    assert scope_scores.main(["--sets", "set_a"], environ={}) == 1
+    assert seen == [None]  # RAG_SECRETS_DIR, else /run/secrets, is the settings' rule

@@ -253,3 +253,8 @@ def test_exactly_one_card_is_named(secrets: Path) -> None:
 def test_the_model_servers_section_no_longer_takes_the_llm_url(secrets: Path) -> None:
     with pytest.raises(SettingsError, match="llm_url"):
         load_settings(environment(RAG__MODEL_SERVERS__LLM_URL="http://vllm:8000/v1"), secrets_dir=secrets)
+
+
+def test_the_secrets_folder_defaults_to_the_environments(secrets: Path) -> None:
+    database = load_settings(environment(RAG_SECRETS_DIR=str(secrets))).overlay.database
+    assert database.user is not None and database.user.get_secret_value() == "rag_app"

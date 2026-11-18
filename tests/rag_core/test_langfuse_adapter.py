@@ -50,3 +50,13 @@ def test_five_tries_then_the_client_without_tracing(tmp_path, monkeypatch, caplo
     assert client is not None and not ok
     assert caplog.text.count("Langfuse auth check failed") == 5
     assert "Langfuse authentication failed after all retries. Running without Langfuse." in caplog.text
+
+
+def test_the_key_files_come_from_the_environments_secrets_folder(tmp_path, monkeypatch) -> None:
+    for name in ("LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY", "LANGFUSE_HOST"):
+        monkeypatch.setenv(name, "")  # init_langfuse exports them; the test restores them
+    monkeypatch.setenv("RAG_SECRETS_DIR", str(keys(tmp_path)))
+    monkeypatch.setattr(lf, "Langfuse", FakeLangfuse)
+    FakeLangfuse.authenticated = True
+    client, ok = lf.init_langfuse("http://langfuse:3000")
+    assert ok and client.kwargs["public_key"] == "pk"  # pyright: ignore[reportOptionalMemberAccess]

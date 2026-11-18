@@ -114,11 +114,9 @@ def _card(environ: Mapping[str, str]) -> Card:
     return with_local_url(card, url) if (url := environ.get("RAG__LLM_URL")) else card
 
 
-def load_settings(
-    environ: Mapping[str, str] = os.environ, secrets_dir: str | Path = "/run/secrets"
-) -> AssistantSettings:
+def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Path | None = None) -> AssistantSettings:
     """The profile named by RAG_PROFILE, the overlay from the environment (and RAG_OVERLAY's file when one is set) and the secret
-    files; SettingsError names a key and its source, never a value."""
+    files of secrets_dir, else RAG_SECRETS_DIR, else /run/secrets; SettingsError names a key and its source, never a value."""
     path = environ.get("RAG_PROFILE")
     if not path:
         raise SettingsError("RAG_PROFILE: not set (the image sets it; a test passes the profile's path)")

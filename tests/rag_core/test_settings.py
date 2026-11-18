@@ -1,11 +1,13 @@
 """rag_core.settings: the overlay file, the environment and secret files in that order, every rejection naming its key and
 source, secrets never shown, and the RAG__ key parser (a Hypothesis property)."""
 
+from pathlib import Path
+
 import pytest
 from hypothesis import assume, given, strategies as st
 from pydantic import SecretStr, ValidationError
 
-from rag_core.settings import OverlaySection, SettingsError, env_key, load, secret
+from rag_core.settings import OverlaySection, SettingsError, env_key, load, secret, secrets_path
 
 
 class Http(OverlaySection):
@@ -156,3 +158,16 @@ def test_every_section_and_key_round_trips_through_the_variable_name(section, ke
 def test_a_name_without_the_prefix_is_no_setting(name):
     assume(not name.startswith("RAG__"))
     assert env_key(name) is None
+
+
+def test_the_secrets_folder_is_the_argument_else_the_environment_else_run_secrets(tmp_path):
+    here, there = tmp_path / "here", tmp_path / "there"
+    assert secrets_path({"RAG_SECRETS_DIR": str(there)}, here) == here
+    assert secrets_path({"RAG_SECRETS_DIR": str(there)}) == there
+    assert secrets_path({}) == Path("/run/secrets")
+
+
+def test_load_reads_the_secret_files_of_the_environments_folder(tmp_path):
+    (tmp_path / "http_token").write_text("tok\n", encoding="utf-8")
+    token = load(Model, environ={"RAG_SECRETS_DIR": str(tmp_path)}).http.token
+    assert token is not None and token.get_secret_value() == "tok"

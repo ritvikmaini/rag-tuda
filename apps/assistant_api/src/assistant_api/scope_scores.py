@@ -100,7 +100,7 @@ async def score(deps: GraphDeps, profile_dir: Path, names: Sequence[str] | None,
     return 0 if scored else 1
 
 
-async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir: str | Path) -> int:
+async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir: str | Path | None) -> int:
     settings = load_settings(environ, secrets_dir=secrets_dir)
     rt = build_runtime(settings, None, False)  # no Langfuse client: nothing is traced
     index = await open_index(rt.collection, settings.profile, settings.overlay.database)
@@ -111,9 +111,7 @@ async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir:
         await close_http_client()
 
 
-def main(
-    argv: Sequence[str], *, environ: Mapping[str, str] = os.environ, secrets_dir: str | Path = "/run/secrets"
-) -> int:
+def main(argv: Sequence[str], *, environ: Mapping[str, str] = os.environ, secrets_dir: str | Path | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m assistant_api.scope_scores")
     parser.add_argument(
         "--sets", type=lambda value: [n for n in value.split(",") if n], help="comma-separated set names"

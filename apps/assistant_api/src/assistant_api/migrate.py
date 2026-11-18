@@ -20,15 +20,19 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, pool
 from sqlalchemy.engine import URL
 
+from rag_core.settings import secrets_path
+
 MIGRATIONS = Path(__file__).with_name("migrations")
 ROLE = "rag_migrator"
 PENDING_EXIT = 3
 UNKNOWN_EXIT = 4
 
 
-def migrator_url(environ: Mapping[str, str], secrets_dir: str) -> URL:
+def migrator_url(environ: Mapping[str, str], secrets_dir: str | Path | None = None) -> URL:
+    folder = secrets_path(environ, secrets_dir)
+
     def secret(name: str) -> str:
-        return Path(secrets_dir, name).read_text(encoding="utf-8").strip()
+        return (folder / name).read_text(encoding="utf-8").strip()
 
     return URL.create(
         "postgresql+psycopg",
@@ -63,7 +67,9 @@ def pending(cfg: Config, current: tuple[str, ...]) -> list[str]:
     return chain[max((chain.index(c) for c in current), default=-1) + 1 :]
 
 
-def main(environ: Mapping[str, str] = os.environ, secrets_dir: str = "/run/secrets", argv: Sequence[str] = ()) -> int:
+def main(
+    environ: Mapping[str, str] = os.environ, secrets_dir: str | Path | None = None, argv: Sequence[str] = ()
+) -> int:
     url = migrator_url(environ, secrets_dir)
     cfg = alembic_config(url)
     if "--pending" in argv:
