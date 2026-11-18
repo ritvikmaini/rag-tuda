@@ -106,13 +106,8 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
         langfuse=langfuse,
         handler=make_handler(authenticated),
         prompts=PromptService(settings.prompts),
-        answer_llm=chat(
-            card.answer,
-            card.reasoning.answer,
-            card.sampling.temperature,
-            card.budget.answer_tokens,
-            card.timeouts.retries,
-        ),
+        # the answer's retries are the generate node's (a rate limit waits within the request's deadline)
+        answer_llm=chat(card.answer, card.reasoning.answer, card.sampling.temperature, card.budget.answer_tokens, 0),
         analysis=ChatOpenAIModel(
             chat(
                 card.analysis_endpoint,

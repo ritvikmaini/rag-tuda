@@ -9,7 +9,7 @@ dependencies = ["pydantic>=2.9,<3", "pyyaml>=6.0,<7"]
 db = ["psycopg[binary]>=3.3.3,<3.4"]   # rag_core.adapters.db
 http = ["httpx>=0.28,<0.29"]            # rag_core.adapters.embedding_http
 # what the assistant's services and adapters import beyond db and http
-assistant = ["langchain-core>=1.6,<2", "langchain-openai>=1.1,<2", "langfuse>=4.17,<5",
+assistant = ["langchain-core>=1.6,<2", "langchain-openai>=1.1,<2", "openai>=1.109,<2", "langfuse>=4.17,<5",
              "psycopg-pool>=3.2,<4"]
 
 [build-system]

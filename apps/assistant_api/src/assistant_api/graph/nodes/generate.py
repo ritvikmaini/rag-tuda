@@ -12,7 +12,8 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from rag_core.adapters.chat_openai import accepts_extras
+from langchain_core.runnables import RunnableConfig
+from rag_core.adapters.chat_openai import BUSY, TIMEOUT, TOO_LONG, accepts_extras, ainvoke_waiting, failure_of
 
 from rag_core.domain.answer_shapes import (
     answer_language,
@@ -41,17 +42,6 @@ from assistant_api.graph.history import as_messages, insert_history, to_messages
 from assistant_api.graph.state import AgentState, GraphDeps
 
 logger = logging.getLogger(__name__)
-QUOTA_INDICATORS = (
-    "quota",
-    "exceeded",
-    "rate_limit",
-    "ratelimit",
-    "billing",
-    "insufficient_quota",
-    "too many requests",
-    "rate limit",
-    "429",
-)
 CITATION = re.compile(r"\[(\d+)\]")
 
 
@@ -152,7 +142,7 @@ def make_generate(deps: GraphDeps):
         )
         return insert_history(formatted, history, "after_system")
 
-    async def generate(state: AgentState) -> dict[str, Any]:
+    async def generate(state: AgentState, config: RunnableConfig) -> dict[str, Any]:
         current = state["messages"][-1]
         intent = state.get("intent") or "lookup"
         position = profile.history.position
@@ -245,7 +235,13 @@ def make_generate(deps: GraphDeps):
             llm = deps.answer_llm
             if answer_language(state) == "Deutsch":
                 llm = with_decoding_limits(llm, deps.card.quirks, deps.card.answer.provider)
-            response = await llm.ainvoke(prompt)
+            response = await ainvoke_waiting(
+                llm,
+                prompt,
+                retries=deps.card.timeouts.retries,
+                deadline_at=(config.get("configurable") or {}).get("deadline_at"),
+                max_wait_s=deps.card.timeouts.idle_s,
+            )
             if holds_answer(state):
                 try:
                     reply = past_event_reply(
@@ -287,13 +283,18 @@ def make_generate(deps: GraphDeps):
                     logger.warning(f"[StatusGroups] note_failed={type(exc).__name__}")
             return {"messages": [response], "generation": response.content, "context_sources": sources}
         except Exception as e:
-            logger.error(f"Error during LLM invocation: {type(e).__name__}")
-            if "input tokens" in str(e) or "context length" in str(e):
+            status = getattr(e, "status_code", None)
+            logger.error(f"Error during LLM invocation: {type(e).__name__}" + (f" status={status}" if status else ""))
+            failure = failure_of(e, deps.card.answer.provider)
+            texts = {
+                TOO_LONG: deps.messages.answer.context_too_long,  # the trim path: the user is asked to shorten the question
+                BUSY: deps.messages.guard.busy,
+                TIMEOUT: deps.messages.guard.timeout,
+            }
+            if failure is None:
+                raise
+            if failure == TOO_LONG:
                 logger.error("[ContextBudget] request still exceeded the context window after fitting")
-                return {"messages": [], "generation": deps.messages.answer.context_too_long}
-            if any(indicator in str(e).lower() for indicator in QUOTA_INDICATORS):
-                logger.error("OpenAI quota/billing limit reached - returning user-friendly message")
-                return {"messages": [], "generation": deps.messages.answer.unavailable}
-            raise
+            return {"messages": [], "generation": texts[failure]}
 
     return generate

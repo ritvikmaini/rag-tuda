@@ -2384,6 +2384,7 @@ assistant = [
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "langfuse" },
+    { name = "openai" },
     { name = "psycopg-pool" },
 ]
 db = [
@@ -2399,6 +2400,7 @@ requires-dist = [
     { name = "langchain-core", marker = "extra == 'assistant'", specifier = ">=1.6,<2" },
     { name = "langchain-openai", marker = "extra == 'assistant'", specifier = ">=1.1,<2" },
     { name = "langfuse", marker = "extra == 'assistant'", specifier = ">=4.17,<5" },
+    { name = "openai", marker = "extra == 'assistant'", specifier = ">=1.109,<2" },
     { name = "psycopg", extras = ["binary"], marker = "extra == 'db'", specifier = ">=3.3.3,<3.4" },
     { name = "psycopg-pool", marker = "extra == 'assistant'", specifier = ">=3.2,<4" },
     { name = "pydantic", specifier = ">=2.9,<3" },

@@ -288,7 +288,13 @@ def test_run_stream_records_the_turns_results():
             "event": "on_chain_end",
             "name": "generate",
             "metadata": {"langgraph_node": "generate"},
-            "data": {"output": {"messages": [answer_msg], "generation": "Antwort [1].", "context_sources": [{"n": 1}]}},
+            "data": {
+                "output": {
+                    "messages": [answer_msg],
+                    "generation": "Antwort [1].",
+                    "context_sources": [{"n": 1}],
+                }
+            },
         },
     ]
 
@@ -414,3 +420,48 @@ def test_foreign_script_characters_are_dropped_from_the_chunks_and_the_stored_an
     assert "".join(sent) == result.answer == "Der Urlaub  gilt.\n\nHinweis "
     warnings = [r.getMessage() for r in caplog.records if "[ForeignScript]" in r.getMessage()]
     assert len(warnings) == 1 and "中" not in warnings[0]
+
+
+def test_a_failure_after_part_of_the_answer_follows_the_part_with_the_fallback_text():
+    def sent(streamed_text):
+        events = [
+            {
+                "event": "on_chat_model_stream",
+                "name": "x",
+                "metadata": {"langgraph_node": "generate"},
+                "data": {"chunk": AIMessageChunk(content=streamed_text)},
+            }
+            if streamed_text
+            else {"event": "on_chain_start", "name": "x", "metadata": {}, "data": {}},
+            {
+                "event": "on_chain_end",
+                "name": "generate",
+                "metadata": {"langgraph_node": "generate"},
+                "data": {"output": {"generation": "Dauert zu lange.", "messages": [], "context_sources": []}},
+            },
+        ]
+
+        class Chain:
+            async def astream_events(self, *args, **kwargs):
+                for event in events:
+                    yield event
+
+        async def run():
+            stream = ss.run_stream(
+                Chain(),
+                {},
+                {},
+                formats_on=False,
+                variant=None,
+                sources_mode="none",
+                none_text="",
+                result=ss.StreamResult(),
+                user="u",
+                strip_cjk=True,
+            )
+            return [fr.wire(f)["content"] async for f in stream if isinstance(f, fr.Chunk)]
+
+        return asyncio.run(run())
+
+    assert sent("Ein Teil") == ["Ein Teil", "\n\nDauert zu lange."]
+    assert sent("") == ["Dauert zu lange."]

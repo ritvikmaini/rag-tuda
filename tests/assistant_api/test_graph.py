@@ -157,6 +157,103 @@ def test_a_failing_model_call_logs_its_class_never_the_message(caplog) -> None:
     assert "4711" not in " ".join(r.getMessage() for r in caplog.records)
 
 
+def provider_error(status: int, retry_after: str | None = None, code: str | None = None):
+    """The exception the OpenAI client raises for a reply with this status (its body text is never read)."""
+    import httpx
+    import openai
+
+    headers = {"retry-after": retry_after} if retry_after else {}
+    response = httpx.Response(status, headers=headers, request=httpx.Request("POST", "http://llm.test/v1"))
+    classes = {400: openai.BadRequestError, 429: openai.RateLimitError, 500: openai.InternalServerError}
+    cls = classes.get(status, openai.APIStatusError)
+    return cls("text that is never read", response=response, body={"code": code, "message": "x"})
+
+
+class Raising:
+    """The answer model: fails with each exception of the list in turn, then answers with usage."""
+
+    def __init__(self, *errors: Exception) -> None:
+        self.errors, self.calls = list(errors), 0
+
+    async def ainvoke(self, prompt):
+        self.calls += 1
+        if self.errors:
+            raise self.errors.pop(0)
+        return AIMessage(
+            content="Die Antwort", usage_metadata={"input_tokens": 120, "output_tokens": 30, "total_tokens": 150}
+        )
+
+
+def failed_run(llm, deadline_in: float | None = 60.0, card_update: dict | None = None) -> dict:
+    import dataclasses
+    import time
+
+    base = deps("lookup")
+    card = base.card.model_copy(update=card_update or {})
+    graph = build_graph(dataclasses.replace(base, answer_llm=llm, card=card))
+    inputs = {
+        "messages": [question_message("Frage?", None, datetime.now(timezone.utc))],
+        "variant": None,
+        "formats": "",
+    }
+    deadline = None if deadline_in is None else time.monotonic() + deadline_in
+    config = {"configurable": {"thread_id": "t", "deadline_at": deadline}}
+    return asyncio.run(graph.ainvoke(inputs, config=config))
+
+
+def test_context_length_error_maps_to_trim(caplog) -> None:
+    """By status and code, never by text: the trim text asks the user to shorten the question."""
+    texts = load_messages().answer
+    caplog.set_level("ERROR")
+    for error in (provider_error(413), provider_error(400)):  # the harness card is vLLM's: its 400 is the context error
+        assert failed_run(Raising(error))["generation"] == texts.context_too_long
+    groq = load_card(CARD).answer.model_copy(update={"provider": "groq"})
+    assert (
+        failed_run(Raising(provider_error(400, code="context_length_exceeded")), card_update={"answer": groq})[
+            "generation"
+        ]
+        == texts.context_too_long
+    )
+    with pytest.raises(Exception, match="never read"):  # a rejected parameter at Groq is no context error
+        failed_run(Raising(provider_error(400)), card_update={"answer": groq})
+    assert "[ContextBudget] request still exceeded" in caplog.text
+
+
+def test_errors_map_to_the_busy_and_timeout_messages_and_others_are_raised() -> None:
+    import httpx
+    import openai
+
+    guard = load_messages().guard
+    assert failed_run(Raising(provider_error(429)))["generation"] == guard.busy  # no retry-after: nothing to wait for
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "http://llm.test/v1"))
+    assert failed_run(Raising(timeout))["generation"] == guard.timeout
+    with pytest.raises(openai.InternalServerError):  # a server error is no message of ours: the pipeline reports it
+        failed_run(
+            Raising(provider_error(500), provider_error(500)),
+            card_update={"timeouts": load_card(CARD).timeouts.model_copy(update={"retries": 0})},
+        )
+
+
+def test_a_429_waits_the_retry_after_within_the_deadline_then_answers(monkeypatch) -> None:
+    slept: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr("rag_core.adapters.chat_openai.asyncio.sleep", sleep)
+    llm = Raising(provider_error(429, retry_after="2"))
+    out = failed_run(llm)
+    assert slept == [2.0] and llm.calls == 2 and out["generation"] == "Die Antwort"
+    llm = Raising(provider_error(429, retry_after="500"))  # beyond the deadline and the silence limit: the busy message
+    assert failed_run(llm, deadline_in=30)["generation"] == load_messages().guard.busy and llm.calls == 1
+
+
+def load_messages() -> Messages:
+    import yaml
+
+    return Messages.model_validate(yaml.safe_load((PROFILE.parent / "messages.de.yaml").read_text(encoding="utf-8")))
+
+
 class Scored:
     """A retriever that returns one document per score (the retrieve node reads their cross_encoder_score)."""
 

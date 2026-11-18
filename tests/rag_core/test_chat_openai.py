@@ -1,16 +1,30 @@
 """The chat model's construction: the request bodies carry the options their provider accepts and no others; the reasoning
-level reaches each provider as its own switch; the analysis model sends its bound max_tokens."""
+level reaches each provider as its own switch; a failed call is told apart by class and status; a rate limit is waited out
+within the deadline; the analysis model sends its bound max_tokens."""
 
 import asyncio
 import json
+import time
 import warnings
+from typing import Any
 
 import httpx
+import openai
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from rag_core.adapters.chat_openai import ChatOpenAIModel, build_chat_openai, extra_body, reasoning_options
+from rag_core.adapters.chat_openai import (
+    BUSY,
+    TIMEOUT,
+    TOO_LONG,
+    ChatOpenAIModel,
+    ainvoke_waiting,
+    build_chat_openai,
+    extra_body,
+    failure_of,
+    reasoning_options,
+)
 
 URL = "http://vllm.test/v1"
 MODEL = "Qwen/Qwen3-14B-AWQ"
@@ -167,3 +181,95 @@ def test_the_analysis_model_sends_its_bound_cap_and_returns_the_text(monkeypatch
     assert reply == "{}"
     assert bodies[0].get("max_completion_tokens", bodies[0].get("max_tokens")) == 400
     assert bodies[0]["messages"] == [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
+
+
+def status_error(status: int, code: str | None = None, headers: dict | None = None) -> openai.APIStatusError:
+    body = {"error": {"message": "text that is never read", "code": code}}
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json=body, headers=headers)
+
+    client = openai.AsyncOpenAI(
+        base_url=URL, api_key="x", max_retries=0, http_client=httpx.AsyncClient(transport=httpx.MockTransport(handle))
+    )
+    with pytest.raises(openai.APIStatusError) as raised:
+        asyncio.run(client.chat.completions.create(model=MODEL, messages=[{"role": "user", "content": "q"}]))
+    return raised.value
+
+
+def test_failures_are_told_apart_by_class_and_status_never_by_message() -> None:
+    assert failure_of(status_error(429), "groq") == BUSY
+    assert failure_of(status_error(413), "ollama") == TOO_LONG
+    assert failure_of(status_error(400, "context_length_exceeded"), "groq") == TOO_LONG
+    assert failure_of(status_error(400), "vllm") == TOO_LONG  # vLLM's context error has no code of its own
+    assert failure_of(status_error(400), "groq") is None  # a rejected parameter is no context error
+    assert failure_of(status_error(500), "vllm") is None
+    request = httpx.Request("POST", URL)
+    assert failure_of(openai.APITimeoutError(request=request), "ollama") == TIMEOUT
+    assert failure_of(httpx.ReadTimeout("slow"), "ollama") == TIMEOUT
+    assert failure_of(ValueError("input tokens context length 429"), "vllm") is None  # the text decides nothing
+
+
+def rate_limited(first_retry_after: str | None, calls: list) -> ChatOpenAI:
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(time.monotonic())
+        if len(calls) == 1:
+            headers = {"retry-after": first_retry_after} if first_retry_after is not None else {}
+            return httpx.Response(
+                429, json={"error": {"message": "slow down", "code": "rate_limit_exceeded"}}, headers=headers
+            )
+        return httpx.Response(
+            200,
+            json={
+                "id": "c",
+                "object": "chat.completion",
+                "created": 1,
+                "model": MODEL,
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+            },
+        )
+
+    return build_chat_openai(
+        provider="groq",
+        model=MODEL,
+        base_url=URL,
+        temperature=0.1,
+        top_p=0.9,
+        max_tokens=10,
+        read_timeout_s=5.0,
+        reasoning="low",
+        extras={},
+        max_retries=0,
+        http_async_client=httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+    )
+
+
+def test_429_waits_retry_after_within_deadline(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+
+    def run(retry_after: str | None, *, deadline_in: float = 60.0, max_wait_s: float = 60.0, retries: int = 1) -> Any:
+        calls: list = []
+        wait = ainvoke_waiting(
+            rate_limited(retry_after, calls),
+            MESSAGES,
+            retries=retries,
+            deadline_at=time.monotonic() + deadline_in,
+            max_wait_s=max_wait_s,
+        )
+        try:
+            return asyncio.run(wait), calls
+        except openai.RateLimitError:
+            return None, calls
+
+    reply, calls = run("0.2")  # inside the deadline: waited out, answered
+    assert reply is not None and reply.content == "ok" and len(calls) == 2 and calls[1] - calls[0] >= 0.2
+    cases: list[dict[str, Any]] = [
+        {"deadline_in": 0.1},  # it would end after the deadline
+        {"max_wait_s": 0.1},  # longer than the guard's silence limit
+        {"retries": 0},
+    ]
+    for kwargs in cases:
+        reply, calls = run("0.2", **kwargs)
+        assert reply is None and len(calls) == 1, kwargs  # the rate limit is raised: the busy message
+    assert run(None)[0] is None  # no retry-after: nothing to wait for
+    assert run("soon")[0] is None  # not a number of seconds

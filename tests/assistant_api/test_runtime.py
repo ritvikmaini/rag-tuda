@@ -265,7 +265,7 @@ def test_timeouts_come_from_card(tmp_path, monkeypatch) -> None:
     assert rt.answer_llm.request_timeout.read == card.timeouts.llm_read_s
     assert rt.analysis.runnable.bound.request_timeout.read == card.timeouts.llm_read_s
     assert rt.answer_llm.max_tokens == card.budget.answer_tokens  # the answer's tokens are the card's
-    assert rt.answer_llm.max_retries == rt.analysis.runnable.bound.max_retries == card.timeouts.retries
+    assert rt.answer_llm.max_retries == 0 and rt.analysis.runnable.bound.max_retries == card.timeouts.retries
     assert rt.answer_llm.temperature == card.sampling.temperature and rt.answer_llm.top_p == card.sampling.top_p
     assert rt.answer_llm.extra_body["chat_template_kwargs"] == {"enable_thinking": False}
     assert rt.counter.url == card.answer.url.removesuffix("/v1") + "/tokenize"  # /tokenize at vLLM

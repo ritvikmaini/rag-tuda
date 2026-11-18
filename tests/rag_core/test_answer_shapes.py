@@ -193,7 +193,7 @@ def sent_prompt(**state):
         "standalone_question": "Wie beantrage ich Urlaub?",
         **state,
     }
-    asyncio.run(make_generate(deps)(full))  # pyright: ignore[reportArgumentType]  # a stand-in for GraphDeps and AgentState
+    asyncio.run(make_generate(deps)(full, {}))  # pyright: ignore[reportArgumentType]  # a stand-in for GraphDeps and AgentState
     return seen[0]
 
 

@@ -1,5 +1,6 @@
 """GET /api/chat: streams the answer; the pipeline runs inside the request guard (deadline and idle timeout)."""
 
+import time
 import uuid
 from functools import partial
 from typing import Optional
@@ -55,6 +56,7 @@ async def main(
         end_turn, rt.turns, record
     )  # the [Turn] line for every request; the store's finish where both exist
     # every request ends within the deadline with an answer or a German message
+    deadline_at = time.monotonic() + timeouts.deadline_s
     return StreamingResponse(
         guard(
             lambda: pipeline(
@@ -72,6 +74,7 @@ async def main(
                 trace_id=trace,
                 principal=principal,
                 record=record,
+                deadline_at=deadline_at,
             ),
             deadline_s=timeouts.deadline_s,
             idle_s=timeouts.idle_s,

@@ -190,6 +190,9 @@ async def run_stream(
             elif generation.startswith(streamed) and len(generation) > len(streamed):
                 # text the node appended after the model's stream (a closing note) still reaches the page
                 yield fr.Chunk(content=generation[len(streamed) :])
+            elif streamed_any and not produced and not generation.startswith(streamed):
+                # the model failed after part of its answer was sent: the fallback text follows it
+                yield fr.Chunk(content="\n\n" + generation)
             citations = citations_frame(output.get("context_sources"), result.retrieved_docs)
             if citations:
                 yield citations

@@ -42,11 +42,13 @@ async def pipeline(
     trace_id: Optional[str] = None,
     principal: Principal = ANONYMOUS,
     record: TurnRecord | None = None,
+    deadline_at: float | None = None,
 ) -> AsyncIterator[Any]:
     """
     RAG pipeline with concurrency control. `turn` is the turn id the route sent in `meta` (the stored question takes it) and
     `trace_id` the Langfuse trace id it sent (None: untraced). `record` is the question's turn (None for a variant or a switch):
-    the store gets its row before the early exits and the run fills it, the guard's end writes it.
+    the store gets its row before the early exits and the run fills it, the guard's end writes it. `deadline_at` is the guard's
+    deadline as a time.monotonic() value: the answer step waits out a rate limit only within it.
 
     Uses a semaphore to limit concurrent executions and prevent resource exhaustion
     under high load. Excess requests will wait for a slot to become available.
@@ -153,6 +155,7 @@ async def pipeline(
         # configurable is not state: the Principal object reaches the nodes, never the turn store (pass the object,
         # never its name as a str)
         config["configurable"]["principal"] = principal
+        config["configurable"]["deadline_at"] = deadline_at
 
         try:
             async for frame in run_stream(
