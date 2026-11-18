@@ -17,7 +17,8 @@ REGISTRY = "pdf_downloaded_urls.json"  # in the state store
 @dataclass(frozen=True)
 class PdfEntry:
     """One PDF of a source's list: its download URL, its title, the hash the list publishes for it (None when it
-    publishes none) and whatever else the connector keeps with it."""
+    publishes none) and whatever else the connector keeps with it. `meta` is JSON-serialisable (dates as ISO text, tuples as
+    lists): the list safeguard writes it into its state file."""
 
     url: str
     title: str

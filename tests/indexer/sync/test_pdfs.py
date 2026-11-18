@@ -9,6 +9,7 @@ import json
 import pytest
 from rag_core.domain.sources import CorruptStateError
 
+from indexer.sync import pdfs
 from indexer.sync.pdfs import PDF_DOWNLOAD_TIMEOUT, PdfEntry, sync_pdfs
 from indexer.sync.registry import REGISTRY, file_hash, local_path
 
@@ -140,3 +141,64 @@ def test_frozen_inputs_fetch_nothing_and_write_nothing(make_ctx, pdf_dir):
     assert [r["status"] for r in result.results] == ["cached", "missing"]
     assert (result.unchanged, result.missing, result.downloaded) == (1, 1, 0)
     assert ctx.state.path(REGISTRY).read_bytes() == before
+
+
+def test_a_failing_cache_cleanup_does_not_keep_the_registry_from_being_saved(make_ctx, pdf_dir, monkeypatch):
+    ctx = make_ctx({url(1): b"version two"})
+    path = local_path(url(1), pdf_dir)
+    pdf_dir.mkdir()
+    path.write_bytes(b"version one")
+
+    def refuse(*args):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(pdfs.reg, "drop_cache_entry", refuse)
+    result = sync_pdfs([PdfEntry(url(1), "Doc 1", "new", {})], ctx, pdf_dir=pdf_dir)
+    assert result.downloaded == 1 and path.read_bytes() == b"version two"
+    assert registry(ctx) == {url(1): "new"}
+
+
+class DropsMidStream:
+    """A fetcher whose body breaks off after its first chunk."""
+
+    def get(self, url, *, timeout):
+        return self
+
+    def raise_for_status(self):
+        pass
+
+    def iter_content(self, chunk_size=8192):
+        yield b"%PDF-1.7 the first chunk"
+        raise ConnectionError("connection reset")
+
+
+def test_a_download_that_breaks_off_leaves_the_old_file_the_registry_and_no_temporary_file(make_ctx, pdf_dir):
+    ctx = make_ctx(served(1))
+    sync_pdfs([entry(1)], ctx, pdf_dir=pdf_dir)
+    broken = dataclasses.replace(ctx, fetch=DropsMidStream())
+    result = sync_pdfs([entry(1, sha256="h1-new")], broken, pdf_dir=pdf_dir)
+    assert [r["status"] for r in result.results] == ["retained_on_error"] and "connection reset" in result.results[0][
+        "error"
+    ]
+    assert local_path(url(1), pdf_dir).read_bytes() == body(1) and registry(ctx) == {url(1): "h1"}
+    assert not list(pdf_dir.glob("*.tmp"))
+    fresh = sync_pdfs([entry(2)], dataclasses.replace(ctx, fetch=DropsMidStream()), pdf_dir=pdf_dir)
+    assert [r["status"] for r in fresh.results] == ["failed"]
+    assert url(2) not in registry(ctx) and not local_path(url(2), pdf_dir).exists()  # nothing partial is registered
+
+
+def test_a_registered_hash_whose_file_is_gone_is_fetched_again(make_ctx, pdf_dir):
+    ctx = make_ctx(served(1))
+    sync_pdfs([entry(1)], ctx, pdf_dir=pdf_dir)
+    local_path(url(1), pdf_dir).unlink()
+    ctx.fetch.calls.clear()
+    result = sync_pdfs([entry(1)], ctx, pdf_dir=pdf_dir)
+    assert [r["status"] for r in result.results] == ["downloaded"] and len(ctx.fetch.calls) == 1
+    assert local_path(url(1), pdf_dir).read_bytes() == body(1)
+
+
+def test_an_url_listed_twice_is_synced_once_and_the_first_entry_wins(make_ctx, pdf_dir):
+    ctx = make_ctx(served(1))
+    twice = [PdfEntry(url(1), "first", "h1", {"n": 1}), PdfEntry(url(1), "second", "h1", {"n": 2})]
+    result = sync_pdfs(twice, ctx, pdf_dir=pdf_dir)
+    assert len(ctx.fetch.calls) == 1 and [e.title for e in result.entries] == ["first"]

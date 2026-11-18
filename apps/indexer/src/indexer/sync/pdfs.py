@@ -54,7 +54,9 @@ def sync_pdfs(entries: list[PdfEntry], ctx: SourceContext, *, pdf_dir: str | Pat
     """Sync `entries` into pdf_dir (default: the context's paths.pdf_dir). ctx.reuse (frozen inputs): nothing is fetched,
     a PDF whose file is missing counts as missing, the registry is not written and the safeguard runs dry. ctx.limit: only
     the first N entries, and no safeguard. A corrupt registry raises CorruptStateError; a corrupt list state is reported in `check` (corrupt) with
-    every missing PDF kept. An empty list raises ValueError: it is a failed crawl, not a list."""
+    every missing PDF kept. An URL listed twice is synced once (the first entry wins). An empty list raises ValueError: it
+    is a failed crawl, not a list."""
+    entries = list({entry.url: entry for entry in reversed(entries)}.values())[::-1]
     if not entries:
         raise ValueError("no PDF entries to sync")
     pdf_dir = pdf_dir or ctx.paths["pdf_dir"]
@@ -99,7 +101,10 @@ def _sync_one(entry: PdfEntry, registry: dict[str, str], ctx: SourceContext, pdf
         logging.error(f"Failed to sync PDF {entry.url}: {exc}")
         return {**result, "status": "retained_on_error" if exists else "failed", "error": str(exc)}
     if before and before != after:
-        reg.drop_cache_entry(before, ctx.cache_dir)
+        try:
+            reg.drop_cache_entry(before, ctx.cache_dir)
+        except OSError as exc:  # an orphaned cache entry only costs disk space; the registry must still be saved
+            logging.error(f"Failed to drop the extraction cache entry of {entry.url}: {exc}")
     registry[entry.url] = entry.sha256 or after
     return {**result, "status": "downloaded"}
 

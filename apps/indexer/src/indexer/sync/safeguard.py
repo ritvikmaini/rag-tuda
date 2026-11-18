@@ -168,6 +168,8 @@ def _load_state(path: Path) -> dict:
         known, missing = state.get("known", {}), state.get("missing", {})
         if not isinstance(known, dict) or not all(isinstance(v, dict) for v in known.values()):
             why = "'known' is not an object of objects"
+        elif not all(_is_entry(v) for v in known.values()):
+            why = "'known' holds an entry that is not a PdfEntry (a state of an older format)"
         elif not isinstance(missing, dict) or not all(
             isinstance(v, dict) and isinstance(v.get("runs"), int) for v in missing.values()
         ):
@@ -191,6 +193,14 @@ def _load_state(path: Path) -> dict:
         "known": known,
         "missing": missing,
     }
+
+
+def _is_entry(record: dict) -> bool:
+    try:
+        PdfEntry(**record)
+    except TypeError:
+        return False
+    return True
 
 
 def save_state(path: Path, state: dict) -> None:

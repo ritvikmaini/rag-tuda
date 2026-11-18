@@ -170,6 +170,7 @@ def test_a_minimal_entry_takes_its_title_from_the_extraction_cache(env):
         '{"last_full_count": "abc"}',
         '{"missing": {"%s": 5}}' % url(9),
         '{"known": [], "missing": []}',
+        '{"known": {"%s": {"url": "%s", "title": "", "sha256": null, "meta": {}, "old_field": 1}}}' % (url(9), url(9)),
         "{broken",
     ],
 )
