@@ -61,3 +61,12 @@ def test_a_failure_estimates_two_characters_a_token_warns_once_and_stops_asking(
 @pytest.mark.parametrize("path", ["http://vllm.test/v1/", "http://vllm.test"])
 def test_the_v1_suffix_is_not_part_of_the_tokenize_url(path: str) -> None:
     assert VllmTokenCounter(path, "m", 1).url == "http://vllm.test/tokenize"
+
+
+def test_the_servers_window_can_lower_the_configured_one_but_never_raise_it(monkeypatch) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"count": 1, "max_model_len": 262144})
+
+    tokens = counter(monkeypatch, handle)
+    asyncio.run(tokens.count_text("Hallo"))
+    assert tokens.max_model_len == 8192

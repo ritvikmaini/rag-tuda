@@ -153,7 +153,6 @@ class History(ProfileModel):
 
 class Guard(ProfileModel):
     max_question_chars: int = Field(gt=0)  # = the page's QUESTION_LIMIT
-    context_window: int = Field(gt=0)  # = vLLM's --max-model-len; /tokenize's max_model_len wins at run time
     safety_margin: int = Field(ge=0)
     source_window_chars: int = Field(ge=0)
     full_sources: int = Field(ge=0)
@@ -167,35 +166,12 @@ class Sampling(ProfileModel):
     presence_penalty: float | None
 
 
-MAX_LOGIT_BIAS = 1024
-
-
 class Generation(ProfileModel):
-    model: str
-    analysis_model: str
     temperature: float
     analysis_temperature: float
     max_tokens: int = Field(gt=0)
     analysis_max_tokens: int = Field(gt=0)
-    disable_thinking: bool  # Qwen3's chat_template_kwargs.enable_thinking = false
     sampling: Sampling
-    logit_bias: dict[int, float] = {}  # token id -> bias, sent with German answers only
-    bad_words: tuple[str, ...] = ()  # vLLM bad_words, sent with German answers only
-
-    @field_validator("logit_bias")
-    @classmethod
-    def _bias_size(cls, value: dict[int, float]) -> dict[int, float]:
-        # vLLM's sampler rejects more than 1024 logit-bias entries inside the engine core, and the rejection kills it
-        # (EngineDeadError, the container restarts): such a profile never loads
-        if len(value) > MAX_LOGIT_BIAS:
-            raise ValueError(f"logit_bias has {len(value)} entries; vLLM accepts at most {MAX_LOGIT_BIAS}")
-        return value
-
-    @model_validator(mode="after")
-    def _one_llm(self) -> "Generation":
-        if self.analysis_model != self.model:
-            raise ValueError("analysis_model must be the answer model (one LLM serves the stack)")
-        return self
 
 
 class Formats(ProfileModel):

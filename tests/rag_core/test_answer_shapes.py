@@ -152,9 +152,11 @@ def sent_prompt(**state):
     from langchain_core.messages import AIMessage, HumanMessage
     from rag_core.services.prompts import PromptService, load_profile_prompts
     from rag_core.settings import load_profile
+    from rag_core.settings.card import load_card
     from rag_core.settings.profile import Profile
 
-    profile_file = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
+    root = Path(__file__).resolve().parents[2]
+    profile_file = root / "profiles" / "example" / "profile.yaml"
     seen = []
 
     class Model:
@@ -173,6 +175,7 @@ def sent_prompt(**state):
 
     deps = types.SimpleNamespace(
         profile=load_profile(Profile, profile_file),
+        card=load_card(root / "deploy" / "env" / "ci-fake-card.toml"),
         messages=Messages.model_validate(
             yaml.safe_load((profile_file.parent / "messages.de.yaml").read_text(encoding="utf-8"))
         ),

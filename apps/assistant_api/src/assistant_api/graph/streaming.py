@@ -114,6 +114,7 @@ async def run_stream(
     none_text: str,
     result: StreamResult,
     user: str,
+    strip_cjk: bool,
 ) -> AsyncIterator[Any]:
     """LangGraph's v2 events as frame models; PROGRESS for every other step (the guard's activity signal)."""
     streamed_any = False
@@ -137,7 +138,7 @@ async def run_stream(
             chunk_content = event["data"][
                 "chunk"
             ].text  # the text of the chunk: str content as it is, content blocks joined
-            clean = strip_foreign(chunk_content)
+            clean = strip_foreign(chunk_content, strip_cjk)
             dropped += len(chunk_content) - len(clean)
             chunk_content = clean
             if held:
@@ -172,7 +173,7 @@ async def run_stream(
             produced = output.get("messages") or []
             text = str(produced[-1].content) if produced else ""
             # the answer kept and the answer sent are the same text; the generation is the chunks, the text the stored one
-            kept_generation, kept_text = strip_foreign(str(generation)), strip_foreign(text)
+            kept_generation, kept_text = strip_foreign(str(generation), strip_cjk), strip_foreign(text, strip_cjk)
             dropped = max(dropped, len(str(generation)) - len(kept_generation), len(text) - len(kept_text))
             generation, text = kept_generation, kept_text
             if dropped:

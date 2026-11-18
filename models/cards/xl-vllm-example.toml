@@ -1,0 +1,21 @@
+# a large model on a vLLM server, as an example to copy: shipped for documentation, not tested
+name = "xl-vllm-example"
+class = "XL"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "large"
+slots = 4  # vLLM batches requests
+
+[answer]
+provider = "vllm"
+url = "http://vllm:8000/v1"
+model = "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8"
+context_window = 131072  # the server's --max-model-len
+
+[budget]
+window_tokens = 64000
+answer_tokens = 2000
+
+[reasoning]
+answer = "off"
+analysis = "off"

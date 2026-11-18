@@ -2,8 +2,8 @@ from rag_core.domain.language import looks_english_question, strip_foreign
 
 
 def test_foreign_scripts_are_dropped_and_other_text_is_kept() -> None:
-    assert strip_foreign("Antwort 中文 かな 한글 ，ok Привет äöü [1]") == "Antwort    ok Привет äöü [1]"
-    assert strip_foreign("Nur Deutsch.") == "Nur Deutsch."
+    assert strip_foreign("Antwort 中文 かな 한글 ，ok Привет äöü [1]", True) == "Antwort    ok Привет äöü [1]"
+    assert strip_foreign("Nur Deutsch.", True) == "Nur Deutsch."
 
 
 def test_an_english_question_has_two_english_function_words_and_no_german_one() -> None:

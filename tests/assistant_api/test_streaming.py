@@ -174,7 +174,7 @@ def test_frames_are_ascii_json_like_the_other_frames():
     assert content(frame)["question"] == "Gilt das für Beschäftigte?"
 
 
-def chunk_frames(content):
+def chunk_frames(content, strip_cjk=True):
     """The frames run_stream makes of one streamed chunk of the generate node."""
     event = {"event": "on_chat_model_stream", "name": "x", "metadata": {"langgraph_node": "generate"}}
     event["data"] = {"chunk": AIMessageChunk(content=content)}
@@ -194,6 +194,7 @@ def chunk_frames(content):
             none_text="",
             result=ss.StreamResult(),
             user="u",
+            strip_cjk=strip_cjk,
         )
         return [fr.encode(f) async for f in stream if not isinstance(f, str)]
 
@@ -202,6 +203,11 @@ def chunk_frames(content):
 
 def test_a_text_chunk_is_sent_as_it_is():
     assert chunk_frames("Die Antwort") == [fr.encode(fr.Chunk(content="Die Antwort"))]
+
+
+def test_foreign_script_stays_unless_the_card_strips_it():
+    assert chunk_frames("Der Urlaub 中文", strip_cjk=False) == [fr.encode(fr.Chunk(content="Der Urlaub 中文"))]
+    assert chunk_frames("Der Urlaub 中文") == [fr.encode(fr.Chunk(content="Der Urlaub "))]
 
 
 def test_a_chunk_of_content_blocks_is_sent_as_its_text():
@@ -235,6 +241,7 @@ def test_run_stream_takes_the_scope_fallback_from_the_search_node():
                 none_text="",
                 result=result,
                 user="u",
+                strip_cjk=True,
             )
             return [f async for f in stream]
 
@@ -302,6 +309,7 @@ def test_run_stream_records_the_turns_results():
                 none_text="keine",
                 result=result,
                 user="u",
+                strip_cjk=True,
             )
             return [f async for f in stream]
 
@@ -351,6 +359,7 @@ def test_text_the_node_appended_after_the_stream_is_sent_as_one_more_chunk():
                 none_text="",
                 result=ss.StreamResult(),
                 user="u",
+                strip_cjk=True,
             )
             return [fr.wire(f)["content"] async for f in stream if isinstance(f, fr.Chunk)]
 
@@ -396,6 +405,7 @@ def test_foreign_script_characters_are_dropped_from_the_chunks_and_the_stored_an
             none_text="",
             result=result,
             user="u",
+            strip_cjk=True,
         )
         return [fr.wire(f)["content"] async for f in stream if isinstance(f, fr.Chunk)]
 

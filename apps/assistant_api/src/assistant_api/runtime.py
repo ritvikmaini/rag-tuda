@@ -20,6 +20,7 @@ from rag_core.domain.access import AllowAll
 from rag_core.domain.resilience import dispose_engines
 from rag_core.services.prompts import PromptService
 from rag_core.services.retrieval import RetrievalService
+from rag_core.settings.card import Endpoint, effective_window
 
 from assistant_api.graph.build import build_graph
 from assistant_api.graph.state import GraphDeps
@@ -55,8 +56,12 @@ class Runtime:
 
     @property
     def config_hash(self) -> str:
-        """The answer-affecting settings of this process (the profile), so a turn names the configuration it ran with."""
-        return hashlib.sha256(self.settings.profile.model_dump_json().encode("utf-8")).hexdigest()[:16]
+        """The answer-affecting settings of this process (the profile and the model card), so a turn names the configuration
+        it ran with."""
+        settings = self.settings
+        return hashlib.sha256(
+            (settings.profile.model_dump_json() + settings.card.model_dump_json()).encode("utf-8")
+        ).hexdigest()[:16]
 
     def run_info(self) -> dict[str, Any]:
         return {
@@ -77,18 +82,17 @@ class Runtime:
 
 
 def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticated: bool) -> Runtime:
-    profile, overlay = settings.profile, settings.overlay
+    profile, card, overlay = settings.profile, settings.card, settings.overlay
     g = profile.generation
-    llm_url = overlay.model_servers.llm_url
 
-    def chat(model: str, temperature: float) -> Any:
+    def chat(endpoint: Endpoint, reasoning: str, temperature: float) -> Any:
         return build_chat_openai(
-            model=model,
+            model=endpoint.model,
             temperature=temperature,
-            base_url=llm_url,
+            base_url=endpoint.url,
             max_tokens=g.max_tokens,
             read_timeout_s=overlay.timeouts.llm_read_s,
-            disable_thinking=g.disable_thinking,
+            disable_thinking=reasoning == "off" and endpoint.provider == "vllm",  # chat_template_kwargs: vLLM only
             sampling=g.sampling.model_dump(),
         )
 
@@ -98,9 +102,11 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
         langfuse=langfuse,
         handler=make_handler(authenticated),
         prompts=PromptService(settings.prompts),
-        answer_llm=chat(g.model, g.temperature),
-        analysis=ChatOpenAIModel(chat(g.analysis_model, g.analysis_temperature), g.analysis_max_tokens),
-        counter=VllmTokenCounter(llm_url, g.model, profile.guard.context_window),
+        answer_llm=chat(card.answer, card.reasoning.answer, g.temperature),
+        analysis=ChatOpenAIModel(
+            chat(card.analysis_endpoint, card.reasoning.analysis, g.analysis_temperature), g.analysis_max_tokens
+        ),
+        counter=VllmTokenCounter(card.answer.url, card.answer.model, effective_window(card)),
         embedder=EmbeddingClient(
             overlay.model_servers.embedding_url,
             query_prefix=embedding.query_prefix,
@@ -115,6 +121,7 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
     overlay = rt.settings.overlay
     return GraphDeps(
         profile=rt.settings.profile,
+        card=rt.settings.card,
         messages=rt.settings.messages,
         prompts=rt.prompts,
         analysis=rt.analysis,
@@ -265,7 +272,7 @@ async def model_reports(rt: Runtime) -> dict[str, str]:
             f"{servers.embedding_url}/info", (retrieval.embedding.model, retrieval.embedding.revision)
         ),
         "reranker": await _report(f"{servers.reranker_url}/info", (retrieval.rerank.model, retrieval.rerank.revision)),
-        "llm": await _report(f"{servers.llm_url}/models", None),
+        "llm": await _report(f"{rt.settings.card.answer.url}/models", None),
     }
 
 

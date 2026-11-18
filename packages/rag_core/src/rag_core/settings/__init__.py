@@ -3,7 +3,7 @@
 Technical sections are OverlaySection models (extra keys forbidden, frozen) and a settings model holds sections. load()
 reads, each layer overriding the one before:
   1. the overlay file, when one is named (YAML: {section: {key: value}});
-  2. environment variables RAG__<SECTION>__<KEY>;
+  2. environment variables RAG__<SECTION>__<KEY> (RAG__CARD and RAG__CARD_FILE name the model card, see card.py);
   3. secret files: a field declared with secret("<name>") reads <secrets_dir>/<name> (trailing line breaks stripped);
      secrets_dir is the argument, else RAG_SECRETS_DIR, else /run/secrets.
 An unknown section or key, in the overlay or the environment, raises SettingsError naming the key and its source; so does a
@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from pydantic.fields import FieldInfo
 
 PREFIX = "RAG__"
+CARD_VARIABLES = frozenset({"RAG__CARD", "RAG__CARD_FILE"})  # select the model card; they set no section key
 _SECRET_FILE = "secret_file"
 
 Layer = dict[tuple[str, str], tuple[object, str]]  # (section, key) -> (value, the source's name)
@@ -79,8 +80,8 @@ def secret(file: str) -> Any:
 
 def env_key(name: str) -> tuple[str, str] | None:
     """RAG__<SECTION>__<KEY> -> (section, key) in lower case; None for a variable without the prefix. A variable with the
-    prefix but without a section or a key raises SettingsError."""
-    if not name.startswith(PREFIX):
+    prefix but without a section or a key raises SettingsError, except the card variables (CARD_VARIABLES): None."""
+    if not name.startswith(PREFIX) or name in CARD_VARIABLES:
         return None
     section, separator, key = name[len(PREFIX) :].partition("__")
     if not section or not separator or not key:

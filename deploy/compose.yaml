@@ -34,7 +34,7 @@ services:
       # the assistant's technical settings: RAG__<SECTION>__<KEY>
       - RAG__DATABASE__HOST=pgvector
       - RAG__DATABASE__PORT=5432
-      - RAG__MODEL_SERVERS__LLM_URL=http://vllm:8000/v1
+      - RAG__CARD=xl-vllm-example
       - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
       - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
       - RAG__COMPUTE__SLOTS=1

@@ -1,7 +1,8 @@
-# The assistant API image. Root build context (.dockerignore admits only the workspace and the profiles). The workspace lock
-# installs the locked packages plus rag-core and assistant-api (tests/repo/test_assistant.py); the dependency layer comes first
-# and is rebuilt only when a pyproject or the lock changes. The profile is baked (RAG_PROFILE): an image tag fixes every
-# answer-affecting value. No locale: the prompt's weekday comes from the profile; TZ stays Berlin (the prompt's date and time).
+# The assistant API image. Root build context (.dockerignore admits only the workspace, the profiles and the model cards). The
+# workspace lock installs the locked packages plus rag-core and assistant-api (tests/repo/test_assistant.py); the dependency
+# layer comes first and is rebuilt only when a pyproject or the lock changes. The profile is baked (RAG_PROFILE) and so are
+# the model cards (/app/cards; RAG__CARD names one): an image tag fixes every answer-affecting value. No locale: the prompt's
+# weekday comes from the profile; TZ stays Berlin (the prompt's date and time).
 # gunicorn runs the app factory with its config at /app (one worker: one GPU pipeline slot).
 ARG PYTHON_IMAGE=python:3.12.15-slim-bookworm@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258
 
@@ -30,6 +31,7 @@ RUN apt-get update && apt-get install -y build-essential libssl-dev libffi-dev p
     && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /app/.venv /app/.venv
 COPY profiles/${PROFILE}/ /app/profile/
+COPY models/cards/ /app/cards/
 COPY apps/assistant_api/gunicorn_conf.py /app/
 RUN mkdir -p /app/data/vector_database_contents
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1 TZ=Europe/Berlin

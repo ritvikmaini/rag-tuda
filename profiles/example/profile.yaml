@@ -51,14 +51,11 @@ ranking:
   source_min_score: 0.0
   max_per_document: 0
 history: {turns: 2, max_tokens: 1200, max_age_hours: 12, position: after_system}
-guard: {max_question_chars: 2000, context_window: 8192, safety_margin: 128, source_window_chars: 300, full_sources: 3}
+guard: {max_question_chars: 2000, safety_margin: 128, source_window_chars: 300, full_sources: 3}
 generation:
-  model: Qwen/Qwen3-14B-AWQ
-  analysis_model: Qwen/Qwen3-14B-AWQ
   temperature: 0.1
   analysis_temperature: 0
   max_tokens: 900
   analysis_max_tokens: 400
-  disable_thinking: true
   sampling: {top_k: 50, top_p: 0.1, repetition_penalty: 1.05, frequency_penalty: null, presence_penalty: null}
 formats: {sources_event: before}

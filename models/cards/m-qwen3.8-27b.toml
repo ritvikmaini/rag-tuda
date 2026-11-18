@@ -1,0 +1,22 @@
+# Qwen3.8 27B (dense) on Ollama
+name = "m-qwen3.8-27b"
+class = "M"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "large"
+slots = 1
+download_gb = 17.7
+
+[answer]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "qwen3.8:27b"
+context_window = 262144
+
+[budget]
+window_tokens = 16000
+answer_tokens = 1200
+
+[reasoning]
+answer = "off"
+analysis = "off"

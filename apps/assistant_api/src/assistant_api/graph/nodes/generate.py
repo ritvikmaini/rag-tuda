@@ -110,14 +110,14 @@ def past_event_reply(answer: str, context: str, today: date, texts: Any) -> str 
     return text + (" [%s]" % cites[0] if cites else "") + "."
 
 
-def with_decoding_limits(llm: Any, generation: Any) -> Any:
-    """The answer model with the profile's logit bias and bad words bound to its requests (the model's own extra_body is
+def with_decoding_limits(llm: Any, quirks: Any) -> Any:
+    """The answer model with the card's logit bias and bad words bound to its requests (the model's own extra_body is
     kept, since a bound extra_body replaces it)."""
     options: dict[str, Any] = {}
-    if generation.logit_bias:
-        options["logit_bias"] = {str(token): bias for token, bias in generation.logit_bias.items()}
-    if generation.bad_words:
-        options["extra_body"] = dict(getattr(llm, "extra_body", None) or {}, bad_words=list(generation.bad_words))
+    if quirks.logit_bias:
+        options["logit_bias"] = {str(token): bias for token, bias in quirks.logit_bias.items()}
+    if quirks.bad_words:
+        options["extra_body"] = dict(getattr(llm, "extra_body", None) or {}, bad_words=list(quirks.bad_words))
     return llm.bind(**options) if options and hasattr(llm, "bind") else llm
 
 
@@ -241,7 +241,7 @@ def make_generate(deps: GraphDeps):
         try:
             llm = deps.answer_llm
             if answer_language(state) == "Deutsch":
-                llm = with_decoding_limits(llm, profile.generation)
+                llm = with_decoding_limits(llm, deps.card.quirks)
             response = await llm.ainvoke(prompt)
             if holds_answer(state):
                 try:

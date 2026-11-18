@@ -1,0 +1,22 @@
+# Qwen3.5 4B on Ollama; thinking is on by default in the model, so the reasoning level stays off
+name = "s-qwen3.5-4b"
+class = "S"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "small"
+slots = 1
+download_gb = 3.3
+
+[answer]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "qwen3.5:4b"
+context_window = 262144
+
+[budget]
+window_tokens = 8000
+answer_tokens = 700
+
+[reasoning]
+answer = "off"
+analysis = "off"

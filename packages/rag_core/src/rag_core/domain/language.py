@@ -1,4 +1,4 @@
-"""The language of a question and the scripts an answer may not contain."""
+"""The language of a question and the scripts a card's quirk drops from an answer."""
 
 import re
 
@@ -20,9 +20,9 @@ WORD = re.compile(r"[a-zäöüß]+")
 QUOTED = re.compile(r'"[^"]*"|„[^“”"]*[“”"]|“[^”]*”|»[^«]*«|«[^»]*»|(?<!\w)\'[^\']*\'(?!\w)')
 
 
-def strip_foreign(text: str) -> str:
-    """The text without CJK, kana and Hangul characters."""
-    return FOREIGN.sub("", text)
+def strip_foreign(text: str, enabled: bool) -> str:
+    """The text without CJK, kana and Hangul characters when the card's strip_cjk quirk is on; else the text itself."""
+    return FOREIGN.sub("", text) if enabled else text
 
 
 def looks_english_question(text: str) -> bool:

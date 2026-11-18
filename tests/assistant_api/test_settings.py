@@ -45,16 +45,12 @@ EXPECTED = {
     "HISTORY_MAX_AGE_HOURS": ("history.max_age_hours", 12),
     "HISTORY_POSITION": ("history.position", "after_system"),
     "MAX_QUESTION_CHARS": ("guard.max_question_chars", 2000),
-    "LLM_CONTEXT_WINDOW": ("guard.context_window", 8192),
     "CONTEXT_SAFETY_MARGIN": ("guard.safety_margin", 128),
     "SOURCE_WINDOW_CHARS": ("guard.source_window_chars", 300),
     "FULL_SOURCES": ("guard.full_sources", 3),
-    "MODEL_NAME": ("generation.model", "Qwen/Qwen3-14B-AWQ"),
-    "FUNCTION_CALLING_MODEL_NAME": ("generation.analysis_model", "Qwen/Qwen3-14B-AWQ"),
     "RAG_TEMPERATURE": ("generation.temperature", 0.1),
     "MAX_TOKENS": ("generation.max_tokens", 900),
     "ANALYSIS_MAX_TOKENS": ("generation.analysis_max_tokens", 400),
-    "DISABLE_THINKING_MODE": ("generation.disable_thinking", True),
     "TOP_K": ("generation.sampling.top_k", 50),
     "TOP_P": ("generation.sampling.top_p", 0.1),
     "REPETITION_PENALTY": ("generation.sampling.repetition_penalty", 1.05),
@@ -65,7 +61,6 @@ EXPECTED = {
 # values the profile names beyond that table: the analysis temperature, the date locale and format, the reranker's revision
 NAMED = {
     "generation.analysis_temperature": 0,
-    "generation.bad_words": [],
     "identity.language": "de",
     "identity.locale": "de_DE",
     "identity.date_format": "%A, der %d.%m.%Y %H:%M:%S",
@@ -77,7 +72,7 @@ NAMED = {
 STACK = {
     "RAG__DATABASE__HOST": "pgvector",
     "RAG__DATABASE__PORT": "5432",
-    "RAG__MODEL_SERVERS__LLM_URL": "http://vllm:8000/v1",
+    "RAG__CARD_FILE": str(ROOT / "deploy" / "env" / "ci-fake-card.toml"),
     "RAG__MODEL_SERVERS__EMBEDDING_URL": "http://embedding_service:8001",
     "RAG__MODEL_SERVERS__RERANKER_URL": "http://reranker_service:8003",
     "RAG__COMPUTE__SLOTS": "1",
@@ -153,7 +148,6 @@ def test_every_assistant_profile_value_is_explained(secrets: Path) -> None:
     profile = load_settings(environment(), secrets_dir=secrets).profile
     sections = ("identity", "ranking", "history", "guard", "generation", "formats")
     found = leaves({name: getattr(profile, name).model_dump() for name in sections})
-    found = {k: v for k, v in found.items() if not k.startswith("generation.logit_bias.")}  # token ids, not named keys
     found.update(
         {
             f"retrieval.{k}": v
@@ -180,10 +174,7 @@ def test_the_environment_supplies_the_technical_values(secrets: Path) -> None:
         overlay.timeouts.reranker_s,
         overlay.timeouts.llm_read_s,
     ) == (120, 45, 20, 10, 5, 15, 60)
-    assert (overlay.model_servers.llm_url, overlay.model_servers.reranker_url) == (
-        "http://vllm:8000/v1",
-        "http://reranker_service:8003",
-    )
+    assert overlay.model_servers.reranker_url == "http://reranker_service:8003"
     assert (overlay.database.host, overlay.database.port) == ("pgvector", 5432)
     assert (overlay.http.cors_domain, overlay.tracing.url) == ("example.org", "")
 
@@ -230,8 +221,7 @@ def test_the_coupled_profile_values_are_checked() -> None:
     from rag_core.settings.profile import Generation, Ranking
 
     data = yaml.safe_load(PROFILE.read_text(encoding="utf-8"))
-    with pytest.raises(ValueError, match="analysis_model"):
-        Generation.model_validate(dict(data["generation"], analysis_model="other"))
+    assert Generation.model_validate(data["generation"])
     with pytest.raises(ValueError, match="recency_max_bonus"):
         Ranking.model_validate(dict(data["ranking"], recency_bonus_per_year=0.1, recency_max_bonus=0.05))
 
@@ -253,17 +243,26 @@ def test_the_runtime_flattens_the_texts_and_leaves_the_labels_out(secrets: Path)
     assert all(isinstance(text, str) and not key.startswith("labels.") for key, text in rt.messages.items())
 
 
-def test_a_logit_bias_of_more_than_1024_tokens_is_refused(tmp_path: Path) -> None:
-    from rag_core.settings import load_profile
-    from rag_core.settings.profile import Profile
+def test_the_card_comes_from_a_name_or_a_file(secrets: Path) -> None:
+    cards = ROOT / "models" / "cards"
+    by_name = load_settings(
+        environment(RAG__CARD_FILE="<unset>", RAG__CARD="s-qwen3-4b-instruct-2507", RAG_CARDS_DIR=str(cards)),
+        secrets_dir=secrets,
+    )
+    assert by_name.card.name == "s-qwen3-4b-instruct-2507"
+    by_file = load_settings(environment(), secrets_dir=secrets)
+    assert by_file.card.name == "ci-fake" and by_file.card.answer.model == "Qwen/Qwen3-14B-AWQ"
 
-    source = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
-    profile = yaml.safe_load(source.read_text(encoding="utf-8"))
-    file = tmp_path / "profile.yaml"
-    profile["generation"]["logit_bias"] = {i: -100 for i in range(1024)}
-    file.write_text(yaml.safe_dump(profile), encoding="utf-8")
-    assert len(load_profile(Profile, file).generation.logit_bias) == 1024
-    profile["generation"]["logit_bias"] = {i: -100 for i in range(1025)}
-    file.write_text(yaml.safe_dump(profile), encoding="utf-8")
-    with pytest.raises(SettingsError, match="1024"):
-        load_profile(Profile, file)
+
+def test_exactly_one_card_is_named(secrets: Path) -> None:
+    with pytest.raises(SettingsError, match="RAG__CARD"):
+        load_settings(environment(RAG__CARD_FILE="<unset>"), secrets_dir=secrets)
+    with pytest.raises(SettingsError, match="RAG__CARD"):
+        load_settings(environment(RAG__CARD="m-qwen3.6-35b-a3b"), secrets_dir=secrets)
+    with pytest.raises(SettingsError, match="cannot be read"):
+        load_settings(environment(RAG__CARD_FILE="<unset>", RAG__CARD="no-such-card"), secrets_dir=secrets)
+
+
+def test_the_model_servers_section_no_longer_takes_the_llm_url(secrets: Path) -> None:
+    with pytest.raises(SettingsError, match="llm_url"):
+        load_settings(environment(RAG__MODEL_SERVERS__LLM_URL="http://vllm:8000/v1"), secrets_dir=secrets)

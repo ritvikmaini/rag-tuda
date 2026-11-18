@@ -1,5 +1,5 @@
 """The assistant's settings: the baked profile (RAG_PROFILE, set in the
-image), its messages, and the technical sections from the environment and the secret files. Read once, by the lifespan."""
+image), the model card (RAG__CARD or RAG__CARD_FILE), its messages, and the technical sections from the environment and the secret files. Read once, by the lifespan."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 from rag_core.domain.source_meta import SourceLabels
 from rag_core.services.prompts import PromptText, load_profile_prompts
 from rag_core.settings import OverlaySection, SettingsError, load, load_profile
+from rag_core.settings.card import DEFAULT_CARDS_DIR, Card, load_card
 from rag_core.settings.profile import Guard, Profile
 from rag_core.settings.sections import Compute, DatabaseSection, Http, ModelServersSection, Server, Timeouts, Tracing
 
@@ -101,6 +102,7 @@ class Messages(_Texts):
 @dataclass(frozen=True)
 class AssistantSettings:
     profile: Profile
+    card: Card
     overlay: AssistantOverlay
     messages: Messages
     prompts: dict[str, PromptText]
@@ -109,6 +111,14 @@ class AssistantSettings:
     @property
     def guard(self) -> Guard:
         return self.profile.guard
+
+
+def _card(environ: Mapping[str, str]) -> Card:
+    """The model card: RAG__CARD names a shipped card (in RAG_CARDS_DIR, the image's /app/cards), RAG__CARD_FILE a card file."""
+    name, file = environ.get("RAG__CARD"), environ.get("RAG__CARD_FILE")
+    if bool(name) == bool(file):
+        raise SettingsError("RAG__CARD or RAG__CARD_FILE: exactly one names the model card (environment)")
+    return load_card(Path(file) if file else name or "", environ.get("RAG_CARDS_DIR") or DEFAULT_CARDS_DIR)
 
 
 def load_settings(
@@ -121,6 +131,7 @@ def load_settings(
         raise SettingsError("RAG_PROFILE: not set (the image sets it; a test passes the profile's path)")
     profile_file = Path(path)
     profile = load_profile(Profile, profile_file)
+    card = _card(environ)
     overlay = load(
         AssistantOverlay,
         overlay=environ.get("RAG_OVERLAY") or None,
@@ -130,4 +141,4 @@ def load_settings(
     )
     texts = yaml.safe_load((profile_file.parent / "messages.de.yaml").read_text(encoding="utf-8"))
     prompts = load_profile_prompts(profile_file.parent / "prompts")
-    return AssistantSettings(profile, overlay, Messages.model_validate(texts), prompts, profile_file.parent)
+    return AssistantSettings(profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent)

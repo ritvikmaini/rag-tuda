@@ -1,0 +1,22 @@
+# Qwen3.6 35B-A3B (mixture of experts) on Ollama, the default of class M
+name = "m-qwen3.6-35b-a3b"
+class = "M"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "large"
+slots = 1
+download_gb = 22.6
+
+[answer]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "qwen3.6:35b-a3b"
+context_window = 262144
+
+[budget]
+window_tokens = 16000
+answer_tokens = 1200
+
+[reasoning]
+answer = "off"
+analysis = "off"

@@ -1,0 +1,22 @@
+# Gemma 4 31B (dense) on Ollama
+name = "m-gemma4-31b"
+class = "M"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "large"
+slots = 1
+download_gb = 20.4
+
+[answer]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "gemma4:31b"
+context_window = 262144
+
+[budget]
+window_tokens = 16000
+answer_tokens = 1200
+
+[reasoning]
+answer = "off"
+analysis = "off"

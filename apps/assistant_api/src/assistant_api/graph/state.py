@@ -9,6 +9,7 @@ from typing_extensions import TypedDict
 from rag_core.domain.access import ANONYMOUS, Principal
 from rag_core.ports.chat import ChatModel, TokenCounter
 from rag_core.services.prompts import PromptService
+from rag_core.settings.card import Card
 from rag_core.settings.profile import Profile
 from rag_core.settings.sections import Timeouts
 
@@ -56,6 +57,7 @@ class Retriever(Protocol):
 @dataclass(frozen=True)
 class GraphDeps:
     profile: Profile
+    card: Card
     messages: Messages
     prompts: PromptService
     analysis: ChatModel

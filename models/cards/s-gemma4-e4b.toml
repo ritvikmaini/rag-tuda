@@ -1,0 +1,22 @@
+# Gemma 4 E4B on Ollama
+name = "s-gemma4-e4b"
+class = "S"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "small"
+slots = 1
+download_gb = 6.6
+
+[answer]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "gemma4:e4b"
+context_window = 131072
+
+[budget]
+window_tokens = 8000
+answer_tokens = 700
+
+[reasoning]
+answer = "off"
+analysis = "off"

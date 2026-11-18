@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STACK = {  # the stack's values as RAG__ entries
     "RAG__DATABASE__HOST": "pgvector",
     "RAG__DATABASE__PORT": "5432",
-    "RAG__MODEL_SERVERS__LLM_URL": "http://vllm:8000/v1",
+    "RAG__CARD": "xl-vllm-example",
     "RAG__MODEL_SERVERS__EMBEDDING_URL": "http://embedding_service:8001",
     "RAG__MODEL_SERVERS__RERANKER_URL": "http://reranker_service:8003",
     "RAG__COMPUTE__SLOTS": "1",
@@ -151,8 +151,10 @@ def test_the_stack_sets_the_slot_and_timeout_values_the_code_does_not_default() 
     assert {key: env[key] for key in expected} == expected
 
 
-def test_the_ci_environment_differs_only_in_the_three_harness_timeouts() -> None:
+def test_the_ci_environment_differs_only_in_the_card_and_the_three_harness_timeouts() -> None:
     env = {k: v for k, v in environment(backend("deploy/compose.ci.yaml")).items() if k.startswith("RAG__")}
+    assert env.pop("RAG__CARD_FILE") == "/app/card.toml"  # the harness's card file replaces the named card
+    env["RAG__CARD"] = STACK["RAG__CARD"]
     assert {k: v for k, v in env.items() if STACK.get(k) != v} == CI_ONLY and set(env) == set(STACK)
 
 

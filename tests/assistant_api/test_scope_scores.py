@@ -15,6 +15,7 @@ from assistant_api import scope_scores
 from assistant_api.graph.state import GraphDeps
 from rag_core.services.prompts import PromptService, load_profile_prompts
 from rag_core.settings import load_profile
+from rag_core.settings.card import load_card
 from rag_core.settings.profile import Profile
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
@@ -82,6 +83,7 @@ def make_deps() -> GraphDeps:
     profile = load_profile(Profile, PROFILE)
     return GraphDeps(
         profile=profile,
+        card=load_card(PROFILE.parents[2] / "deploy" / "env" / "ci-fake-card.toml"),
         messages=SimpleNamespace(),  # type: ignore[arg-type]
         prompts=PromptService(load_profile_prompts(PROFILE.parent / "prompts")),
         analysis=Analysis(),  # type: ignore[arg-type]

@@ -16,8 +16,7 @@ class DatabaseSection(OverlaySection):
 
 class ModelServersSection(OverlaySection):
     embedding_url: str = Field(default="http://embedding_service:8001", pattern=r"^https?://\S+[^/]$")
-    # the OpenAI-compatible LLM endpoint and the reranker's base URL
-    llm_url: str = Field(default="http://vllm:8000/v1", pattern=r"^https?://\S+[^/]$")
+    # the chat models' endpoints come from the model card
     reranker_url: str = Field(default="http://reranker_service:8003", pattern=r"^https?://\S+[^/]$")
 
 

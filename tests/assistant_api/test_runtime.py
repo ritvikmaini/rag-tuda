@@ -11,6 +11,7 @@ import pytest
 from assistant_api import runtime as rt_module
 from rag_core.services.prompts import PromptService, load_profile_prompts
 from rag_core.settings import load_profile
+from rag_core.settings.card import load_card
 from rag_core.settings.profile import Profile
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
@@ -35,6 +36,7 @@ def runtime() -> types.SimpleNamespace:
             model_servers=types.SimpleNamespace(reranker_url="http://reranker_service:8003"),
         ),
         messages=None,
+        card=None,
     )
     return types.SimpleNamespace(
         settings=settings,
@@ -189,11 +191,12 @@ def test_a_failing_graph_build_keeps_the_old_index_and_closes_the_new_pool(monke
 
 def test_run_info_names_what_a_turn_ran_with() -> None:
     profile = load_profile(Profile, PROFILE)
+    card = load_card(PROFILE.parents[2] / "deploy" / "env" / "ci-fake-card.toml")
     bundled = load_profile_prompts(PROFILE.parent / "prompts")
 
-    def make(profile: Profile) -> rt_module.Runtime:
+    def make(profile: Profile, card=card) -> rt_module.Runtime:
         return rt_module.Runtime(
-            settings=types.SimpleNamespace(profile=profile),  # pyright: ignore[reportArgumentType]
+            settings=types.SimpleNamespace(profile=profile, card=card),  # pyright: ignore[reportArgumentType]
             langfuse=None,
             handler=None,
             prompts=PromptService(bundled),
@@ -216,6 +219,40 @@ def test_run_info_names_what_a_turn_ran_with() -> None:
         update={"history": profile.history.model_copy(update={"turns": profile.history.turns + 1})}
     )
     assert make(changed).config_hash != rt.config_hash
+    other = card.model_copy(update={"quirks": card.quirks.model_copy(update={"strip_cjk": not card.quirks.strip_cjk})})
+    assert make(profile, other).config_hash != rt.config_hash  # the model card is part of the configuration
+
+
+def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) -> None:
+    from rag_core.settings.card import effective_window
+    from assistant_api.settings import load_settings
+
+    root = PROFILE.parents[2]
+    env = {
+        "RAG_PROFILE": str(PROFILE),
+        "RAG__CARD": "l-groq-gpt-oss-120b",
+        "RAG_CARDS_DIR": str(root / "models" / "cards"),
+        "RAG__COMPUTE__SLOTS": "1",
+        "RAG__COMPUTE__SLOT_WAIT_S": "3",
+        "RAG__TIMEOUTS__REQUEST_DEADLINE_S": "25",
+        "RAG__TIMEOUTS__REQUEST_IDLE_S": "5",
+        "RAG__TIMEOUTS__ANALYSIS_S": "20",
+        "RAG__TIMEOUTS__RETRIEVAL_S": "10",
+        "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
+        "RAG__TIMEOUTS__RERANKER_S": "15",
+        "RAG__TIMEOUTS__LLM_READ_S": "60",
+        "RAG__HTTP__CORS_DOMAIN": "example.org",
+        "RAG__TRACING__URL": "",
+    }
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    settings = load_settings(env, secrets_dir=tmp_path)
+    rt = rt_module.build_runtime(settings, None, False)
+    assert rt.answer_llm.model_name == "openai/gpt-oss-120b"
+    assert str(rt.answer_llm.openai_api_base) == "https://api.groq.com/openai/v1"
+    assert rt.analysis.runnable.bound.model_name == "qwen3:4b-instruct-2507-q4_K_M"  # the card's own analysis block
+    assert str(rt.analysis.runnable.bound.openai_api_base) == "http://127.0.0.1:11434/v1"
+    assert effective_window(settings.card) == 8000 == rt.counter.max_model_len
+    assert rt.counter.url == "https://api.groq.com/openai/tokenize"
 
 
 class Langfuse:

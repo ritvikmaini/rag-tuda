@@ -1,0 +1,21 @@
+# The harness's model card: the fake LLM of deploy/compose.ci.yaml, which answers as the vLLM server it replaces. The window is
+# the one the fake reports from /tokenize; the foreign-script strip is on so the harness covers it.
+name = "ci-fake"
+class = "M"
+structured_output = "json_object"
+chars_per_token = 2.0
+prompt_overlay = "large"
+slots = 1
+
+[answer]
+provider = "vllm"
+url = "http://vllm:8000/v1"
+model = "Qwen/Qwen3-14B-AWQ"
+context_window = 8192
+
+[budget]
+window_tokens = 8192
+answer_tokens = 900
+
+[quirks]
+strip_cjk = true

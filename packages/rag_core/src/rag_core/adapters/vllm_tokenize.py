@@ -1,4 +1,4 @@
-"""vLLM's /tokenize for the context budget."""
+"""vLLM's /tokenize for the context budget. The window is the card's effective window; the server's max_model_len can only lower it."""
 
 import logging
 import time
@@ -30,8 +30,8 @@ class VllmTokenCounter:
             resp = await get_http_client().post(self.url, json={"model": self.model, **body}, timeout=3.0)
             resp.raise_for_status()
             data = resp.json()
-            if data.get("max_model_len"):
-                self.max_model_len = int(data["max_model_len"])
+            if data.get("max_model_len"):  # the server's own window may lower the configured one, never raise it
+                self.max_model_len = min(self.max_model_len, int(data["max_model_len"]))
             self.exact = True
             return int(data["count"])
         except Exception as e:

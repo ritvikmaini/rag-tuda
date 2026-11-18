@@ -40,6 +40,7 @@ services:
     networks: [ci]
     volumes:
       - ./ci/.generated/data:/app/data
+      - ./env/ci-fake-card.toml:/app/card.toml:ro
     ports: ["127.0.0.1:${RAG_CI_BACKEND_PORT-28002}:8000"]
     env_file: [{path: ./ci/.generated/ci.env, required: false}]
     environment:
@@ -52,7 +53,7 @@ services:
       # in seconds (compute.slot_wait_s, timeouts.request_deadline_s, timeouts.request_idle_s)
       - RAG__DATABASE__HOST=pgvector
       - RAG__DATABASE__PORT=5432
-      - RAG__MODEL_SERVERS__LLM_URL=http://vllm:8000/v1
+      - RAG__CARD_FILE=/app/card.toml
       - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
       - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
       - RAG__COMPUTE__SLOTS=1

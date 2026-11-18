@@ -25,10 +25,12 @@ from rag_core.domain.access import ANONYMOUS, Principal
 from rag_core.domain.history import PastTurn, VariantInput, context_turns
 from rag_core.services.prompts import PromptService, load_profile_prompts
 from rag_core.settings import load_profile
+from rag_core.settings.card import load_card
 from rag_core.settings.profile import Profile
 from rag_core.settings.sections import Timeouts
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
+CARD = Path(__file__).resolve().parents[2] / "deploy" / "env" / "ci-fake-card.toml"
 
 
 class Analysis:
@@ -77,6 +79,7 @@ def deps(intent: str) -> GraphDeps:
     )
     return GraphDeps(
         profile=profile,
+        card=load_card(CARD),
         messages=messages,
         prompts=PromptService(load_profile_prompts(PROFILE.parent / "prompts")),
         analysis=Analysis(intent),
@@ -381,7 +384,7 @@ def test_variant_inputs_hold_what_generate_read_from_the_checkpoint() -> None:
 def runtime() -> types.SimpleNamespace:
     d = deps("lookup")
     overlay = types.SimpleNamespace(compute=types.SimpleNamespace(slot_wait_s=0.2))
-    settings = types.SimpleNamespace(profile=d.profile, messages=d.messages, overlay=overlay)
+    settings = types.SimpleNamespace(profile=d.profile, card=d.card, messages=d.messages, overlay=overlay)
     return types.SimpleNamespace(
         chain=build_graph(d),
         settings=settings,
@@ -661,30 +664,26 @@ def test_the_logit_bias_and_bad_words_are_bound_to_german_answers() -> None:
         def bind(self, **options):
             return options
 
-    class Generation:
-        logit_bias = {12: -5.0}
-        bad_words = ("Mitarbeiter",)
-
-    assert with_decoding_limits(Llm(), Generation()) == {
+    quirks = load_card(CARD).quirks.model_copy(update={"logit_bias": {12: -5.0}, "bad_words": ("Mitarbeiter",)})
+    assert with_decoding_limits(Llm(), quirks) == {
         "logit_bias": {"12": -5.0},
         "extra_body": {"top_k": 50, "bad_words": ["Mitarbeiter"]},
     }
-    empty = types.SimpleNamespace(logit_bias={}, bad_words=())
     llm = Llm()
-    assert with_decoding_limits(llm, empty) is llm
+    assert with_decoding_limits(llm, load_card(CARD).quirks) is llm
 
 
 ENGLISH_QUESTION = "How do I apply for leave?"
 
 
-def answered(question: str, intent: str, *titles: str, **generation: Any) -> tuple[Any, Any]:
-    """The messages and the options of the answer model's request for the question; `generation` overrides the profile's."""
+def answered(question: str, intent: str, *titles: str, **quirks: Any) -> tuple[Any, Any]:
+    """The messages and the options of the answer model's request for the question; `quirks` overrides the card's."""
     PROMPTS.clear()
     ANSWER_OPTIONS.clear()
     base = deps(intent)
     d = dataclasses.replace(
         base,
-        profile=base.profile.model_copy(update={"generation": base.profile.generation.model_copy(update=generation)}),
+        card=base.card.model_copy(update={"quirks": base.card.quirks.model_copy(update=quirks)}),
         retrieval=Titled(*titles),
         answer_llm=PromptLog(messages=iter([AIMessage(content="Antwort.")])),
     )

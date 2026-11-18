@@ -1,0 +1,32 @@
+# gpt-oss-120b on Groq's free tier; the model cannot switch its reasoning off, so it runs at low
+name = "l-groq-gpt-oss-120b"
+class = "L"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "large"
+slots = 1
+
+[answer]
+provider = "groq"
+url = "https://api.groq.com/openai/v1"
+model = "openai/gpt-oss-120b"
+context_window = 131072
+
+# the analysis runs on the machine, so the question is not sent twice to the provider
+[analysis]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "qwen3:4b-instruct-2507-q4_K_M"
+context_window = 262144
+
+# the free tier admits 8000 tokens per minute, which caps the window whatever the model's own
+[limits]
+tpm = 8000
+
+[budget]
+window_tokens = 8000
+answer_tokens = 1000
+
+[reasoning]
+answer = "low"
+analysis = "low"

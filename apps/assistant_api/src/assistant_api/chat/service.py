@@ -165,6 +165,7 @@ async def pipeline(
                 none_text=rt.settings.messages.docs.none,
                 result=result,
                 user=user,
+                strip_cjk=rt.settings.card.quirks.strip_cjk,
             ):
                 yield frame
         except asyncio.CancelledError:

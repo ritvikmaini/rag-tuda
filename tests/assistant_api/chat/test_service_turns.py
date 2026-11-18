@@ -81,6 +81,7 @@ def runtime(problem=""):
         run_info=lambda: {"collection": "example"},
         settings=SimpleNamespace(
             guard=SimpleNamespace(max_question_chars=20),
+            card=SimpleNamespace(quirks=SimpleNamespace(strip_cjk=False)),
             profile=SimpleNamespace(
                 guard=SimpleNamespace(max_question_chars=20), formats=SimpleNamespace(sources_event="before")
             ),
