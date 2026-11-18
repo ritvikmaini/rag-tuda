@@ -10,8 +10,8 @@ import subprocess
 import urllib.request
 from dataclasses import asdict, dataclass
 
-from rag_tuda import tiers
-from rag_tuda.tiers import Tier
+from rag_tuda import classes
+from rag_tuda.classes import SizeClass
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/version"
 MIN_RAM_GB = 16
@@ -288,11 +288,13 @@ def problems(f: Facts) -> list[str]:
     return out
 
 
-def warnings(f: Facts, tier: Tier) -> list[str]:
+def warnings(f: Facts, cls: SizeClass) -> list[str]:
     out = []
     if f.ram_gb and f.ram_gb < MIN_RAM_GB - RAM_TOLERANCE_GB:
-        out.append(f"Only {f.ram_gb:.1f} GB RAM; 16 GB or more is recommended. Staying on T1, expect it to be slow.")
-    total = tiers.download_total_gb(tier)
+        out.append(
+            f"Only {f.ram_gb:.1f} GB RAM; 16 GB or more is recommended. Staying on class S, expect it to be slow."
+        )
+    total = classes.download_total_gb(cls)
     if f.disk_free_gb < total:
         out.append(f"Only {f.disk_free_gb:.1f} GB free disk; the downloads need about {total:.1f} GB.")
     return out
@@ -303,23 +305,24 @@ def _hardware_line(f: Facts) -> str:
         names = ", ".join(f"{n} ({v:.1f} GB)" for n, v in f.nvidia)
         return f"GPU: {len(f.nvidia)} x NVIDIA, {sum(v for _, v in f.nvidia):.1f} GB VRAM: {names}"
     if is_mac_native(f):
-        return f"Memory: {f.unified_gb:.1f} GB unified ({f.apple_chip or f.cpu_name}), about 65% usable = {tiers.usable_gb(f):.1f} GB"
+        return f"Memory: {f.unified_gb:.1f} GB unified ({f.apple_chip or f.cpu_name}), about 65% usable = {classes.usable_gb(f):.1f} GB"
     return f"GPU: none usable for models (CPU, AMD or Intel graphics); RAM {f.ram_gb:.1f} GB"
 
 
-def report(f: Facts, tier: Tier) -> str:
+def report(f: Facts, cls: SizeClass) -> str:
     where = "WSL2" if f.is_wsl else {"darwin": "macOS", "linux": "Linux", "windows": "Windows"}.get(f.os, f.os)
     lines = [
         f"Platform: {where} {f.arch}, {f.cpu_name or 'unknown CPU'}, {f.cores} cores, {f.ram_gb:.1f} GB RAM, {f.disk_free_gb:.0f} GB free disk",
         _hardware_line(f),
-        f"Tier: {tier.name} ({tier.rule}); usable memory {tiers.usable_gb(f):.1f} GB",
+        f"Class: {cls.name} ({cls.rule}); usable memory {classes.usable_gb(f):.1f} GB",
+        f"Default card: {cls.default_card or 'none (pick one with --card)'}",
         "Models:",
-        f"  answer (Ollama): {tier.ollama_tag + f' ({tier.download_gb:g} GB, {tier.context_k}k context)' if tier.ollama_tag else 'none defined for this tier'}",
-        f"  answer (vLLM, NVIDIA, opt-in): {tier.vllm_model}",
+        f"  answer (Ollama): {cls.ollama_tag + f' ({cls.download_gb:g} GB, {cls.context_k}k context)' if cls.ollama_tag else 'none defined for this class'}",
+        f"  answer (vLLM, NVIDIA, opt-in): {cls.vllm_model}",
     ]
-    lines += [f"  {m.name} ({m.gb:g} GB)" for m in tiers.FIXED_MODELS]
-    lines.append(f"Download total: {tiers.download_total_gb(tier):.1f} GB")
-    lines.append(f"Suits: {tier.use_case}")
+    lines += [f"  {m.name} ({m.gb:g} GB)" for m in classes.FIXED_MODELS]
+    lines.append(f"Download total: {classes.download_total_gb(cls):.1f} GB")
+    lines.append(f"Suits: {cls.use_case}")
     lines.append(f"Mode: {runtime_mode(f)}")
     lines.append(
         f"Docker: {f.docker.runtime_hint} {f.docker.server_version}" if f.docker.ok else "Docker: not available"
@@ -329,7 +332,7 @@ def report(f: Facts, tier: Tier) -> str:
         if f.ollama.installed
         else "Ollama: not installed"
     )
-    lines += [f"Warning: {w}" for w in warnings(f, tier)]
+    lines += [f"Warning: {w}" for w in warnings(f, cls)]
     missing = problems(f)
     lines += [f"Missing: {m}" for m in missing]
     lines.append(
@@ -338,17 +341,18 @@ def report(f: Facts, tier: Tier) -> str:
     return "\n".join(lines)
 
 
-def report_json(f: Facts, tier: Tier) -> str:
+def report_json(f: Facts, cls: SizeClass) -> str:
     missing = problems(f)
     return json.dumps(
         {
             "facts": asdict(f),
-            "tier": asdict(tier),
-            "usable_gb": round(tiers.usable_gb(f), 1),
-            "fixed_models": [asdict(m) for m in tiers.FIXED_MODELS],
-            "download_total_gb": round(tiers.download_total_gb(tier), 1),
+            "class": asdict(cls),
+            "default_card": cls.default_card,
+            "usable_gb": round(classes.usable_gb(f), 1),
+            "fixed_models": [asdict(m) for m in classes.FIXED_MODELS],
+            "download_total_gb": round(classes.download_total_gb(cls), 1),
             "mode": runtime_mode(f),
-            "warnings": warnings(f, tier),
+            "warnings": warnings(f, cls),
             "missing": missing,
             "ok": not missing,
             "next": "uv run rag up" if not missing else "rag doctor",

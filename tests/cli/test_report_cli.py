@@ -6,48 +6,50 @@ from pathlib import Path
 
 import pytest
 
-from rag_tuda import cli, doctor as d, tiers
+from rag_tuda import cli, doctor as d, classes
 
 BARE = re.compile(r"qwen3:(4b|30b)(?![-\w])")
 CASES = {
-    "m1max64": "T3",
-    "m2_16": "T1",
-    "m3pro36": "T2",
-    "rtx4090": "T2",
-    "a100x2": "T3",
-    "h100x4": "T3+",
-    "cpu32": "T1",
-    "wsl2": "T2",
-    "intelmac": "T1",
+    "m1max64": "M",
+    "m2_16": "S",
+    "m3pro36": "S",
+    "rtx4090": "M",
+    "a100x2": "M",
+    "h100x4": "M",
+    "cpu32": "S",
+    "wsl2": "S",
+    "intelmac": "S",
 }
 
 
-@pytest.mark.parametrize("name,tier", CASES.items())
-def test_scenario_tiers(scenario, name, tier):
+@pytest.mark.parametrize("name,cls", CASES.items())
+def test_scenario_classes(scenario, name, cls):
     f = scenario(name)
-    assert tiers.pick_tier(f).name == tier
-    text = d.report(f, tiers.pick_tier(f))
-    assert f"Tier: {tier}" in text
+    assert classes.pick_class(f).name == cls
+    text = d.report(f, classes.pick_class(f))
+    assert f"Class: {cls} " in text
     assert not BARE.search(text)
 
 
-def test_report_content_t1_mac(scenario):
+def test_report_content_s_mac(scenario):
     f = scenario("m2_16")
-    t = tiers.pick_tier(f)
+    t = classes.pick_class(f)
     text = d.report(f, t)
     assert "qwen3:4b-instruct-2507-q4_K_M" in text
     assert "snowflake-arctic-embed-m-v2.0" in text and "bge-reranker-v2-m3" in text
     assert "Download total: 6.5 GB" in text
     assert "Mode: Mac native" in text
     assert "10.4 GB" in text  # 16 * 0.65
-    assert "personal document Q&A" in text
+    assert "short cited answers on a laptop" in text
     assert "Missing: Ollama is not installed: run `brew install ollama`." in text
     assert "Next: fix the missing items" in text
 
 
-def test_report_t2_and_t3_tags(scenario):
-    assert "qwen3:14b" in d.report(scenario("m3pro36"), tiers.pick_tier(scenario("m3pro36")))
-    assert "qwen3:30b-a3b-instruct-2507-q4_K_M" in d.report(scenario("m1max64"), tiers.pick_tier(scenario("m1max64")))
+def test_report_names_the_default_card_and_tag(scenario):
+    m3 = d.report(scenario("m3pro36"), classes.pick_class(scenario("m3pro36")))
+    assert "Default card: s-qwen3-4b-instruct-2507" in m3 and "qwen3:4b-instruct-2507-q4_K_M" in m3
+    m1 = d.report(scenario("m1max64"), classes.pick_class(scenario("m1max64")))
+    assert "Default card: m-qwen3.6-35b-a3b" in m1 and "qwen3.6:35b-a3b (22.6 GB, 16k context)" in m1
 
 
 def test_compose_modes_and_wsl_hint(scenario):
@@ -59,16 +61,16 @@ def test_compose_modes_and_wsl_hint(scenario):
     assert "WSL2" not in d.runtime_mode(scenario("wsl2"))
 
 
-def test_low_ram_warns_but_stays_t1(scenario):
+def test_low_ram_warns_but_stays_s(scenario):
     f = scenario("cpu32", meminfo="MemTotal:  8000000 kB\n")
-    text = d.report(f, tiers.pick_tier(f))
-    assert tiers.pick_tier(f).name == "T1"
+    text = d.report(f, classes.pick_class(f))
+    assert classes.pick_class(f).name == "S"
     assert "Warning" in text and "16 GB" in text
 
 
-def test_t3_plus_marked_untested(scenario):
-    f = scenario("h100x4")
-    assert "untested" in d.report(f, tiers.pick_tier(f))
+def test_xl_marked_untested(scenario):
+    xl = classes.CLASSES[3]
+    assert xl.name == "XL" and "untested" in d.report(scenario("h100x4"), xl)
 
 
 def test_exit_codes(scenario):
@@ -91,32 +93,33 @@ def test_exit_codes(scenario):
 
 def test_report_names_missing_prerequisite(scenario):
     f = scenario("rtx4090", docker=None)
-    text = d.report(f, tiers.pick_tier(f))
+    text = d.report(f, classes.pick_class(f))
     assert "Missing" in text and "Docker Engine" in text
 
 
 def test_json_round_trip(scenario):
     f = scenario("m1max64")
-    data = json.loads(d.report_json(f, tiers.pick_tier(f)))
-    assert data["tier"]["name"] == "T3"
-    assert data["tier"]["ollama_tag"] == "qwen3:30b-a3b-instruct-2507-q4_K_M"
+    data = json.loads(d.report_json(f, classes.pick_class(f)))
+    assert data["class"]["name"] == "M"
+    assert data["class"]["ollama_tag"] == "qwen3.6:35b-a3b"
+    assert data["default_card"] == "m-qwen3.6-35b-a3b"
     assert data["usable_gb"] == pytest.approx(41.6)
-    assert data["download_total_gb"] == pytest.approx(23.0)
+    assert data["download_total_gb"] == pytest.approx(26.6)
     assert data["mode"].startswith("Mac native")
     assert data["ok"] is True and data["missing"] == []
     assert data["facts"]["apple_chip"] == "Apple M1 Max"
     assert data["facts"]["docker"]["runtime_hint"] == "Colima"
     assert [m["name"] for m in data["fixed_models"]][1] == "BAAI/bge-reranker-v2-m3"
-    bad = json.loads(d.report_json(scenario("rtx4090", docker=None), tiers.TIERS[1]))
+    bad = json.loads(d.report_json(scenario("rtx4090", docker=None), classes.CLASSES[1]))
     assert bad["ok"] is False and bad["missing"]
 
 
 def test_cli_exit_code_and_json(monkeypatch, capsys, scenario):
     monkeypatch.setattr(d, "gather", lambda: scenario("rtx4090"))
     assert cli.main(["doctor"]) == 0
-    assert "Tier: T2" in capsys.readouterr().out
+    assert "Class: M " in capsys.readouterr().out
     assert cli.main(["doctor", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out)["tier"]["name"] == "T2"
+    assert json.loads(capsys.readouterr().out)["class"]["name"] == "M"
     monkeypatch.setattr(d, "gather", lambda: scenario("rtx4090", docker=None))
     assert cli.main(["doctor"]) == 1
 
@@ -139,8 +142,8 @@ def test_gather_on_this_machine_writes_nothing():
 
     before = snap()
     f = d.gather()
-    text = d.report(f, tiers.pick_tier(f))
-    d.report_json(f, tiers.pick_tier(f))
+    text = d.report(f, classes.pick_class(f))
+    d.report_json(f, classes.pick_class(f))
     assert text and f.os
     assert snap() == before
 

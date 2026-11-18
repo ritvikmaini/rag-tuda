@@ -1,9 +1,9 @@
-"""Where things run: the mapping from (tier, mode, overrides) to the environment the services get and to the request that
+"""Where things run: the mapping from (class, mode, overrides) to the environment the services get and to the request that
 creates the derived Ollama model. Pure functions; nothing here touches the machine."""
 
 from dataclasses import dataclass
 
-from rag_tuda.tiers import Tier
+from rag_tuda.classes import SizeClass
 
 FLAVOURS = ("ollama", "vllm", "openai")
 MODES = ("native", "compose")
@@ -35,7 +35,7 @@ class Llm:
 
 
 def resolve(
-    tier: Tier,
+    cls: SizeClass,
     mode: str,
     *,
     model: str | None = None,
@@ -43,37 +43,37 @@ def resolve(
     flavour: str | None = None,
     context_window: int | None = None,
 ) -> Llm:
-    """The LLM settings. Default flavour: Ollama when the tier has an Ollama model, else vLLM; `llm_url` means a server we do
-    not manage (flavour openai unless given). `model` replaces the tier's model: the base of the derived model for Ollama,
+    """The LLM settings. Default flavour: Ollama when the class has an Ollama model, else vLLM; `llm_url` means a server we do
+    not manage (flavour openai unless given). `model` replaces the class's model: the base of the derived model for Ollama,
     the served model name otherwise."""
     if mode not in MODES:
         raise ValueError(f"mode must be one of {MODES}: {mode!r}")
-    flavour = flavour or ("openai" if llm_url else "ollama" if tier.ollama_tag else "vllm")
+    flavour = flavour or ("openai" if llm_url else "ollama" if cls.ollama_tag else "vllm")
     if flavour not in FLAVOURS:
         raise ValueError(f"flavour must be one of {FLAVOURS}: {flavour!r}")
-    ctx = context_window if context_window is not None else tier.context_k * 1024
+    ctx = context_window if context_window is not None else cls.context_k * 1024
     if ctx <= 0:
         raise ValueError("the context window must be positive")
     if flavour == "ollama":
-        if not tier.ollama_tag:
-            raise ValueError(f"{tier.name} has no Ollama model: it runs on vLLM (or pass --llm-url)")
+        if not cls.ollama_tag:
+            raise ValueError(f"{cls.name} has no Ollama model: it runs on vLLM (or pass --llm-url)")
         return Llm(
             "ollama",
             llm_url or (NATIVE if mode == "native" else COMPOSE)["ollama"],
-            f"lcr-{tier.name.lower()}",
+            f"lcr-{cls.name.lower()}",
             ctx,
-            model or tier.ollama_tag,
+            model or cls.ollama_tag,
         )
     url = COMPOSE["vllm"] if flavour == "vllm" and mode == "compose" and not llm_url else llm_url
     if not url:
         raise ValueError(
             "this flavour needs --llm-url (vLLM runs in compose mode, or on a server you pass with --llm-url)"
         )
-    return Llm(flavour, url, model or tier.vllm_model, ctx, None)
+    return Llm(flavour, url, model or cls.vllm_model, ctx, None)
 
 
 def env(
-    tier: Tier,
+    cls: SizeClass,
     mode: str,
     *,
     token_file: str,
@@ -83,7 +83,7 @@ def env(
     context_window: int | None = None,
 ) -> dict[str, str]:
     """The environment for the backend and the indexer. One model serves answers and the analysis step."""
-    llm = resolve(tier, mode, model=model, llm_url=llm_url, flavour=flavour, context_window=context_window)
+    llm = resolve(cls, mode, model=model, llm_url=llm_url, flavour=flavour, context_window=context_window)
     where = NATIVE if mode == "native" else COMPOSE
     return {
         "RAG__LLM__URL": llm.url,

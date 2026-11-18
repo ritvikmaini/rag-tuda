@@ -7,15 +7,15 @@ import secrets
 import sys
 from pathlib import Path
 
-from rag_tuda import ask, doctor, sources, tiers
+from rag_tuda import ask, doctor, classes, sources
 
 DEFAULT_URL = "http://127.0.0.1:8700"
 
 
 def _doctor(args: argparse.Namespace) -> int:
     facts = doctor.gather()
-    tier = tiers.pick_tier(facts)
-    print(doctor.report_json(facts, tier) if args.json else doctor.report(facts, tier))
+    cls = classes.pick_class(facts)
+    print(doctor.report_json(facts, cls) if args.json else doctor.report(facts, cls))
     return 1 if doctor.problems(facts) else 0
 
 
@@ -59,7 +59,7 @@ def _add(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag", description="Local RAG assistant with cited answers")
     sub = parser.add_subparsers(dest="command", required=True)
-    d = sub.add_parser("doctor", help="check this machine and pick a tier")
+    d = sub.add_parser("doctor", help="check this machine and pick a class")
     d.add_argument("--json", action="store_true", help="print the result as JSON")
     d.set_defaults(run=_doctor)
     a = sub.add_parser("ask", help="ask one question and stream the cited answer")

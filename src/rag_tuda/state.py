@@ -15,7 +15,7 @@ ROLES = ("rag_owner", "rag_indexer", "rag_app")
 DEFAULT_PORT = 8700
 DEFAULT_STATE = {
     "mode": None,
-    "tier": None,
+    "class": None,
     "model": None,
     "ports": {"app": 8700, "embedding": 8701, "reranker": 8702, "postgres": 55432},
     "first_run_done": False,
