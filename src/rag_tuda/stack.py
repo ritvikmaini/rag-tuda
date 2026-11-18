@@ -25,6 +25,7 @@ from rag_tuda.state import State
 PROJECT = "rag-tuda"
 HF_HOST = "huggingface.co"
 OLLAMA_HOST = "registry.ollama.ai"
+KEYS = ("GROQ_API_KEY",)  # provider keys: only a step that names one gets it
 KEEP_RAG_ENV = ("RAG_DEVICE",)  # the one RAG_ variable a child inherits; every other is set by the plan
 READY_WAIT_S = {"embedding": 900, "reranker": 900, "backend": 180}
 SERVICES = {"embedding": runtime.PORTS["embedding"], "reranker": runtime.PORTS["reranker"]}
@@ -85,6 +86,9 @@ class Step:
     timeout_s: float = 0
     gb: float = 0  # a download's size, when known
     host: str = ""  # a download's server: named when it fails
+    inherit: tuple[
+        str, ...
+    ] = ()  # variables of our own environment the process gets (a key, never copied into the plan)
 
     @property
     def is_download(self) -> bool:
@@ -119,6 +123,7 @@ class Facts:
     compose_images: bool = False
     compose_ollama_models: frozenset[str] = frozenset()
     crawl_contact: bool = False
+    groq_key: bool = False
 
 
 def has_model(models: frozenset[str], tag: str) -> bool:
@@ -181,8 +186,10 @@ def _signature(args: Args) -> dict:
     return {"mode": args.mode, "card": args.card, "profile": args.profile, "model": args.model, "llm_url": args.llm_url}
 
 
-def _record(state: State, args: Args) -> list[Step]:
+def _record(state: State, args: Args, llm: runtime.Llm) -> list[Step]:
     new = {**state.data, **_signature(args), "first_run_done": True}
+    if args.mode == "compose":  # what the compose Ollama volume holds, for the next up after a down
+        new["compose_models"] = sorted({*state.data.get("compose_models", ()), *llm.pulls})
     if new == state.data:
         return []
     return [Step("write", name="state", path=f"{state.dir}/state.json", text=json.dumps(new, indent=2) + "\n")]
@@ -199,6 +206,11 @@ def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
         raise StackError(
             f"Ollama is not running at {llm.ollama_api}: start it (the Ollama app, or `ollama serve`), then run `rag up` again"
         )
+    if llm.provider in runtime.REMOTE and not facts.groq_key:
+        raise StackError(
+            f"{llm.card}: its answers come from Groq, which needs GROQ_API_KEY in the environment "
+            "(export it in this shell, then run `rag up` again; it is passed to the backend only and never stored)"
+        )
     steps: list[Step] = []
     if not facts.crawl_contact and args.profile != "example":
         steps.append(
@@ -206,7 +218,7 @@ def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
         )
     plan = _plan_native if args.mode == "native" else _plan_compose
     steps += plan(state, facts, args, llm)
-    return steps + _record(state, args)
+    return steps + _record(state, args, llm)
 
 
 def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> list[Step]:
@@ -257,22 +269,28 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
         )
     if not facts.index_built:
         steps += _build_index(state, facts, args)
-    body = runtime.derived_model_body(llm, facts.card)
-    have = facts.ollama_derived.get(llm.derived or "", {})
-    # the derived model records its window and sampling, not its base: a base changed since the last up is made again
-    base_changed = bool(state.data.get("first_run_done")) and state.data.get("model") != args.model
-    created = bool(body) and (base_changed or not same_parameters(have, (body or {})["parameters"]))
-    if body and created:
-        steps.append(
-            Step(
-                "request",
-                name="derived-model",
-                text=f"creating the Ollama model {llm.derived} (window {llm.window})",
-                url=f"{llm.ollama_api}/api/create",
-                body=json.dumps(body),
-                timeout_s=300,
+    created = False
+    for body, window in (
+        (runtime.derived_model_body(llm, facts.card), llm.window),
+        (runtime.analysis_model_body(llm, facts.card), llm.analysis_window),
+    ):
+        if body is None:
+            continue
+        have = facts.ollama_derived.get(body["model"], {})
+        # the derived model records its window and sampling, not its base: a changed base is made again
+        base_changed = body["model"] == llm.derived and _base_changed(state, args)
+        if base_changed or not same_parameters(have, body["parameters"]):
+            created = created or body["model"] == llm.derived
+            steps.append(
+                Step(
+                    "request",
+                    name="derived-model" if body["model"] == llm.derived else "analysis-model",
+                    text=f"creating the Ollama model {body['model']} (window {window})",
+                    url=f"{llm.ollama_api}/api/create",
+                    body=json.dumps(body),
+                    timeout_s=300,
+                )
             )
-        )
     env = runtime.backend_env(llm, root=root, secrets=str(state.secrets_dir("backend")), profile=args.profile)
     steps += _service(
         "backend",
@@ -282,10 +300,15 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
         env,
         alive="backend" in facts.alive and not restart,
         ready=backend_up,
+        inherit=("GROQ_API_KEY",) if llm.provider in runtime.REMOTE else (),
     )
     if llm.warms and (not backend_up or created):
         steps.append(_warm(llm))
     return steps
+
+
+def _base_changed(state: State, args: Args) -> bool:
+    return bool(state.data.get("first_run_done")) and state.data.get("model") != args.model
 
 
 def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
@@ -307,7 +330,15 @@ def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
 
 
 def _service(
-    name: str, root: str, rag: str, port: int, env: Mapping[str, str], *, alive: bool, ready: bool
+    name: str,
+    root: str,
+    rag: str,
+    port: int,
+    env: Mapping[str, str],
+    *,
+    alive: bool,
+    ready: bool,
+    inherit: tuple[str, ...] = (),
 ) -> list[Step]:
     """Start a native process unless its pid is alive, then wait until it answers; nothing when it already does."""
     if ready:
@@ -333,7 +364,9 @@ def _service(
             )
             cwd = directory
         text = f"{name}: starting on {runtime.LOOPBACK}:{port}"
-        steps.append(Step("spawn", name=name, text=text, argv=argv, cwd=cwd, env=env, path=pid, log=log))
+        steps.append(
+            Step("spawn", name=name, text=text, argv=argv, cwd=cwd, env=env, path=pid, log=log, inherit=inherit)
+        )
     url = f"http://{runtime.LOOPBACK}:{port}/readyz"
     steps.append(
         Step(
@@ -350,18 +383,12 @@ def _service(
 
 
 def _warm(llm: runtime.Llm) -> Step:
-    body = {
-        "model": llm.answer_model,
-        "messages": [{"role": "user", "content": "Hi"}],
-        "max_tokens": 1,
-        "stream": False,
-    }
     return Step(
         "request",
         name="warm-up",
         text=f"loading the answer model {llm.answer_model} (a first request)",
         url=f"{llm.answer_url}/chat/completions",
-        body=json.dumps(body),
+        body=_warm_body(llm),
         timeout_s=900,
     )
 
@@ -372,18 +399,24 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
         ["compose.vllm.yaml"] if llm.provider == "vllm" else []
     )
     compose = _compose(root, rag, *overlays)
+    # the indexer's overlay names the profile's folder sources as the container sees them (/app/profiles/<profile>/...)
+    overlay = runtime.overlay_text("/app", args.profile, FOLDER_SOURCES.get(args.profile, {})) or "{}\n"
+    env_file = runtime.compose_env_text(
+        llm,
+        token=state.token,
+        roles_dir=str(state.secrets_dir("roles")),
+        profile=args.profile,
+        overlay=f"{rag}/indexer-overlay.yaml",
+    )
     steps = [
-        Step(
-            "write",
-            name="compose-env",
-            path=f"{rag}/compose.env",
-            text=runtime.compose_env_text(llm, token=state.token, roles_dir=str(state.secrets_dir("roles"))),
-        )
+        Step("write", name="indexer-overlay", path=f"{rag}/indexer-overlay.yaml", text=overlay),
+        Step("write", name="compose-env", path=f"{rag}/compose.env", text=env_file),
     ]
     steps += [_download(name, pin, root) for name, pin in PINNED.items() if pin.key not in facts.hf]
     if "backend" in facts.ready and _signature(args) == {k: state.data.get(k) for k in _signature(args)}:
         return [*steps, Step("say", text="the compose stack: already running")]
-    if not facts.compose_images:
+    profile_changed = bool(state.data.get("first_run_done")) and state.data.get("profile") != args.profile
+    if not facts.compose_images or profile_changed:  # the images carry the profile
         steps.append(Step("run", name="build", text="building the images", argv=(*compose, "build"), cwd=root))
     steps += [
         Step(
@@ -413,17 +446,25 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
                 timeout_s=300,
             )
         )
-        steps += [
+        # the container is gone after `down`, its volume is not: the models pulled before are recorded in the state file
+        recorded = frozenset(state.data.get("compose_models", ()))
+        have = facts.compose_ollama_models | recorded
+        pulls = [
             _pull(tag, facts.card.get("download_gb") or 0, None, compose)
             for tag in llm.pulls
-            if not has_model(facts.compose_ollama_models, tag)
+            if not has_model(have, tag)
         ]
+        steps += pulls
+        if pulls:  # recorded at once, so a later failure does not make the next up pull again
+            models = sorted(recorded | set(llm.pulls))
+            text = json.dumps({**state.data, "compose_models": models}, indent=2) + "\n"
+            steps.append(Step("write", name="state-models", path=f"{state.dir}/state.json", text=text))
     if not facts.index_built:
         steps.append(
             Step(
                 "run",
                 name="index-build",
-                text="building the index (indexer build)",
+                text=f"building the index of the {args.profile} profile (indexer build)",
                 argv=(*compose, "--profile", "build", "run", "--rm", "indexer", "build"),
                 cwd=root,
             )
@@ -433,7 +474,37 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
             "run", name="up", text="starting the stack", argv=(*compose, "up", "-d", "--wait"), cwd=root, timeout_s=900
         )
     )
+    if llm.warms:
+        steps.append(_warm_in_compose(llm, compose, root))
     return steps
+
+
+def _warm_body(llm: runtime.Llm) -> str:
+    return json.dumps(
+        {
+            "model": llm.answer_model,
+            "messages": [{"role": "user", "content": "Hi"}],
+            "max_tokens": 1,
+            "stream": False,
+        }
+    )
+
+
+def _warm_in_compose(llm: runtime.Llm, compose: tuple[str, ...], root: str) -> Step:
+    """The model server has no host port: the backend container sends the request over the compose network."""
+    code = (
+        "import urllib.request as u; "
+        f"u.urlopen(u.Request({llm.answer_url + '/chat/completions'!r}, {_warm_body(llm)!r}.encode(), "
+        "{'Content-Type': 'application/json'}), timeout=900).read()"
+    )
+    return Step(
+        "run",
+        name="warm-up",
+        text=f"loading the answer model {llm.answer_model} (a first request)",
+        argv=(*compose, "exec", "-T", "backend", "python", "-c", code),
+        cwd=root,
+        timeout_s=900,
+    )
 
 
 # --- down ----------------------------------------------------------------------------------------------------------------
@@ -446,9 +517,9 @@ class DownFacts:
     pid_files: frozenset[str] = frozenset()  # the native processes that have a pid file
 
 
-def plan_down(state: State, facts: DownFacts, purge: bool = False) -> list[Step]:
+def plan_down(rag: Path, facts: DownFacts, purge: bool = False) -> list[Step]:
     """Stop the native processes (a stale pid file is cleared), then the containers; every step is safe to repeat."""
-    rag = str(state.dir)
+    rag = str(rag)
     steps: list[Step] = []
     for name in ("backend", "reranker", "embedding"):  # the reverse of the start order
         if name in facts.pid_files:
@@ -486,11 +557,13 @@ class System:
         self.sleep: Callable[[float], None] = time.sleep
         self.clock: Callable[[], float] = time.monotonic
 
-    def child_env(self, extra: Mapping[str, str]) -> dict[str, str]:
-        """The environment of a child: ours without the RAG_ variables (the settings loader refuses keys it does not know),
-        plus what the plan sets."""
+    def child_env(self, extra: Mapping[str, str], inherit: tuple[str, ...] = ()) -> dict[str, str]:
+        """The environment of a child: ours without the RAG_ variables (the settings loader refuses keys it does not know) and
+        without the provider key, plus what the plan sets and the variables the step names to inherit."""
         base = {k: v for k, v in self.environ.items() if not k.startswith("RAG_") or k in KEEP_RAG_ENV}
-        return {**base, **extra}
+        for name in KEYS:
+            base.pop(name, None)
+        return {**base, **{k: self.environ[k] for k in inherit if k in self.environ}, **extra}
 
     def run(self, argv: tuple[str, ...], cwd: str, env: Mapping[str, str], timeout_s: float = 0) -> int:
         try:
@@ -502,17 +575,19 @@ class System:
 
     def output(self, argv: tuple[str, ...]) -> str | None:
         try:
-            done = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+            done = subprocess.run(argv, capture_output=True, text=True, timeout=30, env=self.child_env({}))
         except (OSError, subprocess.SubprocessError):
             return None
         return done.stdout if done.returncode == 0 else None
 
-    def popen(self, argv: tuple[str, ...], cwd: str, env: Mapping[str, str], log: IO[bytes]) -> int:
+    def popen(
+        self, argv: tuple[str, ...], cwd: str, env: Mapping[str, str], log: IO[bytes], inherit: tuple[str, ...] = ()
+    ) -> int:
         try:
             process = subprocess.Popen(
                 argv,
                 cwd=cwd or None,
-                env=self.child_env(env),
+                env=self.child_env(env, inherit),
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
@@ -553,8 +628,9 @@ class System:
             return True
         return True
 
-    def command_of(self, pid: int) -> str:
-        return self.output(("ps", "-o", "command=", "-p", str(pid))) or ""
+    def start_time(self, pid: int) -> str:
+        """When the process started, as `ps` prints it; a recycled pid has another start time."""
+        return (self.output(("ps", "-o", "lstart=", "-p", str(pid))) or "").strip()
 
     def signal_group(self, pid: int, sig: int) -> None:
         try:
@@ -564,10 +640,10 @@ class System:
 
 
 def read_pid(path: str) -> tuple[int, str] | None:
-    """(pid, the command's first word) from a pid file; None when it is missing or unreadable."""
+    """(pid, the process's start time) from a pid file; None when it is missing or unreadable."""
     try:
-        pid, command = Path(path).read_text(encoding="utf-8").split("\n")[:2]
-        return int(pid), command
+        pid, started = Path(path).read_text(encoding="utf-8").split("\n")[:2]
+        return int(pid), started
     except (OSError, ValueError):
         return None
 
@@ -604,8 +680,8 @@ def _run(step: Step, system: System, out: Callable[[str], None]) -> None:
 
 def _spawn(step: Step, system: System, out: Callable[[str], None]) -> None:
     with os.fdopen(os.open(step.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab") as log:
-        pid = system.popen(step.argv, step.cwd, step.env, log)
-    state_module.write_private(Path(step.path), f"{pid}\n{Path(step.argv[0]).name}\n")
+        pid = system.popen(step.argv, step.cwd, step.env, log, step.inherit)
+    state_module.write_private(Path(step.path), f"{pid}\n{system.start_time(pid)}\n")
 
 
 def _wait(step: Step, system: System, out: Callable[[str], None]) -> None:
@@ -630,7 +706,8 @@ def _request(step: Step, system: System, out: Callable[[str], None]) -> None:
 
 def _stop(step: Step, system: System, out: Callable[[str], None]) -> None:
     found = read_pid(step.path)
-    if found and system.alive(found[0]) and found[1] in system.command_of(found[0]):
+    # a pid that now has another start time is another process: only the file goes
+    if found and system.alive(found[0]) and found[1] and found[1] == system.start_time(found[0]):
         pid = found[0]
         system.signal_group(pid, signal.SIGTERM)
         deadline = system.clock() + 20
@@ -688,7 +765,10 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
     system = system or System()
     llm = runtime.resolve(card, args.mode, model=args.model, llm_url=args.llm_url)
     pids = {name: found for name in (*SERVICES, "backend") if (found := read_pid(f"{state.dir}/pids/{name}.pid"))}
-    alive = frozenset(name for name, (pid, _) in pids.items() if system.alive(pid))
+    # a pid file of an earlier boot or a recycled pid names another process: the start time must match
+    alive = frozenset(
+        name for name, (pid, started) in pids.items() if system.alive(pid) and started == system.start_time(pid)
+    )
     ports = {**SERVICES, "backend": runtime.PORTS["backend"]}
     ready = frozenset(
         name
@@ -701,9 +781,10 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
         ollama_up = status == 200
         if ollama_up:
             models = parse_tags(system.http("GET", f"{llm.ollama_api}/api/tags", None, 5)[1])
-            if llm.derived and has_model(models, llm.derived):
-                shown = system.http("POST", f"{llm.ollama_api}/api/show", json.dumps({"model": llm.derived}), 10)[1]
-                derived = {llm.derived: parse_parameters(shown)}
+            for name in filter(None, (llm.derived, llm.analysis_derived)):
+                if has_model(models, name):
+                    shown = system.http("POST", f"{llm.ollama_api}/api/show", json.dumps({"model": name}), 10)[1]
+                    derived[name] = parse_parameters(shown)
     cache = hf_cache(system.environ)
     hf = frozenset(
         pin.key
@@ -739,11 +820,12 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
             line.split()[0] for line in (ollama_list or "").splitlines()[1:] if line.split()
         ),
         crawl_contact=bool(system.environ.get("RAG__CRAWL__CONTACT")),
+        groq_key=bool(system.environ.get("GROQ_API_KEY", "").strip()),
     )
 
 
-def gather_down(root: Path, state: State, hardware) -> DownFacts:
-    pid_files = frozenset(p.stem for p in (state.dir / "pids").glob("*.pid"))
+def gather_down(root: Path, rag: Path, hardware) -> DownFacts:
+    pid_files = frozenset(p.stem for p in (rag / "pids").glob("*.pid"))
     return DownFacts(str(root), bool(hardware.docker.ok), pid_files)
 
 

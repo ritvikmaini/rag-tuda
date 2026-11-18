@@ -10,6 +10,7 @@ from rag_tuda import cards
 MODES = ("native", "compose")
 REMOTE = ("groq",)  # providers whose endpoint is not on this machine
 OLLAMA = "ollama"
+SERVICE_URLS = {"ollama": "http://ollama:11434/v1", "vllm": "http://vllm:8000/v1"}  # the compose stack's model servers
 PORTS = {"backend": 8700, "embedding": 8701, "reranker": 8702, "postgres": 55432}
 LOOPBACK = "127.0.0.1"
 PRIVACY = {"HF_HUB_OFFLINE": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1"}
@@ -39,6 +40,9 @@ class Llm:
     answer_url: str  # where the answer endpoint listens
     answer_model: str  # the model name a request to it carries
     ollama_api: str | None  # the Ollama server this tool talks to (native, a card that uses Ollama)
+    analysis_derived: str | None = None  # the Ollama model made for an analysis model other than the answer's
+    analysis_base: str | None = None
+    analysis_window: int = 0
 
     @property
     def warms(self) -> bool:
@@ -57,6 +61,8 @@ def resolve(card: dict, mode: str, *, model: str | None = None, llm_url: str | N
         raise ValueError(
             "--llm-url and --model belong to the native stack: the compose stack serves the card's own model"
         )
+    if provider in REMOTE and not analysis:
+        raise ValueError(f"{name}: the answer provider {provider} is remote: the card needs its own [analysis] block")
     if provider in REMOTE and mode == "compose":
         raise ValueError(f"{name}: the compose stack runs Ollama or vLLM cards; run a hosted card natively")
     if provider == "vllm" and mode == "native" and not llm_url:
@@ -67,6 +73,14 @@ def resolve(card: dict, mode: str, *, model: str | None = None, llm_url: str | N
         pulls.append(analysis["model"])
     derived = f"rag-{name}" if managed else None
     served = derived or (model if llm_url else None)
+    # an analysis model other than the answer's is made again with its own window; one on the answer's model shares its runner
+    own_analysis = bool(
+        analysis
+        and analysis["provider"] == OLLAMA
+        and mode == "native"
+        and not llm_url
+        and analysis["model"] != answer["model"]
+    )
     ollama = answer if provider == OLLAMA else analysis if analysis and analysis["provider"] == OLLAMA else None
     return Llm(
         card=name,
@@ -77,9 +91,14 @@ def resolve(card: dict, mode: str, *, model: str | None = None, llm_url: str | N
         derived=derived,
         base_tag=(model or answer["model"]) if managed else None,
         pulls=tuple(dict.fromkeys(pulls)),
-        answer_url=llm_url or answer["url"],
+        answer_url=llm_url or (SERVICE_URLS.get(provider, answer["url"]) if mode == "compose" else answer["url"]),
         answer_model=served or answer["model"],
         ollama_api=ollama["url"].removesuffix("/v1") if ollama and mode == "native" and not llm_url else None,
+        analysis_derived=f"rag-{name}-analysis" if own_analysis else None,
+        analysis_base=analysis["model"] if own_analysis and analysis else None,
+        analysis_window=min(analysis["context_window"], card["budget"]["window_tokens"])
+        if own_analysis and analysis
+        else 0,
     )
 
 
@@ -99,6 +118,19 @@ def derived_model_body(llm: Llm, card: dict) -> dict | None:
     if llm.derived is None or llm.base_tag is None:
         return None
     return {"model": llm.derived, "from": llm.base_tag, "parameters": parameters(card, llm.window), "stream": False}
+
+
+def analysis_model_body(llm: Llm, card: dict) -> dict | None:
+    """The body for `POST /api/create` of the analysis model: the card's analysis model with the smaller of its own window and
+    the card's request window, or None when the analysis runs on the answer's model or on a server we do not manage."""
+    if llm.analysis_derived is None or llm.analysis_base is None:
+        return None
+    return {
+        "model": llm.analysis_derived,
+        "from": llm.analysis_base,
+        "parameters": parameters(card, llm.analysis_window),
+        "stream": False,
+    }
 
 
 def endpoint(name: str) -> str:
@@ -129,6 +161,8 @@ def backend_env(llm: Llm, *, root: str, secrets: str, profile: str) -> dict[str,
         env["RAG__LLM_URL"] = llm.url
     if llm.served:
         env["RAG__LLM_MODEL"] = llm.served
+    if llm.analysis_derived:
+        env["RAG__LLM_ANALYSIS_MODEL"] = llm.analysis_derived
     return env
 
 
@@ -170,12 +204,17 @@ def overlay_text(root: str, profile: str, folders: dict[str, str]) -> str | None
     return json.dumps({"connectors": connectors}, indent=2) + "\n"
 
 
-def compose_env_text(llm: Llm, *, token: str, roles_dir: str) -> str:
+def compose_env_text(
+    llm: Llm, *, token: str, roles_dir: str, profile: str = "example", overlay: str | None = None
+) -> str:
     """`.rag/compose.env`: what deploy/compose.yaml reads from its env file."""
     values = {
         "RAG__CARD": llm.card,
         "OLLAMA_CONTEXT_LENGTH": str(llm.window),
         "BACKEND_REFRESH_TOKEN": token,
         "RAG_ROLES_DIR": roles_dir,
+        "RAG_PROFILE": profile,
     }
+    if overlay:
+        values["RAG_INDEXER_OVERLAY"] = overlay
     return "".join(f"{key}={value}\n" for key, value in values.items())

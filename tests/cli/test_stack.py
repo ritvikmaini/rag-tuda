@@ -30,10 +30,13 @@ class FakeSystem(stack.System):
         self.ran.append((argv, cwd, self.child_env(env)))
         return self.codes.get(argv[0], 0)
 
-    def popen(self, argv, cwd, env, log):
-        self.popened.append((argv, cwd, self.child_env(env)))
+    def popen(self, argv, cwd, env, log, inherit=()):
+        self.popened.append((argv, cwd, self.child_env(env, inherit)))
         self.live.add(4242)
         return 4242
+
+    def start_time(self, pid):
+        return "Wed 18 Nov 12:00:00 2026"
 
     def http(self, method, url, body, timeout_s):
         self.requests.append((method, url, body))
@@ -69,6 +72,28 @@ def test_a_child_does_not_inherit_rag_variables_the_settings_loader_would_refuse
     assert system.child_env({"RAG__CARD": "c"}) == {"PATH": "/bin", "RAG_DEVICE": "mps", "RAG__CARD": "c"}
 
 
+def test_the_provider_key_reaches_only_the_process_that_names_it():
+    system = stack.System({"PATH": "/bin", "GROQ_API_KEY": "gsk-secret", "OPENAI_API_KEY": "sk-x"})
+    assert "GROQ_API_KEY" not in system.child_env({"A": "1"})
+    assert system.child_env({"A": "1"}, ("GROQ_API_KEY",))["GROQ_API_KEY"] == "gsk-secret"
+    assert "GROQ_API_KEY" not in stack.System({"PATH": "/bin"}).child_env({}, ("GROQ_API_KEY",))  # nothing to inherit
+
+
+def test_a_spawn_hands_its_named_variables_to_the_process_and_a_run_none(tmp_path):
+    current = state.ensure(tmp_path)
+    system = FakeSystem(environ={"GROQ_API_KEY": "gsk-secret"})
+    spawn = stack.Step(
+        "spawn",
+        name="backend",
+        argv=("uv",),
+        path=f"{current.dir}/pids/b.pid",
+        log=f"{current.dir}/logs/b.log",
+        inherit=("GROQ_API_KEY",),
+    )
+    stack.execute([spawn, stack.Step("run", name="x", argv=("uv",))], system, lambda line: None)
+    assert system.popened[0][2]["GROQ_API_KEY"] == "gsk-secret" and "GROQ_API_KEY" not in system.ran[0][2]
+
+
 def test_write_replaces_the_content_only_when_it_differs(tmp_path):
     path = tmp_path / ".rag" / "compose.env"
     step = stack.Step("write", path=str(path), text="A=1\n")
@@ -97,7 +122,7 @@ def test_spawn_writes_the_pid_file_and_the_log_with_private_modes(tmp_path):
     )
     stack.execute([step], system, lambda line: None)
     assert system.popened[0][0] == ("uv", "run") and system.popened[0][2]["A"] == "1"
-    assert (current.dir / "pids" / "backend.pid").read_text() == "4242\nuv\n"
+    assert (current.dir / "pids" / "backend.pid").read_text() == "4242\nWed 18 Nov 12:00:00 2026\n"
     for path in (current.dir / "pids" / "backend.pid", current.dir / "logs" / "backend.log"):
         assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
@@ -199,7 +224,7 @@ def test_gather_reads_the_machine_and_plans_nothing_for_a_settled_one(tmp_path, 
     (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
     live = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf"), "RAG__CRAWL__CONTACT": "me@example.org"})
     for name in ("embedding", "reranker", "backend"):
-        (current.dir / "pids" / f"{name}.pid").write_text("4242\nuv\n")
+        (current.dir / "pids" / f"{name}.pid").write_text("4242\nWed 18 Nov 12:00:00 2026\n")
     live.live.add(4242)
     derived = "rag-s-qwen3-4b-instruct-2507"
     live.answers = {
@@ -220,6 +245,81 @@ def test_gather_reads_the_machine_and_plans_nothing_for_a_settled_one(tmp_path, 
     assert found.alive == found.ready == {"embedding", "reranker", "backend"}
     assert found.index_built and found.postgres and found.crawl_contact
     assert found.ollama_derived[derived]["num_ctx"] == "8000"
+    settled = state.State(
+        current.dir, current.token, current.passwords, {**current.data, **stack._signature(a), "first_run_done": True}
+    )
+    assert [s for s in stack.plan_up(settled, found, a) if s.kind != "say"] == []
+
+
+def test_compose_after_down_plans_no_pull_through_the_real_gather_path(tmp_path, scenario):
+    """The container is gone, `ollama list` fails, and the state file remembers what the volume holds."""
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    a = stack.Args(S4B["name"], "compose")
+    cache = tmp_path / "hf" / "hub"
+    for pin in stack.PINNED.values():
+        snapshot = cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision
+        snapshot.mkdir(parents=True)
+        (snapshot / "config.json").write_text("{}")
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf")}, default=(0, "refused"))
+    system.output = lambda argv: None  # no container, no images, no models
+    before = stack.gather(tmp_path, current, S4B, hardware, a, system)
+    assert before.compose_ollama_models == frozenset()
+    pulls = lambda facts, st: [s.name for s in stack.plan_up(st, facts, a) if s.name.startswith("pull-")]  # noqa: E731
+    assert pulls(before, current) == ["pull-qwen3:4b-instruct-2507-q4_K_M"]  # never pulled: the first up downloads
+    pulled = state.State(
+        current.dir,
+        current.token,
+        current.passwords,
+        {**current.data, "compose_models": ["qwen3:4b-instruct-2507-q4_K_M"]},
+    )
+    assert pulls(before, pulled) == []
+
+
+def test_a_pid_file_of_another_boot_does_not_count_as_alive(tmp_path, scenario):
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    (current.dir / "pids" / "embedding.pid").write_text("4242\nMon  1 Jan 00:00:00 2024\n")
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path)}, default=(0, "refused"))
+    system.output = lambda argv: None
+    system.live.add(4242)  # some process has the pid now; FakeSystem gives it another start time than the file records
+    found = stack.gather(tmp_path, current, S4B, hardware, stack.Args(S4B["name"]), system)
+    assert "embedding" not in found.alive
+
+
+def test_a_settled_hosted_card_plans_nothing_through_gather(tmp_path, scenario):
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    groq = cards.named("l-groq-gpt-oss-120b")
+    a = stack.Args(groq["name"])
+    cache = tmp_path / "hf" / "hub"
+    for pin in stack.PINNED.values():
+        snapshot = cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision
+        snapshot.mkdir(parents=True)
+        (snapshot / "config.json").write_text("{}")
+    (current.dir / "state").mkdir()
+    (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
+    for name in ("embedding", "reranker", "backend"):
+        (current.dir / "pids" / f"{name}.pid").write_text("4242\nWed 18 Nov 12:00:00 2026\n")
+    analysis = "rag-l-groq-gpt-oss-120b-analysis"
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf"), "GROQ_API_KEY": "gsk-test"})
+    system.live.add(4242)
+    system.answers = {
+        "http://127.0.0.1:11434/api/tags": (
+            200,
+            json.dumps({"models": [{"name": "qwen3:4b-instruct-2507-q4_K_M"}, {"name": f"{analysis}:latest"}]}),
+        ),
+        "http://127.0.0.1:11434/api/show": (
+            200,
+            json.dumps({"parameters": "num_ctx 8000\ntemperature 0.1\ntop_p 0.9"}),
+        ),
+    }
+    system.output = lambda argv: "abc\n" if "pgvector" in argv else None
+    found = stack.gather(tmp_path, current, groq, hardware, a, system)
+    assert found.groq_key and found.ollama_derived[analysis]["num_ctx"] == "8000"
     settled = state.State(
         current.dir, current.token, current.passwords, {**current.data, **stack._signature(a), "first_run_done": True}
     )
@@ -313,9 +413,34 @@ def test_up_rejects_an_unknown_card_with_its_name(repo, capsys):
     assert "no-such-card" in capsys.readouterr().err
 
 
+def test_down_never_creates_state_and_says_so(repo, monkeypatch, capsys):
+    monkeypatch.setattr(stack, "System", lambda: FakeSystem())
+    assert cli.main(["down"]) == 0
+    assert "no .rag/ here" in capsys.readouterr().out and not (repo / ".rag").exists()
+
+
+def test_down_wants_the_repository_root_too(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert cli.main(["down"]) == 1
+    assert "root of the repository" in capsys.readouterr().err and not (tmp_path / ".rag").exists()
+
+
+def test_up_refuses_a_hosted_card_without_the_key_and_starts_nothing(repo, monkeypatch, capsys):
+    system = FakeSystem()
+    monkeypatch.setattr(stack, "System", lambda: system)
+    monkeypatch.setattr(
+        stack,
+        "gather",
+        lambda *a, **k: stack.Facts(root=str(repo), card=cards.named("l-groq-gpt-oss-120b"), ollama_up=True),
+    )
+    assert cli.main(["up", "--yes", "--card", "l-groq-gpt-oss-120b"]) == 1
+    assert "GROQ_API_KEY" in capsys.readouterr().err and system.ran == [] and system.popened == []
+
+
 def test_down_through_the_command_is_safe_twice(repo, monkeypatch, capsys):
     system = FakeSystem()
     monkeypatch.setattr(stack, "System", lambda: system)
+    state.ensure(repo)
     assert cli.main(["down"]) == 0 and cli.main(["down"]) == 0
     assert capsys.readouterr().out.count("backend: not running") == 2
 
@@ -363,3 +488,11 @@ def test_the_real_system_runs_commands_and_talks_to_the_loopback(monkeypatch):
     assert system.output(("echo", "hi")) == "hi\n" and system.output(("false",)) is None
     with pytest.raises(stack.StackError, match="cannot be started"):
         system.run(("no-such-command-here",), "", {})
+
+
+@posix
+def test_the_probes_do_not_get_the_provider_key():
+    import os
+
+    system = stack.System({"PATH": os.environ["PATH"], "GROQ_API_KEY": "gsk-secret"})
+    assert "GROQ_API_KEY" not in (system.output(("env",)) or "")

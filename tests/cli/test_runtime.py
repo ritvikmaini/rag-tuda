@@ -201,7 +201,7 @@ def test_the_migrate_environment():
     }
 
 
-def test_compose_env_names_the_card_the_window_the_token_and_the_roles_folder():
+def test_compose_env_names_the_card_the_window_the_token_the_roles_folder_and_the_profile():
     llm = runtime.resolve(M35, "compose")
     text = runtime.compose_env_text(llm, token="tok", roles_dir="/repo/.rag/secrets/roles")
     assert dict(line.split("=", 1) for line in text.splitlines()) == {
@@ -209,4 +209,61 @@ def test_compose_env_names_the_card_the_window_the_token_and_the_roles_folder():
         "OLLAMA_CONTEXT_LENGTH": "16000",
         "BACKEND_REFRESH_TOKEN": "tok",
         "RAG_ROLES_DIR": "/repo/.rag/secrets/roles",
+        "RAG_PROFILE": "example",
     }
+    other = runtime.compose_env_text(llm, token="t", roles_dir="/r", profile="p", overlay="/r/overlay.yaml")
+    assert "RAG_PROFILE=p\n" in other and "RAG_INDEXER_OVERLAY=/r/overlay.yaml\n" in other
+
+
+def test_a_remote_card_without_its_own_analysis_block_is_refused():
+    bare = {k: v for k, v in GROQ.items() if k != "analysis"}
+    with pytest.raises(
+        ValueError, match=r"l-groq-gpt-oss-120b: the answer provider groq is remote.*\[analysis\] block"
+    ):
+        runtime.resolve(bare, "native")
+    assert runtime.resolve(S4B, "native").provider == "ollama"  # a local card needs none
+
+
+def test_an_analysis_model_other_than_the_answers_gets_its_own_derived_model_and_window():
+    llm = runtime.resolve(GROQ, "native")
+    assert (
+        llm.analysis_derived == "rag-l-groq-gpt-oss-120b-analysis"
+        and llm.analysis_base == "qwen3:4b-instruct-2507-q4_K_M"
+    )
+    assert llm.analysis_window == 8000  # min(its 262144, the card's request window 8000)
+    assert runtime.analysis_model_body(llm, GROQ) == {
+        "model": "rag-l-groq-gpt-oss-120b-analysis",
+        "from": "qwen3:4b-instruct-2507-q4_K_M",
+        "parameters": {"num_ctx": 8000, "temperature": 0.1, "top_p": 0.9},
+        "stream": False,
+    }
+    env = runtime.backend_env(llm, root="/r", secrets="/s", profile="example")
+    assert env["RAG__LLM_ANALYSIS_MODEL"] == "rag-l-groq-gpt-oss-120b-analysis" and "RAG__LLM_MODEL" not in env
+    assert "GROQ_API_KEY" not in env  # the key travels in the spawn environment, never in the plan
+    small = {**GROQ, "analysis": {**GROQ["analysis"], "context_window": 4096}}
+    assert runtime.resolve(small, "native").analysis_window == 4096
+
+
+def test_no_analysis_model_is_made_when_it_shares_the_answers_or_is_not_ours():
+    shared = {**S4B, "analysis": S4B["answer"]}
+    assert runtime.resolve(shared, "native").analysis_derived is None
+    assert runtime.resolve(S4B, "native").analysis_derived is None
+    foreign = runtime.resolve(GROQ, "native", llm_url="http://gpu.lan/v1")
+    assert foreign.analysis_derived is None and runtime.analysis_model_body(foreign, GROQ) is None
+
+
+def test_the_compose_warm_up_targets_the_compose_model_server():
+    assert runtime.resolve(S4B, "compose").answer_url == "http://ollama:11434/v1"
+    assert runtime.resolve(XL, "compose").answer_url == "http://vllm:8000/v1"
+    assert runtime.resolve(S4B, "compose").answer_model == "qwen3:4b-instruct-2507-q4_K_M"
+
+
+def test_a_hosted_cards_environment_loads_with_the_services_settings(tmp_path):
+    from assistant_api.settings import load_settings
+
+    for name in ("pgdatabase", "vector_user", "pg_vector_password", "backend_token"):
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    env = runtime.backend_env(runtime.resolve(GROQ, "native"), root=str(ROOT), secrets=str(tmp_path), profile="example")
+    card = load_settings(env).card
+    assert card.answer.provider == "groq" and card.answer.model == "openai/gpt-oss-120b"
+    assert card.analysis_endpoint.model == "rag-l-groq-gpt-oss-120b-analysis"

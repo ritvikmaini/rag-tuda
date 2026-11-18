@@ -38,10 +38,17 @@ def _confirm(steps: list[stack.Step], yes: bool) -> bool:
     return input("Continue? [y/N] ").strip().lower() in ("y", "yes")
 
 
-def _up(args: argparse.Namespace) -> int:
+def _at_root() -> Path | None:
+    """The current folder when it is the repository root (the folder with deploy/compose.yaml)."""
     root = Path.cwd()
-    if not (root / "deploy" / "compose.yaml").is_file():
-        print("run `rag up` from the root of the repository (the folder with deploy/compose.yaml)", file=sys.stderr)
+    if (root / "deploy" / "compose.yaml").is_file():
+        return root
+    print("run this from the root of the repository (the folder with deploy/compose.yaml)", file=sys.stderr)
+    return None
+
+
+def _up(args: argparse.Namespace) -> int:
+    if (root := _at_root()) is None:
         return 1
     hardware = doctor.gather()
     try:
@@ -62,13 +69,16 @@ def _up(args: argparse.Namespace) -> int:
 
 
 def _down(args: argparse.Namespace) -> int:
-    root = Path.cwd()
-    current = state.ensure(root)
-    steps = stack.plan_down(current, stack.gather_down(root, current, doctor.gather()), args.purge)
+    if (root := _at_root()) is None:
+        return 1
+    rag = root / ".rag"
+    if not rag.is_dir():
+        print("no .rag/ here: nothing was started from this folder")
+        return 0
+    steps = stack.plan_down(rag, stack.gather_down(root, rag, doctor.gather()), args.purge)
     if args.purge and not args.yes:
-        if not sys.stdin.isatty() or input(
-            "Delete the crawled content in .rag/crawl and .rag/snapshots? [y/N] "
-        ).strip().lower() not in ("y", "yes"):
+        question = "Delete the crawled content in .rag/crawl and .rag/snapshots? [y/N] "
+        if not sys.stdin.isatty() or input(question).strip().lower() not in ("y", "yes"):
             print("--purge deletes the crawled content: confirm with --yes", file=sys.stderr)
             return 1
     try:

@@ -49,7 +49,9 @@ index when there is none, creates the Ollama model `rag-<card>` with the card's 
 the link. Ollama must be running (`ollama serve`). A model that is already on the machine (the pinned snapshots in the Hugging Face
 cache, the Ollama tag) is not downloaded again; a second `up` changes nothing, and `uv run rag down` stops everything (safe to
 repeat, data stays; `--purge` also deletes `.rag/crawl` and `.rag/snapshots`). On Linux or WSL2, `--mode compose` runs the compose
-files below with the card, its window and the secrets taken from `.rag/` (build, then migrate, then up).
+files below with the card, its window, the profile and the secrets taken from `.rag/` (build, then migrate, then up, then a
+first request to the answer model). A hosted card (`l-groq-...`) needs `GROQ_API_KEY` in the environment of `rag up`; the key goes to
+the backend process only and is never stored.
 
 The stack needs Docker with compose on Linux or WSL2. `deploy/compose.yaml` runs on the CPU with Ollama; add
 `-f deploy/compose.nvidia.yaml` for NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve

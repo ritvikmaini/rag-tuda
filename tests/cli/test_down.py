@@ -35,23 +35,23 @@ def spawn(current, name, argv=("sleep", "60")):
     )
     system = stack.System({})
     stack.execute([step], system, lambda line: None)
-    pid, command = stack.read_pid(step.path)
-    return system, pid, command
+    pid, started = stack.read_pid(step.path)
+    return system, pid, started
 
 
 def down(tmp_path, current, ran, *, docker=True, purge=False):
     system = NoDocker(ran)
-    facts = stack.gather_down(tmp_path, current, type("H", (), {"docker": type("D", (), {"ok": docker})()})())
+    facts = stack.gather_down(tmp_path, current.dir, type("H", (), {"docker": type("D", (), {"ok": docker})()})())
     lines: list[str] = []
-    stack.execute(stack.plan_down(current, facts, purge), system, lines.append)
+    stack.execute(stack.plan_down(current.dir, facts, purge), system, lines.append)
     return lines
 
 
 @posix
 def test_down_stops_a_process_and_clears_its_pid_file(tmp_path):
     current = state.ensure(tmp_path)
-    _, pid, command = spawn(current, "embedding")
-    assert command == "sleep" and stack.System({}).alive(pid)
+    _, pid, started = spawn(current, "embedding")
+    assert started and started == stack.System({}).start_time(pid) and stack.System({}).alive(pid)
     ran: list = []
     lines = down(tmp_path, current, ran)
     assert not stack.System({}).alive(pid)
@@ -77,20 +77,34 @@ def test_a_stale_pid_file_is_cleared(tmp_path):
     current = state.ensure(tmp_path)
     done = subprocess.Popen(["true"])
     done.wait()
-    (current.dir / "pids" / "backend.pid").write_text(f"{done.pid}\nuv\n")
+    (current.dir / "pids" / "backend.pid").write_text(f"{done.pid}\nMon  1 Jan 00:00:00 2024\n")
     lines = down(tmp_path, current, [])
     assert "backend: stopping" in lines and not (current.dir / "pids" / "backend.pid").exists()
 
 
 @posix
 def test_a_reused_pid_is_not_signalled(tmp_path):
-    """The pid file names `uv`, but the process now behind the pid is something else: only the file goes."""
+    """The pid file records another start time than the process now behind the pid has: only the file goes."""
     current = state.ensure(tmp_path)
     other = subprocess.Popen(["sleep", "60"], start_new_session=True)
     try:
-        (current.dir / "pids" / "embedding.pid").write_text(f"{other.pid}\nuv\n")
+        (current.dir / "pids" / "embedding.pid").write_text(f"{other.pid}\nMon  1 Jan 00:00:00 2024\n")
         down(tmp_path, current, [])
         assert other.poll() is None and not (current.dir / "pids" / "embedding.pid").exists()
+    finally:
+        os.killpg(other.pid, signal.SIGKILL)
+        other.wait()
+
+
+@posix
+def test_a_leader_with_uv_in_its_command_line_is_not_taken_for_ours(tmp_path):
+    """The check is the recorded start time, not a word of the command line."""
+    current = state.ensure(tmp_path)
+    other = subprocess.Popen(["sh", "-c", "sleep 60; : uvicorn uvx"], start_new_session=True)
+    try:
+        (current.dir / "pids" / "backend.pid").write_text(f"{other.pid}\nMon  1 Jan 00:00:00 2024\n")
+        down(tmp_path, current, [])
+        assert other.poll() is None
     finally:
         os.killpg(other.pid, signal.SIGKILL)
         other.wait()

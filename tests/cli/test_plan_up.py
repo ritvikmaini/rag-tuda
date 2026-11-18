@@ -111,10 +111,35 @@ def test_up_plan_warms_the_answer_model(tmp_path, current):
     assert body["model"] == DERIVED and body["max_tokens"] == 1 and body["stream"] is False
 
 
-def test_a_hosted_answer_is_not_warmed(tmp_path, current):
-    steps = stack.plan_up(current, facts(tmp_path, GROQ, ollama_up=True), args(GROQ))
+def test_a_hosted_answer_is_not_warmed_and_its_analysis_model_is_made_with_its_own_window(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, GROQ, ollama_up=True, groq_key=True), args(GROQ))
     assert "warm-up" not in [s.name for s in steps]
     assert [s.name for s in steps if s.name == "derived-model"] == []  # no Ollama answer model to derive
+    (create,) = [s for s in steps if s.name == "analysis-model"]
+    assert json.loads(create.body)["model"] == "rag-l-groq-gpt-oss-120b-analysis"
+    assert json.loads(create.body)["parameters"]["num_ctx"] == 8000
+    order = names(steps)
+    assert order.index("request:analysis-model") < order.index("spawn:backend")
+
+
+def test_a_hosted_card_is_refused_without_groq_api_key(tmp_path, current):
+    with pytest.raises(stack.StackError, match=r"GROQ_API_KEY in the environment.*passed to the backend only"):
+        stack.plan_up(current, facts(tmp_path, GROQ, ollama_up=True), args(GROQ))
+
+
+def test_the_key_reaches_the_backend_spawn_only_by_name(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, GROQ, ollama_up=True, groq_key=True), args(GROQ))
+    assert [s.name for s in steps if s.inherit] == ["backend"] and [s for s in steps if s.inherit][0].kind == "spawn"
+    backend = next(s for s in steps if s.kind == "spawn" and s.name == "backend")
+    assert backend.env["RAG__LLM_ANALYSIS_MODEL"] == "rag-l-groq-gpt-oss-120b-analysis"
+    local = stack.plan_up(current, facts(tmp_path, ollama_up=True), args())
+    assert not [s for s in local if s.inherit]
+
+
+def test_a_remote_card_without_an_analysis_block_is_refused_before_anything_is_planned(tmp_path, current):
+    bare = {k: v for k, v in GROQ.items() if k != "analysis"}
+    with pytest.raises(ValueError, match=r"\[analysis\] block"):
+        stack.plan_up(current, facts(tmp_path, bare, ollama_up=True, groq_key=True), args(bare))
 
 
 def test_the_derived_model_carries_the_cards_window_and_is_made_from_its_model(tmp_path, current):
@@ -292,20 +317,55 @@ def test_the_crawl_contact_hint_is_printed_when_a_crawling_profile_has_none(tmp_
 def test_compose_builds_then_migrates_then_ups(tmp_path, current):
     steps = stack.plan_up(current, facts(tmp_path, hf=ALL_HF), args(mode="compose"))
     assert names(steps) == [
+        "write:indexer-overlay",
         "write:compose-env",
         "run:build",
         "run:postgres",
         "run:migrate",
         "run:ollama",
         f"run:pull-{TAG}",
+        "write:state-models",
         "run:index-build",
         "run:up",
+        "run:warm-up",
         "write:state",
     ]
     by_name = {s.name: s for s in steps}
     assert by_name["build"].argv[-1] == "build" and "--profile" in by_name["migrate"].argv
     assert by_name["index-build"].argv[-6:] == ("--profile", "build", "run", "--rm", "indexer", "build")
     assert by_name[f"pull-{TAG}"].argv[-6:] == ("exec", "-T", "ollama", "ollama", "pull", TAG)
+
+
+def test_compose_warms_the_answer_model_from_the_backend_container(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, hf=ALL_HF), args(mode="compose"))
+    warm = next(s for s in steps if s.name == "warm-up")
+    assert warm.argv[-6:-1] == ("exec", "-T", "backend", "python", "-c")
+    code = warm.argv[-1]
+    assert "http://ollama:11434/v1/chat/completions" in code and TAG in code and "max_tokens" in code
+    assert names(steps).index("run:warm-up") > names(steps).index("run:up")
+    compile(code, "warm-up", "exec")  # the one-liner the container runs is valid Python
+
+
+def test_compose_takes_the_profile_from_the_env_file_and_writes_the_indexers_overlay(tmp_path, current):
+    steps = {
+        s.name: s for s in stack.plan_up(current, facts(tmp_path, hf=ALL_HF), args(mode="compose", profile="example"))
+    }
+    env = dict(line.split("=", 1) for line in steps["compose-env"].text.splitlines())
+    assert env["RAG_PROFILE"] == "example" and env["RAG_INDEXER_OVERLAY"] == f"{current.dir}/indexer-overlay.yaml"
+    assert steps["indexer-overlay"].path == env["RAG_INDEXER_OVERLAY"]
+    assert json.loads(steps["indexer-overlay"].text) == {
+        "connectors": {"gesetze": {"dir": "/app/profiles/example/documents"}}
+    }
+    other = {s.name: s for s in stack.plan_up(current, facts(tmp_path, hf=ALL_HF), args(mode="compose", profile="tu"))}
+    assert "RAG_PROFILE=tu" in other["compose-env"].text and json.loads(other["indexer-overlay"].text) == {}
+
+
+def test_compose_builds_again_when_the_profile_changed(tmp_path, current):
+    example = args(mode="compose")
+    images = facts(tmp_path, hf=ALL_HF, compose_images=True)
+    assert "run:build" not in names(stack.plan_up(settle(current, example), images, example))
+    other = args(mode="compose", profile="tu")
+    assert "run:build" in names(stack.plan_up(settle(current, example), images, other))
 
 
 def test_compose_writes_the_card_and_the_window_for_the_env_file(tmp_path, current):
@@ -336,21 +396,34 @@ def test_compose_overlays_follow_the_gpu_and_the_card(tmp_path, current):
 
 def test_compose_up_again_changes_nothing(tmp_path, current):
     a = args(mode="compose")
+    first = stack.plan_up(current, facts(tmp_path, hf=ALL_HF), a)
+    recorded = json.loads(next(s.text for s in first if s.name == "state"))
+    assert recorded["compose_models"] == [TAG]
+    again = state.State(current.dir, current.token, current.passwords, recorded)
     done = facts(tmp_path, hf=ALL_HF, ready=frozenset({"backend"}), compose_images=True, index_built=True)
-    steps = stack.plan_up(settle(current, a), done, a)
-    assert names(steps) == ["write:compose-env"]  # the env file is rewritten only when it differs
+    steps = stack.plan_up(again, done, a)
+    assert [s for s in steps if s.kind not in ("say", "write")] == []
+    assert "state" not in [s.name for s in steps]  # the writes that remain are of files that are the same already
 
 
 def test_compose_skips_what_is_present(tmp_path, current):
     present = facts(tmp_path, hf=ALL_HF, compose_images=True, index_built=True, compose_ollama_models=frozenset({TAG}))
-    assert names(stack.plan_up(current, present, args(mode="compose"))) == [
-        "write:compose-env",
+    assert names(stack.plan_up(current, present, args(mode="compose")))[2:] == [
         "run:postgres",
         "run:migrate",
         "run:ollama",
         "run:up",
+        "run:warm-up",
         "write:state",
     ]
+
+
+def test_compose_does_not_pull_again_after_down_because_the_state_file_remembers(tmp_path, current):
+    a = args(mode="compose")
+    remembered = state.State(current.dir, current.token, current.passwords, {**current.data, "compose_models": [TAG]})
+    gone = facts(tmp_path, hf=ALL_HF, compose_images=True, index_built=True)  # the container is down: no models listed
+    assert not [s for s in stack.plan_up(remembered, gone, a) if s.name.startswith("pull-")]
+    assert [s.name for s in stack.plan_up(current, gone, a) if s.name.startswith("pull-")] == [f"pull-{TAG}"]
 
 
 def test_compose_rejects_what_it_cannot_do(tmp_path, current):
