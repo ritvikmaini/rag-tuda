@@ -91,6 +91,11 @@ servers). `just pre-push` (the part without Docker) runs before every push.
 `just harness example` runs the example profile's leg: the ten law texts of `profiles/example` are indexed and queried through
 the real images.
 
+`just harness tu` runs the TU profile's leg: the crawler reads the fixture mini-site (`packages/rag_testing`, two services of
+the harness network that stand in for the faculty's and the university's hosts) under the profile's own host names, the
+indexer's overlay routing those two hosts to the services, and the questions are asked of the index it builds. Nothing is
+fetched from the internet.
+
 ## Profiles and sources
 
 A profile holds what is specific to one deployment.

@@ -24,7 +24,7 @@ cov_indexer := "73"
 cov_assistant := "88"
 
 # all checks of the gate; db-tests, images and harness need Docker (Colima on the Mac: colima start --cpu 6 --memory 12)
-ci: lint types imports unit cli db-tests contracts model-servers images (harness "example")
+ci: lint types imports unit cli db-tests contracts model-servers images (harness "example") (harness "tu")
 
 # what the pre-push hook runs (no Docker)
 pre-push: lint types imports unit contracts
@@ -126,24 +126,28 @@ db-tests:
     if [ -n "$RAG_CI_TAG" ]; then export RAG_CI_PG_PORT=$(compose port pgvector 5432 | cut -d: -f2); fi
     RUN_DOCKER_TESTS=1 {{uv}} pytest -q tests/pgvector tests/assistant_api/test_migrations.py
 
-# the black-box harness: deploy/compose.ci.yaml with deploy/compose.ci.example.yaml merged in (project rag-ci), the real backend
-# and indexer images, then tests/integration (gated on RAG_CI_PROFILE=example), then teardown. `state init` writes
-# deploy/ci/.generated/ (secrets, tokens). HARNESS_PYTEST_ARGS runs only the named tests; HARNESS_KEEP=1 leaves the stack
+# the black-box harness: deploy/compose.ci.yaml with the profile's deploy/compose.ci.<profile>.yaml merged in (project rag-ci),
+# the real backend and indexer images, then tests/integration (gated on RAG_CI_PROFILE), then teardown. `example` indexes the
+# example profile's law texts; `tu` crawls the fixture mini-site (two services) with the TU profile's hosts routed to them and
+# runs tests/integration/tu and test_index_ids.py. `state init` writes deploy/ci/.generated/ (secrets, tokens; for `tu` also
+# the profile copy the indexer reads). HARNESS_PYTEST_ARGS runs only the named tests; HARNESS_KEEP=1 leaves the stack
 # up for a look (in a linked worktree first `set -a; . deploy/ci/.generated/harness.env; set +a`, for a follow-up pytest too; `docker compose -f deploy/compose.ci.yaml
-# -f deploy/compose.ci.example.yaml down -v` ends it). In a linked worktree: project rag-ci-<id>, ports by Docker (exported to the
+# -f deploy/compose.ci.<profile>.yaml down -v` ends it). In a linked worktree: project rag-ci-<id>, ports by Docker (exported to the
 # tests, written to harness.env). Without HARNESS_PYTEST_ARGS the Docker-gated tests that need the built index run last.
 harness profile="example":
     #!/usr/bin/env bash
     set -euo pipefail
     G=deploy/ci/.generated
-    [ "{{profile}}" = example ] || { echo "unknown profile {{profile}} (example)"; exit 2; }
-    compose() { docker compose -f deploy/compose.ci.yaml -f deploy/compose.ci.example.yaml "$@"; }
+    [ "{{profile}}" = example ] || [ "{{profile}}" = tu ] || { echo "unknown profile {{profile}} (example, tu)"; exit 2; }
+    files="-f deploy/compose.ci.yaml -f deploy/compose.ci.{{profile}}.yaml"
+    compose() { docker compose $files "$@"; }
     export COMPOSE_PROJECT_NAME={{ci_project}}
     if [ -n "$RAG_CI_TAG" ]; then export RAG_CI_PG_PORT= RAG_CI_LLM_PORT= RAG_CI_BACKEND_PORT=; fi
     compose --profile evals --profile build down -v --remove-orphans >/dev/null 2>&1 || true
     if [ "${HARNESS_KEEP:-}" != 1 ]; then trap 'compose --profile evals --profile build down -v --remove-orphans >/dev/null 2>&1 || true' EXIT; fi
     rm -rf "$G" && mkdir -p "$G/data"
     PYTHONPATH=src {{uv}} python -m rag_tuda.state init --root "$G" >/dev/null
+    if [ "{{profile}}" = tu ]; then {{uv}} python -m rag_testing.tu_profile profiles/tu-informatik "$G/tu-profile"; fi
     compose up -d --wait pgvector
     compose build backend indexer
     compose --profile migrate run --rm --no-deps migrate
@@ -158,8 +162,8 @@ harness profile="example":
       done
     fi
     env | grep -E '^(COMPOSE_PROJECT_NAME|RAG_CI_)' > "$G/harness.env"
-    RAG_CI_PROFILE=example {{uv}} pytest -q ${HARNESS_PYTEST_ARGS:-tests/integration}
-    if [ -z "${HARNESS_PYTEST_ARGS:-}" ]; then
+    RAG_CI_COMPOSE_FILES="$files" RAG_CI_PROFILE={{profile}} {{uv}} pytest -q ${HARNESS_PYTEST_ARGS:-tests/integration}
+    if [ -z "${HARNESS_PYTEST_ARGS:-}" ] && [ "{{profile}}" = example ]; then
       # the first uses the image `just images` builds; the last needs the index the leg built
       RUN_DOCKER_TESTS=1 {{uv}} pytest -q tests/repo/test_assistant.py::test_the_assistant_image_installs_exactly_its_locked_set tests/assistant_api/chat/test_turns_store.py
     fi

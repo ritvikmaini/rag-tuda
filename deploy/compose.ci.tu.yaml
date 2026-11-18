@@ -1,0 +1,36 @@
+# The TU profile's leg: merged over compose.ci.yaml by `just harness tu`. The backend and indexer images are built with
+# PROFILE=tu-informatik; the fixture mini-site's two hosts run as services of the harness network, and the indexer's overlay
+# routes the profile's two real hosts to them (deploy/env/ci-tu.yaml), so the crawl keeps the real URLs and fetches nothing
+# from the internet. The indexer reads the profile copy `just harness` writes to deploy/ci/.generated/tu-profile
+# (rag_testing.tu_profile). Every service, port, secret and fake is the base file's.
+services:
+  backend:
+    build: {args: {PROFILE: tu-informatik}}
+    image: rag-ci-backend-tu${RAG_CI_TAG:-}
+  migrate:   # the migration runs the TU backend image
+    image: rag-ci-backend-tu${RAG_CI_TAG:-}
+  indexer:
+    build: {args: {PROFILE: tu-informatik}}
+    image: rag-ci-indexer-tu${RAG_CI_TAG:-}
+    volumes:
+      - ./env/ci-tu.yaml:/app/overlay.yaml:ro
+      - ./ci/.generated/tu-profile:/app/profile:ro
+    depends_on:
+      minisite: {condition: service_healthy}
+      minisite-intern: {condition: service_healthy}
+
+  minisite:   # the faculty host: python -m rag_testing.serve minisite
+    build: {context: .., dockerfile: deploy/fakes/Dockerfile}
+    image: rag-ci-fakes${RAG_CI_TAG:-}
+    networks: [ci]
+    command: ["python", "-m", "rag_testing.serve", "minisite", "--port", "8091",
+              "--origin", "https://www.informatik.tu-darmstadt.de", "--intern-origin", "https://www.intern.tu-darmstadt.de"]
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8091/health', timeout=2)"], interval: 2s, retries: 30}
+
+  minisite-intern:   # the university host that holds the original of the general examination regulation
+    build: {context: .., dockerfile: deploy/fakes/Dockerfile}
+    image: rag-ci-fakes${RAG_CI_TAG:-}
+    networks: [ci]
+    command: ["python", "-m", "rag_testing.serve", "minisite-intern", "--port", "8092",
+              "--origin", "https://www.intern.tu-darmstadt.de", "--intern-origin", "https://www.intern.tu-darmstadt.de"]
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8092/health', timeout=2)"], interval: 2s, retries: 30}

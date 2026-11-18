@@ -24,6 +24,7 @@ COMPOSE_FILES = (
     NATIVE,
     "deploy/compose.ci.yaml",
     "deploy/compose.ci.example.yaml",
+    "deploy/compose.ci.tu.yaml",
 )
 HAS_COMPOSE = (
     shutil.which("docker") is not None

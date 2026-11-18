@@ -229,7 +229,7 @@ def test_a_server_that_does_not_answer_is_unhealthy():
 def test_just_runs_the_model_servers_tests_offline_and_checks_their_locks():
     justfile = text("justfile")
     assert re.search(
-        r'^ci: lint types imports unit cli db-tests contracts model-servers images \(harness "example"\)$',
+        r'^ci: lint types imports unit cli db-tests contracts model-servers images \(harness "example"\) \(harness "tu"\)$',
         justfile,
         re.M,
     )

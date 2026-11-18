@@ -1,0 +1,8 @@
+# The TU leg's overlay for the indexer: ci.yaml's values, and the profile's two hosts routed to the mini-site's services
+# (deploy/compose.ci.tu.yaml). A host without a route is unreachable.
+database: {host: pgvector, port: 5432}
+model_servers: {embedding_url: "http://embedding_service:8001"}
+crawl:
+  routes:
+    www.informatik.tu-darmstadt.de: "http://minisite:8091"
+    www.intern.tu-darmstadt.de: "http://minisite-intern:8092"
