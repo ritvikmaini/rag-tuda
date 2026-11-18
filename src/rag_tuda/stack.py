@@ -1,0 +1,763 @@
+"""`rag up` and `rag down`: what to do (`plan_up`, `plan_down`: pure functions from the state, the facts about the machine and
+the arguments to a list of steps) and the executor that runs the steps.
+
+Native: Postgres alone in Docker on 127.0.0.1:55432 (deploy/compose.native.yaml), then the migrations, the embedding and
+reranker servers, the first index build and the backend as uv processes with pid files and logs, and the Ollama setup of the
+card. Compose: the compose files of deploy/ with the env file `.rag/compose.env`. A step whose work is done is not planned:
+a second `up` plans only lines saying so."""
+
+import json
+import os
+import shutil
+import signal
+import subprocess
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import IO
+
+from rag_tuda import classes, runtime, state as state_module
+from rag_tuda.state import State
+
+PROJECT = "rag-tuda"
+HF_HOST = "huggingface.co"
+OLLAMA_HOST = "registry.ollama.ai"
+KEEP_RAG_ENV = ("RAG_DEVICE",)  # the one RAG_ variable a child inherits; every other is set by the plan
+READY_WAIT_S = {"embedding": 900, "reranker": 900, "backend": 180}
+SERVICES = {"embedding": runtime.PORTS["embedding"], "reranker": runtime.PORTS["reranker"]}
+# the profiles whose folder sources read a folder of the profile (source name -> folder in the profile)
+FOLDER_SOURCES = {"example": {"gesetze": "documents"}}
+HF_ENV = {"HF_HUB_DISABLE_XET": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1"}
+
+
+@dataclass(frozen=True)
+class Pinned:
+    """A Hugging Face model at the revision the profile and the model server's image pin (tests/cli/test_stack.py)."""
+
+    repo: str
+    revision: str
+    env: Mapping[str, str]  # what the model server reads, besides the offline switches
+
+    @property
+    def key(self) -> str:
+        return f"{self.repo}@{self.revision}"
+
+
+PINNED = {
+    "embedding": Pinned(
+        "Snowflake/snowflake-arctic-embed-m-v2.0",
+        "95c2741480856aa9666782eb4afe11959938017f",
+        {
+            "EMBEDDING_MODEL": "Snowflake/snowflake-arctic-embed-m-v2.0",
+            "EMBEDDING_REVISION": "95c2741480856aa9666782eb4afe11959938017f",
+            "EMBEDDING_CODE_REVISION": "95c2741480856aa9666782eb4afe11959938017f",
+            "EMBEDDING_CONFIG_KWARGS": '{"use_memory_efficient_attention": false, "unpad_inputs": false}',
+        },
+    ),
+    "reranker": Pinned(
+        "BAAI/bge-reranker-v2-m3",
+        "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+        {"RERANKER_MODEL": "BAAI/bge-reranker-v2-m3", "RERANKER_REVISION": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"},
+    ),
+}
+MODULES = {"embedding": "embedding_server.main:create_app", "reranker": "reranker_server.main:create_app"}
+
+
+class StackError(Exception):
+    """A step failed, or the plan cannot be made; the message says what to do."""
+
+
+@dataclass(frozen=True)
+class Step:
+    kind: str  # say | write | run | spawn | wait | request | stop | remove
+    name: str = ""
+    text: str = field(default="", repr=False)  # the line to print; for a write the content (it may hold a secret)
+    argv: tuple[str, ...] = ()
+    cwd: str = ""
+    env: Mapping[str, str] = field(default_factory=dict, repr=False)
+    path: str = ""  # write, remove: the target; spawn, wait, stop: the pid file
+    log: str = ""
+    url: str = ""
+    body: str = ""
+    timeout_s: float = 0
+    gb: float = 0  # a download's size, when known
+    host: str = ""  # a download's server: named when it fails
+
+    @property
+    def is_download(self) -> bool:
+        return bool(self.host)
+
+
+@dataclass(frozen=True)
+class Args:
+    card: str
+    mode: str = "native"
+    profile: str = "example"
+    model: str | None = None
+    llm_url: str | None = None
+
+
+@dataclass(frozen=True)
+class Facts:
+    """What the machine looks like; `gather` reads it, `plan_up` only looks."""
+
+    root: str
+    card: dict
+    docker: bool = True
+    nvidia: bool = False
+    ollama_up: bool = False
+    ollama_models: frozenset[str] = frozenset()
+    ollama_derived: Mapping[str, Mapping[str, str]] = field(default_factory=dict)  # name -> parameters it has
+    hf: frozenset[str] = frozenset()  # "repo@revision" snapshots in the Hugging Face cache
+    alive: frozenset[str] = frozenset()  # native processes with a live pid
+    ready: frozenset[str] = frozenset()  # services answering /readyz
+    postgres: bool = False
+    index_built: bool = False
+    compose_images: bool = False
+    compose_ollama_models: frozenset[str] = frozenset()
+    crawl_contact: bool = False
+
+
+def has_model(models: frozenset[str], tag: str) -> bool:
+    return tag in models or (":" not in tag and f"{tag}:latest" in models)
+
+
+def same_parameters(have: Mapping[str, str], want: Mapping[str, object]) -> bool:
+    def equal(a: str, b: object) -> bool:
+        try:
+            return float(a) == float(b)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return a == str(b)
+
+    return all(k in have and equal(have[k], v) for k, v in want.items())
+
+
+def _uv(*args: str) -> tuple[str, ...]:
+    return ("uv", "run", "--frozen", *args)
+
+
+def _compose(root: str, rag: str, *files: str) -> tuple[str, ...]:
+    argv = ["docker", "compose", "-p", PROJECT, "--env-file", f"{rag}/compose.env"]
+    for name in ("compose.yaml", *files):
+        argv += ["-f", f"{root}/deploy/{name}"]
+    return tuple(argv)
+
+
+def _download(name: str, pin: Pinned, root: str) -> Step:
+    gb = next((m.gb for m in classes.FIXED_MODELS if m.name == pin.repo), 0.0)
+    directory = f"{root}/model_servers/{name}"
+    return Step(
+        "run",
+        name=f"download-{name}",
+        text=f"downloading {pin.repo} ({gb:g} GB) from {HF_HOST}",
+        argv=_uv("--project", directory, "huggingface-cli", "download", pin.repo, "--revision", pin.revision),
+        cwd=root,
+        env=HF_ENV,
+        gb=gb,
+        host=HF_HOST,
+    )
+
+
+def _pull(tag: str, gb: float, api: str | None, compose: tuple[str, ...] | None) -> Step:
+    if compose:
+        argv, env = (*compose, "exec", "-T", "ollama", "ollama", "pull", tag), {}
+    else:
+        argv, env = ("ollama", "pull", tag), {"OLLAMA_HOST": api or ""}
+    return Step(
+        "run",
+        name=f"pull-{tag}",
+        text=f"downloading {tag}" + (f" ({gb:g} GB)" if gb else "") + f" from {OLLAMA_HOST}",
+        argv=argv,
+        env=env,
+        gb=gb,
+        host=OLLAMA_HOST,
+    )
+
+
+def _signature(args: Args) -> dict:
+    return {"mode": args.mode, "card": args.card, "profile": args.profile, "model": args.model, "llm_url": args.llm_url}
+
+
+def _record(state: State, args: Args) -> list[Step]:
+    new = {**state.data, **_signature(args), "first_run_done": True}
+    if new == state.data:
+        return []
+    return [Step("write", name="state", path=f"{state.dir}/state.json", text=json.dumps(new, indent=2) + "\n")]
+
+
+def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
+    """The steps that bring the stack up from what the machine looks like; ValueError or StackError when it cannot."""
+    llm = runtime.resolve(facts.card, args.mode, model=args.model, llm_url=args.llm_url)
+    if not facts.docker:
+        raise StackError(
+            "Docker is not running: start Docker Desktop, OrbStack or Colima (`colima start`), then run `rag up` again"
+        )
+    if llm.ollama_api and not facts.ollama_up:
+        raise StackError(
+            f"Ollama is not running at {llm.ollama_api}: start it (the Ollama app, or `ollama serve`), then run `rag up` again"
+        )
+    steps: list[Step] = []
+    if not facts.crawl_contact and args.profile != "example":
+        steps.append(
+            Step("say", text="note: RAG__CRAWL__CONTACT is not set; the crawler's user agent will not carry a contact")
+        )
+    plan = _plan_native if args.mode == "native" else _plan_compose
+    steps += plan(state, facts, args, llm)
+    return steps + _record(state, args)
+
+
+def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> list[Step]:
+    root, rag = facts.root, str(state.dir)
+    steps: list[Step] = [_download(name, pin, root) for name, pin in PINNED.items() if pin.key not in facts.hf]
+    for tag in llm.pulls:
+        if not has_model(facts.ollama_models, tag):
+            # the card states the size of its own answer model only
+            gb = (facts.card.get("download_gb") or 0) if tag == facts.card["answer"]["model"] else 0
+            steps.append(_pull(tag, gb, llm.ollama_api, None))
+    if facts.postgres:
+        steps.append(Step("say", text="postgres: already running"))
+    else:
+        env_file = runtime.compose_env_text(llm, token=state.token, roles_dir=str(state.secrets_dir("roles")))
+        port = runtime.PORTS["postgres"]
+        steps += [
+            Step("write", name="compose-env", path=f"{rag}/compose.env", text=env_file),
+            Step(
+                "run",
+                name="postgres",
+                text=f"postgres: starting on {runtime.LOOPBACK}:{port}",
+                argv=(*_compose(root, rag, "compose.native.yaml"), "up", "-d", "--wait", "pgvector"),
+                cwd=root,
+                timeout_s=300,
+            ),
+        ]
+    for name, port in SERVICES.items():
+        env = {**runtime.PRIVACY, **PINNED[name].env}
+        steps += _service(name, root, rag, port, env, alive=name in facts.alive, ready=name in facts.ready)
+    restart = "backend" in facts.alive and _signature(args) != {k: state.data.get(k) for k in _signature(args)}
+    backend_up = "backend" in facts.ready and not restart
+    if restart:
+        steps.append(
+            Step(
+                "stop", name="backend", text="backend: restarting with the new settings", path=f"{rag}/pids/backend.pid"
+            )
+        )
+    if not backend_up:
+        steps.append(
+            Step(
+                "run",
+                name="migrate",
+                text="migrating the database",
+                argv=_uv("--package", "assistant-api", "python", "-m", "assistant_api.migrate"),
+                cwd=root,
+                env=runtime.migrate_env(str(state.secrets_dir("migrate"))),
+            )
+        )
+    if not facts.index_built:
+        steps += _build_index(state, facts, args)
+    body = runtime.derived_model_body(llm, facts.card)
+    have = facts.ollama_derived.get(llm.derived or "", {})
+    # the derived model records its window and sampling, not its base: a base changed since the last up is made again
+    base_changed = bool(state.data.get("first_run_done")) and state.data.get("model") != args.model
+    created = bool(body) and (base_changed or not same_parameters(have, (body or {})["parameters"]))
+    if body and created:
+        steps.append(
+            Step(
+                "request",
+                name="derived-model",
+                text=f"creating the Ollama model {llm.derived} (window {llm.window})",
+                url=f"{llm.ollama_api}/api/create",
+                body=json.dumps(body),
+                timeout_s=300,
+            )
+        )
+    env = runtime.backend_env(llm, root=root, secrets=str(state.secrets_dir("backend")), profile=args.profile)
+    steps += _service(
+        "backend",
+        root,
+        rag,
+        runtime.PORTS["backend"],
+        env,
+        alive="backend" in facts.alive and not restart,
+        ready=backend_up,
+    )
+    if llm.warms and (not backend_up or created):
+        steps.append(_warm(llm))
+    return steps
+
+
+def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
+    root, rag = facts.root, str(state.dir)
+    steps: list[Step] = []
+    overlay = runtime.overlay_text(root, args.profile, FOLDER_SOURCES.get(args.profile, {}))
+    if overlay:
+        steps.append(Step("write", name="overlay", path=f"{rag}/overlay.yaml", text=overlay))
+    env = runtime.indexer_env(
+        root=root,
+        rag=rag,
+        secrets=str(state.secrets_dir("indexer")),
+        profile=args.profile,
+        overlay=f"{rag}/overlay.yaml" if overlay else None,
+    )
+    argv = _uv("--package", "indexer", "indexer", "build")
+    text = f"building the index of the {args.profile} profile (indexer build)"
+    return [*steps, Step("run", name="index-build", text=text, argv=argv, cwd=root, env=env)]
+
+
+def _service(
+    name: str, root: str, rag: str, port: int, env: Mapping[str, str], *, alive: bool, ready: bool
+) -> list[Step]:
+    """Start a native process unless its pid is alive, then wait until it answers; nothing when it already does."""
+    if ready:
+        return [Step("say", text=f"{name}: already running")]
+    pid, log = f"{rag}/pids/{name}.pid", f"{rag}/logs/{name}.log"
+    steps: list[Step] = []
+    if not alive:
+        if name == "backend":
+            gunicorn = ("gunicorn", "assistant_api.app:create_app()", "-c", "apps/assistant_api/gunicorn_conf.py")
+            argv, cwd = _uv("--package", "assistant-api", *gunicorn), root
+        else:
+            directory = f"{root}/model_servers/{name}"  # the server's package is found next to its project
+            argv = _uv(
+                "--project",
+                directory,
+                "uvicorn",
+                "--factory",
+                MODULES[name],
+                "--host",
+                runtime.LOOPBACK,
+                "--port",
+                str(port),
+            )
+            cwd = directory
+        text = f"{name}: starting on {runtime.LOOPBACK}:{port}"
+        steps.append(Step("spawn", name=name, text=text, argv=argv, cwd=cwd, env=env, path=pid, log=log))
+    url = f"http://{runtime.LOOPBACK}:{port}/readyz"
+    steps.append(
+        Step(
+            "wait",
+            name=name,
+            text=f"{name}: waiting until it is ready",
+            url=url,
+            path=pid,
+            log=log,
+            timeout_s=READY_WAIT_S[name],
+        )
+    )
+    return steps
+
+
+def _warm(llm: runtime.Llm) -> Step:
+    body = {
+        "model": llm.answer_model,
+        "messages": [{"role": "user", "content": "Hi"}],
+        "max_tokens": 1,
+        "stream": False,
+    }
+    return Step(
+        "request",
+        name="warm-up",
+        text=f"loading the answer model {llm.answer_model} (a first request)",
+        url=f"{llm.answer_url}/chat/completions",
+        body=json.dumps(body),
+        timeout_s=900,
+    )
+
+
+def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> list[Step]:
+    root, rag = facts.root, str(state.dir)
+    overlays = (["compose.nvidia.yaml"] if facts.nvidia else []) + (
+        ["compose.vllm.yaml"] if llm.provider == "vllm" else []
+    )
+    compose = _compose(root, rag, *overlays)
+    steps = [
+        Step(
+            "write",
+            name="compose-env",
+            path=f"{rag}/compose.env",
+            text=runtime.compose_env_text(llm, token=state.token, roles_dir=str(state.secrets_dir("roles"))),
+        )
+    ]
+    steps += [_download(name, pin, root) for name, pin in PINNED.items() if pin.key not in facts.hf]
+    if "backend" in facts.ready and _signature(args) == {k: state.data.get(k) for k in _signature(args)}:
+        return [*steps, Step("say", text="the compose stack: already running")]
+    if not facts.compose_images:
+        steps.append(Step("run", name="build", text="building the images", argv=(*compose, "build"), cwd=root))
+    steps += [
+        Step(
+            "run",
+            name="postgres",
+            text="postgres: starting",
+            argv=(*compose, "up", "-d", "--wait", "pgvector"),
+            cwd=root,
+            timeout_s=300,
+        ),
+        Step(
+            "run",
+            name="migrate",
+            text="migrating the database",
+            argv=(*compose, "--profile", "migrate", "run", "--rm", "migrate"),
+            cwd=root,
+        ),
+    ]
+    if llm.provider == "ollama":
+        steps.append(
+            Step(
+                "run",
+                name="ollama",
+                text="ollama: starting",
+                argv=(*compose, "up", "-d", "--wait", "ollama"),
+                cwd=root,
+                timeout_s=300,
+            )
+        )
+        steps += [
+            _pull(tag, facts.card.get("download_gb") or 0, None, compose)
+            for tag in llm.pulls
+            if not has_model(facts.compose_ollama_models, tag)
+        ]
+    if not facts.index_built:
+        steps.append(
+            Step(
+                "run",
+                name="index-build",
+                text="building the index (indexer build)",
+                argv=(*compose, "--profile", "build", "run", "--rm", "indexer", "build"),
+                cwd=root,
+            )
+        )
+    steps.append(
+        Step(
+            "run", name="up", text="starting the stack", argv=(*compose, "up", "-d", "--wait"), cwd=root, timeout_s=900
+        )
+    )
+    return steps
+
+
+# --- down ----------------------------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DownFacts:
+    root: str
+    docker: bool
+    pid_files: frozenset[str] = frozenset()  # the native processes that have a pid file
+
+
+def plan_down(state: State, facts: DownFacts, purge: bool = False) -> list[Step]:
+    """Stop the native processes (a stale pid file is cleared), then the containers; every step is safe to repeat."""
+    rag = str(state.dir)
+    steps: list[Step] = []
+    for name in ("backend", "reranker", "embedding"):  # the reverse of the start order
+        if name in facts.pid_files:
+            steps.append(Step("stop", name=name, text=f"{name}: stopping", path=f"{rag}/pids/{name}.pid"))
+        else:
+            steps.append(Step("say", text=f"{name}: not running"))
+    if facts.docker:
+        steps.append(
+            Step(
+                "run",
+                name="containers",
+                text="stopping the containers",
+                argv=("docker", "compose", "-p", PROJECT, "down", "--remove-orphans"),
+                cwd=facts.root,
+            )
+        )
+    else:
+        steps.append(Step("say", text="Docker is not running: no containers to stop"))
+    if purge:
+        steps += [
+            Step("remove", name=name, text=f"deleting {rag}/{name}", path=f"{rag}/{name}")
+            for name in ("crawl", "snapshots")
+        ]
+    return steps
+
+
+# --- the executor ----------------------------------------------------------------------------------------------------------
+
+
+class System:
+    """The machine as the executor sees it: processes, HTTP on the loopback and the clock. Tests replace the methods."""
+
+    def __init__(self, environ: Mapping[str, str] | None = None) -> None:
+        self.environ = os.environ if environ is None else environ
+        self.sleep: Callable[[float], None] = time.sleep
+        self.clock: Callable[[], float] = time.monotonic
+
+    def child_env(self, extra: Mapping[str, str]) -> dict[str, str]:
+        """The environment of a child: ours without the RAG_ variables (the settings loader refuses keys it does not know),
+        plus what the plan sets."""
+        base = {k: v for k, v in self.environ.items() if not k.startswith("RAG_") or k in KEEP_RAG_ENV}
+        return {**base, **extra}
+
+    def run(self, argv: tuple[str, ...], cwd: str, env: Mapping[str, str], timeout_s: float = 0) -> int:
+        try:
+            return subprocess.run(argv, cwd=cwd or None, env=self.child_env(env), timeout=timeout_s or None).returncode
+        except OSError as exc:
+            raise StackError(f"{argv[0]}: cannot be started ({exc.strerror})") from None
+        except subprocess.TimeoutExpired:
+            raise StackError(f"{' '.join(argv[:3])} ...: no end after {timeout_s:g} s") from None
+
+    def output(self, argv: tuple[str, ...]) -> str | None:
+        try:
+            done = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return done.stdout if done.returncode == 0 else None
+
+    def popen(self, argv: tuple[str, ...], cwd: str, env: Mapping[str, str], log: IO[bytes]) -> int:
+        try:
+            process = subprocess.Popen(
+                argv,
+                cwd=cwd or None,
+                env=self.child_env(env),
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+        except OSError as exc:
+            raise StackError(f"{argv[0]}: cannot be started ({exc.strerror})") from None
+        return process.pid
+
+    def http(self, method: str, url: str, body: str | None, timeout_s: float) -> tuple[int, str]:
+        """(status, text); status 0 when nothing answers. Never through a proxy: every URL here is on the loopback."""
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(
+            url,
+            data=body.encode() if body is not None else None,
+            method=method,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with opener.open(request, timeout=timeout_s) as response:
+                return response.status, response.read(65536).decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:
+            return exc.code, exc.read(4096).decode("utf-8", "replace")
+        except (OSError, ValueError) as exc:
+            return 0, str(exc)
+
+    def alive(self, pid: int) -> bool:
+        try:
+            if os.waitpid(pid, os.WNOHANG)[0]:  # our own child that has ended: reaped
+                return False
+        except ChildProcessError:
+            pass
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    def command_of(self, pid: int) -> str:
+        return self.output(("ps", "-o", "command=", "-p", str(pid))) or ""
+
+    def signal_group(self, pid: int, sig: int) -> None:
+        try:
+            os.killpg(pid, sig)
+        except ProcessLookupError:
+            pass
+
+
+def read_pid(path: str) -> tuple[int, str] | None:
+    """(pid, the command's first word) from a pid file; None when it is missing or unreadable."""
+    try:
+        pid, command = Path(path).read_text(encoding="utf-8").split("\n")[:2]
+        return int(pid), command
+    except (OSError, ValueError):
+        return None
+
+
+def execute(steps: list[Step], system: System, out: Callable[[str], None] = print) -> None:
+    """Runs the steps in order and stops at the first failure with a StackError naming what to do."""
+    for step in steps:
+        if step.text and step.kind != "write":  # a write's text is the file's content, which may hold a secret
+            out(step.text)
+        _STEPS[step.kind](step, system, out)
+
+
+def _say(step: Step, system: System, out: Callable[[str], None]) -> None:
+    return None  # the line was printed already
+
+
+def _write(step: Step, system: System, out: Callable[[str], None]) -> None:
+    path = Path(step.path)
+    if path.is_file() and path.read_text(encoding="utf-8") == step.text:
+        path.chmod(0o600)
+        return
+    state_module.write_private(path, step.text)
+
+
+def _run(step: Step, system: System, out: Callable[[str], None]) -> None:
+    code = system.run(step.argv, step.cwd, step.env, step.timeout_s)
+    if code != 0 and step.is_download:
+        raise StackError(
+            f"{step.name}: the download from {step.host} failed (exit {code}); the network may block {step.host}"
+        )
+    if code != 0:
+        raise StackError(f"{step.name}: failed (exit {code}): {' '.join(step.argv[:4])} ...")
+
+
+def _spawn(step: Step, system: System, out: Callable[[str], None]) -> None:
+    with os.fdopen(os.open(step.log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab") as log:
+        pid = system.popen(step.argv, step.cwd, step.env, log)
+    state_module.write_private(Path(step.path), f"{pid}\n{Path(step.argv[0]).name}\n")
+
+
+def _wait(step: Step, system: System, out: Callable[[str], None]) -> None:
+    deadline = system.clock() + step.timeout_s
+    while True:
+        if (system.http("GET", step.url, None, 3)[0]) == 200:
+            return
+        if (found := read_pid(step.path)) and not system.alive(found[0]):
+            raise StackError(f"{step.name} stopped while starting; see {step.log}")
+        if system.clock() > deadline:
+            raise StackError(f"{step.name} was not ready after {step.timeout_s:g} s; see {step.log}")
+        system.sleep(1)
+
+
+def _request(step: Step, system: System, out: Callable[[str], None]) -> None:
+    status, text = system.http("POST", step.url, step.body, step.timeout_s)
+    if 200 <= status < 300:
+        return
+    where = f" (is {step.host} reachable?)" if step.host else ""
+    raise StackError(f"{step.name}: {step.url} answered {status or 'nothing'}{where}: {text[:200]}")
+
+
+def _stop(step: Step, system: System, out: Callable[[str], None]) -> None:
+    found = read_pid(step.path)
+    if found and system.alive(found[0]) and found[1] in system.command_of(found[0]):
+        pid = found[0]
+        system.signal_group(pid, signal.SIGTERM)
+        deadline = system.clock() + 20
+        while system.alive(pid) and system.clock() < deadline:
+            system.sleep(0.2)
+        if system.alive(pid):
+            system.signal_group(pid, signal.SIGKILL)
+    Path(step.path).unlink(missing_ok=True)
+
+
+def _remove(step: Step, system: System, out: Callable[[str], None]) -> None:
+    shutil.rmtree(step.path, ignore_errors=True)
+
+
+_STEPS: dict[str, Callable[[Step, System, Callable[[str], None]], None]] = {
+    "say": _say,
+    "write": _write,
+    "run": _run,
+    "spawn": _spawn,
+    "wait": _wait,
+    "request": _request,
+    "stop": _stop,
+    "remove": _remove,
+}
+
+
+# --- the facts --------------------------------------------------------------------------------------------------------------
+
+
+def hf_cache(environ: Mapping[str, str]) -> Path:
+    """The Hugging Face hub cache: HF_HUB_CACHE, else HF_HOME/hub, else ~/.cache/huggingface/hub."""
+    if cache := environ.get("HF_HUB_CACHE"):
+        return Path(cache)
+    return Path(environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub"
+
+
+def parse_tags(text: str) -> frozenset[str]:
+    try:
+        return frozenset(m["name"] for m in json.loads(text)["models"])
+    except (ValueError, KeyError, TypeError):
+        return frozenset()
+
+
+def parse_parameters(text: str) -> dict[str, str]:
+    """`parameters` of /api/show: one `name value` pair per line."""
+    try:
+        lines = json.loads(text)["parameters"].splitlines()
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return {}
+    return {parts[0]: parts[1] for line in lines if len(parts := line.split(None, 1)) == 2}
+
+
+def gather(root: Path, state: State, card: dict, hardware, args: Args, system: System | None = None) -> Facts:
+    """Reads the machine for `plan_up`: processes, containers, Ollama, the Hugging Face cache and the index."""
+    system = system or System()
+    llm = runtime.resolve(card, args.mode, model=args.model, llm_url=args.llm_url)
+    pids = {name: found for name in (*SERVICES, "backend") if (found := read_pid(f"{state.dir}/pids/{name}.pid"))}
+    alive = frozenset(name for name, (pid, _) in pids.items() if system.alive(pid))
+    ports = {**SERVICES, "backend": runtime.PORTS["backend"]}
+    ready = frozenset(
+        name
+        for name, port in ports.items()
+        if system.http("GET", f"http://{runtime.LOOPBACK}:{port}/readyz", None, 2)[0] == 200
+    )
+    ollama_up, models, derived = False, frozenset[str](), {}
+    if llm.ollama_api:
+        status, text = system.http("GET", f"{llm.ollama_api}/api/version", None, 2)
+        ollama_up = status == 200
+        if ollama_up:
+            models = parse_tags(system.http("GET", f"{llm.ollama_api}/api/tags", None, 5)[1])
+            if llm.derived and has_model(models, llm.derived):
+                shown = system.http("POST", f"{llm.ollama_api}/api/show", json.dumps({"model": llm.derived}), 10)[1]
+                derived = {llm.derived: parse_parameters(shown)}
+    cache = hf_cache(system.environ)
+    hf = frozenset(
+        pin.key
+        for pin in PINNED.values()
+        if (snapshot := cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision).is_dir()
+        and any(snapshot.iterdir())
+    )
+    compose = ("docker", "compose", "-p", PROJECT)
+    running = system.output((*compose, "ps", "--status", "running", "-q", "pgvector")) if hardware.docker.ok else None
+    images = system.output(("docker", "images", "--format", "{{.Repository}}")) if hardware.docker.ok else None
+    names = set((images or "").split())
+    ollama_list = (
+        system.output((*compose, "exec", "-T", "ollama", "ollama", "list"))
+        if args.mode == "compose" and hardware.docker.ok
+        else None
+    )
+    index = state.dir / "state" if args.mode == "native" else root / "data" / "vector_database_contents"
+    return Facts(
+        root=str(root),
+        card=card,
+        docker=hardware.docker.ok,
+        nvidia=bool(hardware.nvidia),
+        ollama_up=ollama_up,
+        ollama_models=models,
+        ollama_derived=derived,
+        hf=hf,
+        alive=alive,
+        ready=ready,
+        postgres=bool(running and running.strip()),
+        index_built=(index / "corpus_build_stats.json").is_file(),
+        compose_images={f"{PROJECT}-backend", f"{PROJECT}-embedding_service", f"{PROJECT}-reranker_service"} <= names,
+        compose_ollama_models=frozenset(
+            line.split()[0] for line in (ollama_list or "").splitlines()[1:] if line.split()
+        ),
+        crawl_contact=bool(system.environ.get("RAG__CRAWL__CONTACT")),
+    )
+
+
+def gather_down(root: Path, state: State, hardware) -> DownFacts:
+    pid_files = frozenset(p.stem for p in (state.dir / "pids").glob("*.pid"))
+    return DownFacts(str(root), bool(hardware.docker.ok), pid_files)
+
+
+def confirm_text(steps: list[Step]) -> str | None:
+    """The downloads of a plan, one per line, with the total; None when there are none."""
+    downloads = [s for s in steps if s.is_download]
+    if not downloads:
+        return None
+    lines = [f"  {s.text}" for s in downloads]
+    total = sum(s.gb for s in downloads)
+    return "\n".join(
+        [
+            "This will download:",
+            *lines,
+            f"  total about {total:g} GB (sizes the cards state; the model servers' first start also installs their Python environments)",
+        ]
+    )

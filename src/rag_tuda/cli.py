@@ -7,7 +7,7 @@ import secrets
 import sys
 from pathlib import Path
 
-from rag_tuda import ask, doctor, classes, sources
+from rag_tuda import ask, cards, classes, doctor, runtime, sources, stack, state
 
 DEFAULT_URL = "http://127.0.0.1:8700"
 
@@ -22,6 +22,61 @@ def _doctor(args: argparse.Namespace) -> int:
         return 1
     print(text)
     return 1 if doctor.problems(facts) else 0
+
+
+def _confirm(steps: list[stack.Step], yes: bool) -> bool:
+    """The downloads of a plan are listed once and need a yes (--yes, or an answer at the terminal)."""
+    text = stack.confirm_text(steps)
+    if text is None:
+        return True
+    print(text)
+    if yes:
+        return True
+    if not sys.stdin.isatty():
+        print("downloads need your yes: run `rag up --yes`", file=sys.stderr)
+        return False
+    return input("Continue? [y/N] ").strip().lower() in ("y", "yes")
+
+
+def _up(args: argparse.Namespace) -> int:
+    root = Path.cwd()
+    if not (root / "deploy" / "compose.yaml").is_file():
+        print("run `rag up` from the root of the repository (the folder with deploy/compose.yaml)", file=sys.stderr)
+        return 1
+    hardware = doctor.gather()
+    try:
+        card, warning = cards.choose(args.card, args.model, hardware)
+        if warning:
+            print(f"warning: {warning}", file=sys.stderr)
+        current = state.ensure(root)
+        up = stack.Args(card["name"], args.mode, args.profile, args.model, args.llm_url)
+        steps = stack.plan_up(current, stack.gather(root, current, card, hardware, up), up)
+        if not _confirm(steps, args.yes):
+            return 1
+        stack.execute(steps, stack.System())
+    except (ValueError, stack.StackError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"ready: {state.page_url(current)}")
+    return 0
+
+
+def _down(args: argparse.Namespace) -> int:
+    root = Path.cwd()
+    current = state.ensure(root)
+    steps = stack.plan_down(current, stack.gather_down(root, current, doctor.gather()), args.purge)
+    if args.purge and not args.yes:
+        if not sys.stdin.isatty() or input(
+            "Delete the crawled content in .rag/crawl and .rag/snapshots? [y/N] "
+        ).strip().lower() not in ("y", "yes"):
+            print("--purge deletes the crawled content: confirm with --yes", file=sys.stderr)
+            return 1
+    try:
+        stack.execute(steps, stack.System())
+    except stack.StackError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
 
 
 def _ask(args: argparse.Namespace) -> int:
@@ -67,6 +122,20 @@ def main(argv: list[str] | None = None) -> int:
     d = sub.add_parser("doctor", help="check this machine and pick a class")
     d.add_argument("--json", action="store_true", help="print the result as JSON")
     d.set_defaults(run=_doctor)
+    u = sub.add_parser("up", help="bring the stack up (a second run changes nothing)")
+    u.add_argument("--card", help="the model card (default: the card of the class this machine fits)")
+    u.add_argument("--model", help="a model for the answers: the Ollama model the card's derived model is made from")
+    u.add_argument("--llm-url", help="an OpenAI-compatible server you run; the stack does not manage it")
+    u.add_argument("--profile", default="example", help="the profile to index and answer from (default %(default)s)")
+    u.add_argument("--mode", choices=runtime.MODES, default="native", help="native (Mac) or compose (Linux, WSL2)")
+    u.add_argument("--yes", action="store_true", help="confirm the model downloads")
+    u.set_defaults(run=_up)
+    w = sub.add_parser("down", help="stop the stack (safe to repeat; data stays)")
+    w.add_argument(
+        "--purge", action="store_true", help="also delete the crawled content in .rag/crawl and .rag/snapshots"
+    )
+    w.add_argument("--yes", action="store_true", help="confirm --purge")
+    w.set_defaults(run=_down)
     a = sub.add_parser("ask", help="ask one question and stream the cited answer")
     a.add_argument("question")
     a.add_argument("--json", action="store_true", help="print the stream's frames, one JSON object per line")
