@@ -30,7 +30,6 @@ from pydantic import BaseModel
 logger = logging.getLogger("reranker_server")
 
 COMMIT = re.compile(r"[0-9a-f]{40}")
-MAX_LENGTH = 512  # tokens per (query, passage) pair; parent sections of up to 2,000 characters are cut there
 READY_DIFFERENCE = 1e-3  # the reference pair's score may differ by at most this
 REFERENCE = Path(__file__).with_name("reference.json")
 
@@ -73,12 +72,23 @@ def stop_self(grace_s: float = FATAL_GRACE_S) -> None:
     os.kill(os.getpid(), signal.SIGTERM)
 
 
+def positive_int(env: Mapping[str, str], name: str, default: int) -> int:
+    """env[name] as an integer of at least 1; unset or empty: the default."""
+    if not env.get(name):
+        return default
+    value = int(env[name])
+    if value < 1:
+        raise ValueError(name + " is not a positive integer")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     model: str
     revision: str
     predict_batch_size: int = 32  # CrossEncoder.predict's default
     wait_s: float = 20.0  # a request waiting for the GPU job gives up after this (the assistant's timeout is 15 s)
+    max_length: int = 1024  # tokens per (query, passage) pair; a parent section is ~500-700 tokens
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
@@ -92,6 +102,7 @@ class Settings:
             env["RERANKER_REVISION"],
             int(env.get("RERANKER_PREDICT_BATCH_SIZE", "32")),
             float(env.get("MULTI_QUERY_WAIT_S", "20")),
+            positive_int(env, "MAX_LENGTH", 1024),
         )
 
 
@@ -118,8 +129,9 @@ def length_sorted_predict(predict, pairs, batch_size):
 
 
 def load_model(settings: Settings) -> Loaded:
-    """The CrossEncoder from its pinned snapshot (a missing snapshot fails the start), 512 tokens per pair, fp16 on CUDA and MPS,
-    fp32 on the CPU (a failed conversion keeps fp32 and says so), converted on the CPU before the move. No remote code."""
+    """The CrossEncoder from its pinned snapshot (a missing snapshot fails the start), max_length tokens per pair, fp16 on
+    CUDA and MPS, fp32 on the CPU (a failed conversion keeps fp32 and says so), converted on the CPU before the move. No
+    remote code."""
     import torch
     from huggingface_hub import snapshot_download
     from sentence_transformers import CrossEncoder
@@ -129,7 +141,7 @@ def load_model(settings: Settings) -> Loaded:
     logger.info("Loading reranking model: %s at %s", settings.model, settings.revision)
     path = snapshot_download(settings.model, revision=settings.revision, local_files_only=True)
     # on the CPU: s-t 4 would move the fp32 weights to the GPU in __init__, where the card has no room for them
-    model = CrossEncoder(path, max_length=MAX_LENGTH, device="cpu")
+    model = CrossEncoder(path, max_length=settings.max_length, device="cpu")
     if device != "cpu":
         try:
             model.model = model.model.half()  # fp16 halves the GPU memory (~2 GB vs ~3.5 GB for bge-reranker-v2-m3)
@@ -267,7 +279,7 @@ def create_app(
         return {
             "model": current.model,
             "revision": current.revision,
-            "max_length": MAX_LENGTH,
+            "max_length": current.max_length,
             "dtype": app.state.loaded.dtype,
             "device": app.state.loaded.device,
         }

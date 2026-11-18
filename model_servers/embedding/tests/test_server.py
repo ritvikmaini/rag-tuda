@@ -34,7 +34,7 @@ def fake_loaded(embed=None, calls=None):
             calls.append(list(texts))
         return [vector(t) for t in texts]
 
-    return main.Loaded(embed or default, 4, "float16", "cuda", lambda: None)
+    return main.Loaded(embed or default, 4, "float16", "cuda", lambda: None, 512)
 
 
 def reference_file(tmp_path, texts=("query: eins", "zwei drei"), vectors=None, revision=REV):
@@ -68,6 +68,10 @@ ENV = {
 def test_settings_come_from_the_environment():
     assert main.Settings.from_env(ENV) == SETTINGS
     assert main.Settings.from_env({**ENV, "EMBED_RELEASE_AFTER_TEXTS": "8"}).release_after_texts == 8
+    assert (SETTINGS.max_seq_length, SETTINGS.dimensions) == (1024, None)  # the defaults
+    sized = main.Settings.from_env({**ENV, "MAX_SEQ_LENGTH": "256", "DIMENSIONS": "1024"})
+    assert (sized.max_seq_length, sized.dimensions) == (256, 1024)
+    assert main.Settings.from_env({**ENV, "MAX_SEQ_LENGTH": "", "DIMENSIONS": ""}) == SETTINGS
 
 
 @pytest.mark.parametrize(
@@ -77,6 +81,8 @@ def test_settings_come_from_the_environment():
         ({"EMBEDDING_REVISION": "main"}, "EMBEDDING_REVISION is not a 40-character commit hash"),
         ({"EMBEDDING_CODE_REVISION": "A" * 40}, "EMBEDDING_CODE_REVISION is not a 40-character commit hash"),
         ({"EMBEDDING_CONFIG_KWARGS": "[]"}, "EMBEDDING_CONFIG_KWARGS is not a JSON object"),
+        ({"MAX_SEQ_LENGTH": "0"}, "MAX_SEQ_LENGTH is not a positive integer"),
+        ({"DIMENSIONS": "-8"}, "DIMENSIONS is not a positive integer"),
     ],
 )
 def test_settings_refuse_a_missing_or_unpinned_value(change, message):
@@ -90,7 +96,7 @@ def no_device_override(monkeypatch):
     monkeypatch.delenv("RAG_DEVICE", raising=False)
 
 
-def fake_libraries(monkeypatch, cuda, half_fails=False, mps=False):
+def fake_libraries(monkeypatch, cuda, half_fails=False, mps=False, model_max_length=8192):
     calls = {}
 
     class Param:
@@ -98,7 +104,7 @@ def fake_libraries(monkeypatch, cuda, half_fails=False, mps=False):
             self.dtype = dtype
 
     class Client:
-        max_seq_length = 8192
+        max_seq_length = model_max_length
         dtype = "torch.float32"
 
         def half(self):
@@ -119,7 +125,7 @@ def fake_libraries(monkeypatch, cuda, half_fails=False, mps=False):
             self._client = Client()
 
         def embed_documents(self, texts):
-            return [[0.0] * 768 for _ in texts]
+            return [[3.0, 4.0] + [0.0] * 766 for _ in texts]
 
     def snapshot_download(repo_id, revision, local_files_only):
         calls["snapshot"] = (repo_id, revision, local_files_only)
@@ -151,10 +157,30 @@ def test_the_model_loads_from_its_pinned_snapshot_with_the_pinned_remote_code(mo
     assert (loaded.dimension, loaded.dtype, loaded.device) == (768, "float16", "cuda")
 
 
-def test_the_input_length_is_capped_at_512(monkeypatch):
+def test_the_input_length_is_the_setting_and_never_above_the_models_own(monkeypatch):
     fake_libraries(monkeypatch, cuda=True)
-    loaded = main.load_model(SETTINGS)
-    assert loaded.embed.__self__._client.max_seq_length == 512  # arctic's 8192 capped
+    assert main.load_model(SETTINGS).embed.__self__._client.max_seq_length == 1024  # the model's 8192 capped
+    assert (
+        main.load_model(dataclasses.replace(SETTINGS, max_seq_length=256)).embed.__self__._client.max_seq_length == 256
+    )
+    fake_libraries(monkeypatch, cuda=True, model_max_length=512)
+    assert main.load_model(SETTINGS).embed.__self__._client.max_seq_length == 512  # the model's own limit holds
+
+
+def test_mrl_truncates_and_renormalises():
+    assert main.truncate_and_renormalise([[3.0, 4.0, 12.0], [0.0, 2.0, 5.0]], 2) == [[0.6, 0.8], [0.0, 1.0]]
+    assert main.truncate_and_renormalise([[0.0, 0.0, 1.0]], 2) == [[0.0, 0.0]]  # no division by zero
+
+
+def test_the_dimensions_setting_cuts_the_models_vectors_and_reports_the_size(monkeypatch):
+    fake_libraries(monkeypatch, cuda=True)
+    whole = main.load_model(SETTINGS)
+    assert whole.dimension == 768 and whole.embed(["x"]) == [[3.0, 4.0] + [0.0] * 766]  # untouched without the setting
+    cut = main.load_model(dataclasses.replace(SETTINGS, dimensions=2))
+    assert cut.dimension == 2 and cut.embed(["x", "y"]) == [[0.6, 0.8], [0.6, 0.8]]
+    assert main.load_model(dataclasses.replace(SETTINGS, dimensions=768)).dimension == 768
+    with pytest.raises(ValueError, match="DIMENSIONS=1024 is above the model's 768 dimensions"):
+        main.load_model(dataclasses.replace(SETTINGS, dimensions=1024))
 
 
 def test_a_failed_fp16_conversion_keeps_fp32(monkeypatch):
@@ -189,6 +215,12 @@ def test_not_ready_when_a_vector_moved(tmp_path):
         assert r.status_code == 503 and r.json()["status"] == "not ready" and r.json()["lowest_cosine"] < 0.9999
 
 
+def test_not_ready_when_the_vectors_have_another_size_than_the_reference(tmp_path):
+    with client(tmp_path, vectors=[[1.0, 2.0], [3.0, 4.0]]) as c:
+        r = c.get("/readyz")
+        assert r.status_code == 503 and "number of dimensions" in r.json()["detail"]
+
+
 def test_not_ready_when_the_reference_belongs_to_another_revision(tmp_path):
     with client(tmp_path, revision="c" * 40) as c:
         r = c.get("/readyz")
@@ -217,6 +249,18 @@ def test_info_names_the_model_its_revisions_and_shape(tmp_path):
             "device": "cuda",
             "max_seq_length": 512,
         }
+
+
+def test_info_reports_the_length_in_force_and_the_cut_dimension(tmp_path, monkeypatch):
+    for model_limit, setting, served in ((8192, 256, 256), (512, 1024, 512)):  # the model's own limit caps the setting
+        fake_libraries(monkeypatch, cuda=True, model_max_length=model_limit)
+        settings = dataclasses.replace(SETTINGS, max_seq_length=setting, dimensions=2)
+        app = main.create_app(settings, load=main.load_model, reference_path=reference_file(tmp_path))
+        with TestClient(
+            app
+        ) as c:  # not ready (the fake model's vectors are not the reference), /info answers all the same
+            info = c.get("/info").json()
+        assert (info["max_seq_length"], info["dimension"]) == (served, 2)
 
 
 def test_liveness_on_healthz_and_no_docs(tmp_path):
@@ -254,7 +298,7 @@ def test_the_start_up_check_reads_the_reference_of_the_device_class(tmp_path):
         encoding="utf-8",
     )
     for device, status in (("cuda", 200), ("mps", 503)):
-        loaded = main.Loaded(fake_loaded().embed, 4, "float16", device, lambda: None)
+        loaded = main.Loaded(fake_loaded().embed, 4, "float16", device, lambda: None, 512)
         app = main.create_app(SETTINGS, load=lambda s: loaded, reference_path=tmp_path / "reference.json")
         with TestClient(app) as c:
             assert c.get("/readyz").status_code == status
@@ -433,7 +477,7 @@ def test_the_model_embeds_through_embed_documents_which_turns_newlines_into_spac
 def test_the_worker_releases_cached_memory_at_the_configured_threshold(tmp_path):
     released = []
     base = fake_loaded()
-    loaded = main.Loaded(base.embed, 4, "float16", "cuda", empty_cache=lambda: released.append(True))
+    loaded = main.Loaded(base.embed, 4, "float16", "cuda", lambda: released.append(True), 512)
     app = main.create_app(
         dataclasses.replace(SETTINGS, release_after_texts=3),
         load=lambda s: loaded,

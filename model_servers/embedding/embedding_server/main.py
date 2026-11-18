@@ -1,13 +1,14 @@
 """The embedding server.
 
 POST /embed {"texts": [str]} -> {"embeddings": [[float]]} in input order, through a bounded queue and one batch worker (503
-when the queue stays full for 5 s, 504 after 60 s); GET /info (model, revisions, dimension, dtype, max_seq_length), /readyz
-(the start-up reference check, against reference.<device>.json when it exists, else reference.json), /healthz,
-/metrics (queue gauges). The settings come from the environment the Dockerfile sets; the model loads in the lifespan from its pinned snapshot in the Hugging Face cache,
-never from the network; nothing happens at import. A torch.AcceleratorError (the CUDA context is gone) answers 500, turns
-/readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it. The device is RAG_DEVICE
-(cuda, mps or cpu; unset: the first available in that order), and a device that is not available stops the start.
-Run: uvicorn --factory embedding_server.main:create_app"""
+when the queue stays full for 5 s, 504 after 60 s); GET /info (model, revisions, dimension, dtype, device, max_seq_length),
+/readyz (the start-up reference check, against reference.<device>.json when it exists, else reference.json), /healthz,
+/metrics (queue gauges). The settings come from the environment the Dockerfile sets (MAX_SEQ_LENGTH tokens per text;
+DIMENSIONS to cut the vectors to a smaller size and renormalise them); the model loads in the lifespan from its pinned
+snapshot in the Hugging Face cache, never from the network; nothing happens at import. The device is RAG_DEVICE (cuda, mps or
+cpu; unset: the first available in that order), and a device that is not available stops the start. A torch.AcceleratorError
+(the CUDA context is gone) answers 500, turns /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S);
+Docker restarts it. Run: uvicorn --factory embedding_server.main:create_app"""
 
 import asyncio
 import json
@@ -31,7 +32,6 @@ from pydantic import BaseModel
 logger = logging.getLogger("embedding_server")
 
 COMMIT = re.compile(r"[0-9a-f]{40}")
-MAX_SEQ_LENGTH = 512  # children stay below 512 tokens; the model was evaluated at 512 (arctic allows 8192)
 MAX_QUEUE_SIZE = 500  # pending requests before /embed answers 503
 MAX_BATCH_SIZE = 32  # requests per batch
 BATCH_TIMEOUT = 0.05  # seconds to collect a batch
@@ -79,6 +79,16 @@ def stop_self(grace_s: float = FATAL_GRACE_S) -> None:
     os.kill(os.getpid(), signal.SIGTERM)
 
 
+def positive_int(env: Mapping[str, str], name: str, default: int | None) -> int | None:
+    """env[name] as an integer of at least 1; unset or empty: the default."""
+    if not env.get(name):
+        return default
+    value = int(env[name])
+    if value < 1:
+        raise ValueError(name + " is not a positive integer")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     model: str
@@ -86,6 +96,10 @@ class Settings:
     code_revision: str
     config_kwargs: dict[str, Any]
     release_after_texts: int = 64  # an index build's batches hand cached GPU memory back; an answer embeds 1-6 queries
+    max_seq_length: int = (
+        1024  # tokens per text, never above the model's own limit (a parent section is ~500-700 tokens)
+    )
+    dimensions: int | None = None  # None: the model's own; smaller: the vectors are cut to it and renormalised (MRL)
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Settings":
@@ -105,6 +119,8 @@ class Settings:
             env["EMBEDDING_CODE_REVISION"],
             config_kwargs,
             int(env.get("EMBED_RELEASE_AFTER_TEXTS", "64")),
+            positive_int(env, "MAX_SEQ_LENGTH", 1024),
+            positive_int(env, "DIMENSIONS", None),
         )
 
 
@@ -115,6 +131,7 @@ class Loaded:
     dtype: str
     device: str
     empty_cache: Callable[[], None]
+    max_seq_length: int  # the limit in force: the setting, or the model's own when that is lower
 
 
 def model_kwargs(settings: Settings, device: str) -> dict[str, Any]:
@@ -145,8 +162,9 @@ def release_cached_memory(n_texts: int, device: str, empty_cache: Callable[[], N
 
 def load_model(settings: Settings) -> Loaded:
     """The model from its pinned snapshot (a missing snapshot fails the start), through langchain-huggingface
-    (its embed_documents turns newlines into spaces), max_seq_length 512, fp16 on CUDA and MPS, fp32 on the CPU (a failed
-    conversion keeps fp32 and says so)."""
+    (its embed_documents turns newlines into spaces), max_seq_length from the settings (never above the model's own), fp16
+    on CUDA and MPS, fp32 on the CPU (a failed conversion keeps fp32 and says so). A dimensions setting below the model's
+    cuts the vectors to it and renormalises them."""
     import torch
     from huggingface_hub import snapshot_download
     from langchain_huggingface import HuggingFaceEmbeddings
@@ -160,7 +178,7 @@ def load_model(settings: Settings) -> Loaded:
     path = snapshot_download(settings.model, revision=settings.revision, local_files_only=True)
     embeddings = HuggingFaceEmbeddings(model_name=path, model_kwargs=model_kwargs(settings, device))
     model = embeddings._client
-    model.max_seq_length = min(model.max_seq_length or MAX_SEQ_LENGTH, MAX_SEQ_LENGTH)
+    model.max_seq_length = min(model.max_seq_length or settings.max_seq_length, settings.max_seq_length)
     if device != "cpu":
         try:
             model.half()
@@ -169,9 +187,28 @@ def load_model(settings: Settings) -> Loaded:
             logger.warning("fp16 conversion failed, embedding model stays fp32: %s", e)
     logger.info("Embedding model loaded successfully.")
     dtype = str(next(model.parameters()).dtype).removeprefix("torch.")
-    return Loaded(
-        embeddings.embed_documents, model.get_sentence_embedding_dimension(), dtype, device, torch.cuda.empty_cache
-    )
+    native = model.get_sentence_embedding_dimension()
+    dimension = settings.dimensions or native
+    if dimension > native:
+        raise ValueError("DIMENSIONS=%d is above the model's %d dimensions" % (dimension, native))
+    embed = embeddings.embed_documents
+    if dimension < native:
+        logger.info("Truncating the vectors from %d to %d dimensions and renormalising", native, dimension)
+
+        def embed(texts: list[str]) -> list[list[float]]:
+            return truncate_and_renormalise(embeddings.embed_documents(texts), dimension)
+
+    return Loaded(embed, dimension, dtype, device, torch.cuda.empty_cache, model.max_seq_length)
+
+
+def truncate_and_renormalise(vectors: list[list[float]], dimensions: int) -> list[list[float]]:
+    """Matryoshka truncation: the first `dimensions` components of each vector, scaled back to unit length."""
+    out = []
+    for vector in vectors:
+        head = vector[:dimensions]
+        norm = math.sqrt(sum(x * x for x in head)) or 1.0
+        out.append([x / norm for x in head])
+    return out
 
 
 def cosine(a: list[float], b: list[float]) -> float:
@@ -200,6 +237,8 @@ def reference_check(loaded: Loaded, settings: Settings, reference: Mapping[str, 
             "ready": False,
             "detail": "%d vectors for %d reference texts" % (len(vectors), len(reference["vectors"])),
         }
+    if any(len(a) != len(b) for a, b in zip(vectors, reference["vectors"])):
+        return {"ready": False, "detail": "the vectors and the reference differ in their number of dimensions"}
     lowest = min(cosine(a, b) for a, b in zip(vectors, reference["vectors"]))
     return {"ready": lowest >= READY_COSINE, "texts": len(vectors), "lowest_cosine": lowest}
 
@@ -324,7 +363,7 @@ def create_app(
             "dimension": loaded.dimension,
             "dtype": loaded.dtype,
             "device": loaded.device,
-            "max_seq_length": MAX_SEQ_LENGTH,
+            "max_seq_length": loaded.max_seq_length,
         }
 
     @app.get("/readyz")

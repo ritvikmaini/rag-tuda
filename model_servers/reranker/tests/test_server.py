@@ -3,6 +3,7 @@ sentence-transformers), length-sorted scoring, the rerank endpoint, one GPU job 
 start-up reference pair, the routes, the fatal CUDA exit and the device choice. No GPU and no model."""
 
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -64,6 +65,11 @@ def client(tmp_path, settings=SETTINGS, fake=None, **reference):
 def test_settings_come_from_the_environment():
     env = {"RERANKER_MODEL": SETTINGS.model, "RERANKER_REVISION": REV}
     assert main.Settings.from_env(env) == SETTINGS
+    assert SETTINGS.max_length == 1024  # the default
+    assert main.Settings.from_env({**env, "MAX_LENGTH": "512"}).max_length == 512
+    assert main.Settings.from_env({**env, "MAX_LENGTH": ""}) == SETTINGS
+    with pytest.raises(ValueError, match="MAX_LENGTH is not a positive integer"):
+        main.Settings.from_env({**env, "MAX_LENGTH": "0"})
     assert main.Settings.from_env(
         {**env, "RERANKER_PREDICT_BATCH_SIZE": "8", "MULTI_QUERY_WAIT_S": "1.5"}
     ) == main.Settings(SETTINGS.model, REV, 8, 1.5)
@@ -122,13 +128,20 @@ def fake_libraries(monkeypatch, cuda, half_fails=False, mps=False):
     return calls
 
 
-def test_the_model_loads_from_its_pinned_snapshot_at_512_tokens_in_fp16(monkeypatch):
+def test_the_model_loads_from_its_pinned_snapshot_at_the_set_length_in_fp16(monkeypatch):
     calls = fake_libraries(monkeypatch, cuda=True)
     model = main.load_model(SETTINGS)
     assert calls["snapshot"] == (SETTINGS.model, REV, True)
-    assert calls["cross_encoder"] == ("/hf/hub/snapshots/" + REV, 512, "cpu")  # s-t 4 would put fp32 weights on the GPU
+    assert calls["cross_encoder"] == (
+        "/hf/hub/snapshots/" + REV,
+        1024,
+        "cpu",
+    )  # s-t 4 would put fp32 weights on the GPU
     assert calls["to"] == [("cuda", "torch.float16")]  # the GPU only ever holds the fp16 weights
     assert (model.dtype, model.device) == ("float16", "cuda")
+    calls = fake_libraries(monkeypatch, cuda=True)
+    main.load_model(dataclasses.replace(SETTINGS, max_length=512))
+    assert calls["cross_encoder"][1] == 512
 
 
 def test_a_failed_fp16_conversion_keeps_fp32_and_the_cpu_stays_fp32(monkeypatch):
@@ -295,10 +308,12 @@ def test_info_liveness_and_the_routes_that_are_gone(tmp_path):
         assert c.get("/info").json() == {
             "model": SETTINGS.model,
             "revision": REV,
-            "max_length": 512,
+            "max_length": 1024,
             "dtype": "float16",
             "device": "cuda",
         }
+    with client(tmp_path, settings=dataclasses.replace(SETTINGS, max_length=256)) as c:
+        assert c.get("/info").json()["max_length"] == 256
         assert c.get("/healthz").json() == {"status": "ok"}
         assert c.get("/health").status_code == 404
         gone = [c.post("/rerank", json={"query": "q", "documents": ["x"]}).status_code, c.get("/metrics").status_code]
