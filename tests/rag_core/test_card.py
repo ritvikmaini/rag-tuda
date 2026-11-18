@@ -7,7 +7,14 @@ import pytest
 
 from rag_core.domain.language import strip_foreign
 from rag_core.settings import SettingsError
-from rag_core.settings.card import Card, effective_window, load_card, with_local_model, with_local_url
+from rag_core.settings.card import (
+    Card,
+    effective_window,
+    load_card,
+    with_local_analysis_model,
+    with_local_model,
+    with_local_url,
+)
 from rag_core.settings.profile import Generation
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -197,6 +204,19 @@ def test_llm_model_renames_the_local_endpoints_on_the_answer_model_only() -> Non
     groq = {"provider": "groq", "url": "https://api.groq.com/openai/v1", "model": "test:4b", "context_window": 131072}
     remote = card("L", answer=groq, analysis={**LOCAL, "context_window": 32768})
     assert with_local_model(remote, "rag-test") == remote  # a remote answer has no local model to rename
+
+
+def test_llm_analysis_model_renames_the_own_local_analysis_endpoint_only() -> None:
+    own = card(analysis={**LOCAL, "model": "analysis:1b", "context_window": 32768})
+    renamed = with_local_analysis_model(own, "rag-test-analysis")
+    assert renamed.analysis_endpoint.model == "rag-test-analysis" and renamed.answer.model == "test:4b"
+    assert with_local_analysis_model(card(), "rag-x") == card()  # no analysis block: the answer's endpoint serves it
+    groq = {"provider": "groq", "url": "https://api.groq.com/openai/v1", "model": "g/120b", "context_window": 131072}
+    hosted = {**LOCAL, "provider": "groq", "url": "https://api.groq.com/openai/v1", "context_window": 8192}
+    remote = card("L", answer=groq, analysis=hosted)
+    assert with_local_analysis_model(remote, "rag-x") == remote
+    with pytest.raises(SettingsError, match="RAG__LLM_ANALYSIS_MODEL"):
+        with_local_analysis_model(own, "")
 
 
 def test_llm_model_must_not_be_empty() -> None:

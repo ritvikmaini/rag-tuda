@@ -14,7 +14,14 @@ from pydantic import BaseModel, ConfigDict
 from rag_core.domain.source_meta import SourceLabels
 from rag_core.services.prompts import PromptText, load_profile_prompts
 from rag_core.settings import OverlaySection, SettingsError, load, load_profile
-from rag_core.settings.card import DEFAULT_CARDS_DIR, Card, load_card, with_local_model, with_local_url
+from rag_core.settings.card import (
+    DEFAULT_CARDS_DIR,
+    Card,
+    load_card,
+    with_local_analysis_model,
+    with_local_model,
+    with_local_url,
+)
 from rag_core.settings.profile import Guard, Profile
 from rag_core.settings.sections import Compute, DatabaseSection, Http, ModelServersSection, Server, Timeouts, Tracing
 
@@ -107,7 +114,7 @@ class AssistantSettings:
 def _card(environ: Mapping[str, str]) -> Card:
     """The model card: RAG__CARD names a shipped card (in RAG_CARDS_DIR, the image's /app/cards), RAG__CARD_FILE a card file.
     RAG__LLM_URL, when set, replaces the url of the card's local endpoints and RAG__LLM_MODEL the model of those that serve its
-    answer model."""
+    answer model and RAG__LLM_ANALYSIS_MODEL the model of its own local analysis endpoint."""
     name, file = environ.get("RAG__CARD"), environ.get("RAG__CARD_FILE")
     if bool(name) == bool(file):
         raise SettingsError("RAG__CARD or RAG__CARD_FILE: exactly one names the model card (environment)")
@@ -116,6 +123,8 @@ def _card(environ: Mapping[str, str]) -> Card:
         card = with_local_url(card, url)
     if model := environ.get("RAG__LLM_MODEL"):
         card = with_local_model(card, model)
+    if model := environ.get("RAG__LLM_ANALYSIS_MODEL"):
+        card = with_local_analysis_model(card, model)
     return card
 
 

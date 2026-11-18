@@ -239,6 +239,18 @@ def with_local_model(card: Card, model: str) -> Card:
     return card.model_copy(update={"answer": swap(answer), "analysis": card.analysis and swap(card.analysis)})
 
 
+def with_local_analysis_model(card: Card, model: str) -> Card:
+    """The card with model as the model of its own local analysis endpoint (the command line names the derived model it makes
+    for an analysis model other than the answer's); a card without an analysis block, or with a remote one, is returned as it is."""
+    analysis = card.analysis
+    if analysis is None or analysis.provider in REMOTE_PROVIDERS:
+        return card
+    try:
+        return card.model_copy(update={"analysis": Endpoint.model_validate({**analysis.model_dump(), "model": model})})
+    except ValidationError:
+        raise SettingsError("RAG__LLM_ANALYSIS_MODEL: expected a model name (environment)") from None
+
+
 def load_card(name_or_path: str | Path, cards_dir: str | Path = DEFAULT_CARDS_DIR) -> Card:
     """The card named name_or_path (a file in cards_dir), or the file at that path when it is a Path or ends in .toml; an
     unreadable file or an invalid key raises SettingsError naming the file and the key, never a value."""

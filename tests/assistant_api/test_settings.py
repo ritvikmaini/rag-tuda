@@ -251,6 +251,15 @@ def test_llm_model_renames_the_cards_local_model(secrets: Path) -> None:
     assert (both.card.answer.model, both.card.answer.url) == ("rag-ci", "http://ollama:11434/v1")
 
 
+def test_llm_analysis_model_renames_the_cards_own_analysis_model(secrets: Path) -> None:
+    cards = ROOT / "models" / "cards"
+    env = environment(RAG__CARD_FILE="<unset>", RAG__CARD="l-groq-gpt-oss-120b", RAG_CARDS_DIR=str(cards))
+    base = load_settings(env, secrets_dir=secrets).card
+    moved = load_settings({**env, "RAG__LLM_ANALYSIS_MODEL": "rag-l-analysis"}, secrets_dir=secrets).card
+    assert base.analysis_endpoint.model == "qwen3:4b-instruct-2507-q4_K_M"
+    assert (moved.analysis_endpoint.model, moved.answer.model) == ("rag-l-analysis", base.answer.model)
+
+
 def test_exactly_one_card_is_named(secrets: Path) -> None:
     with pytest.raises(SettingsError, match="RAG__CARD"):
         load_settings(environment(RAG__CARD_FILE="<unset>"), secrets_dir=secrets)

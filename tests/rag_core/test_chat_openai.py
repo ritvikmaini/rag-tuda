@@ -33,7 +33,7 @@ from rag_core.adapters.chat_openai import (
 from rag_core.domain.query_analysis import analysis_schema
 from rag_core.services.analysis import analyse
 from rag_core.services.prompts import PromptService, load_profile_prompts
-from rag_core.settings import load_profile
+from rag_core.settings import SettingsError, load_profile
 from rag_core.settings.profile import Profile
 
 PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
@@ -121,6 +121,7 @@ async def calls(build) -> list:
 
 def test_the_request_bodies_carry_the_model_the_cap_and_the_sampling_options(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
     common = {
         "model": MODEL,
@@ -145,6 +146,7 @@ def test_the_request_bodies_carry_the_model_the_cap_and_the_sampling_options(mon
 
 def test_extras_only_for_accepting_providers(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     assert extra_body("vllm", "off", EXTRAS) == {**EXTRAS, "chat_template_kwargs": {"enable_thinking": False}}
     assert extra_body("ollama", "off", EXTRAS) == {"reasoning_effort": "none"}
     assert extra_body("groq", "low", EXTRAS) == {"reasoning_effort": "low"}
@@ -185,6 +187,7 @@ def test_the_reasoning_level_maps_to_the_providers_switch(provider: str, level: 
 
 def test_the_construction_no_longer_warns(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         new(0.1, [])
@@ -193,6 +196,7 @@ def test_the_construction_no_longer_warns(monkeypatch) -> None:
 
 def test_the_analysis_model_sends_its_bound_cap_and_returns_the_text(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     bodies: list = []
     reply = asyncio.run(ChatOpenAIModel(new(0, bodies), max_tokens=400).complete([("system", "s"), ("user", "q")]))
     assert reply == "{}"
@@ -202,6 +206,7 @@ def test_the_analysis_model_sends_its_bound_cap_and_returns_the_text(monkeypatch
 
 def test_a_reasoning_only_chunk_reaches_the_stream_with_no_text_and_the_usage_is_reported(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     deltas = (
         {"role": "assistant", "content": None, "reasoning_content": "denke nach"},
         {"content": "Antwort"},
@@ -280,6 +285,7 @@ def rate_limited(first_retry_after: str | None, calls: list) -> ChatOpenAI:
 
 def test_429_waits_retry_after_within_deadline(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
 
     def run(retry_after: str | None, *, deadline_in: float = 60.0, max_wait_s: float = 60.0, retries: int = 1) -> Any:
         calls: list = []
@@ -345,6 +351,7 @@ def analysis_model(
 
 def test_analysis_inside_astream_events_is_not_streamed(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     bodies: list = []
     model = analysis_model(bodies)
 
@@ -364,6 +371,7 @@ def test_analysis_inside_astream_events_is_not_streamed(monkeypatch) -> None:
 
 def test_the_cards_structured_output_picks_the_response_format_and_strict_is_groq_only(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     schema = analysis_schema(None)
     assert response_format("json_object", "ollama", schema) == {"type": "json_object"}
     assert response_format("prompt", "ollama", schema) is None
@@ -402,6 +410,7 @@ def test_the_analysis_schema_is_in_the_strict_shape() -> None:
 
 def test_invalid_json_falls_back_to_plain_question(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     question = "Wann hat das Bürgerbüro am Samstag geöffnet?"
     truncated = '{"standalone_question": "Wann hat das Bürgerbüro am Sams'  # cut off at the token cap
     profile = load_profile(Profile, PROFILE)
@@ -420,3 +429,50 @@ def test_invalid_json_falls_back_to_plain_question(monkeypatch) -> None:
     )
     assert analysis.parsed == "fallback" and analysis.standalone_question == question
     assert analysis.intent == "lookup" and queries == [question]
+
+
+def test_groq_authenticates_with_groq_api_key_and_a_local_server_with_openai_api_key(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    seen: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["authorization"])
+        return httpx.Response(
+            200,
+            json={
+                "id": "c",
+                "object": "chat.completion",
+                "created": 1,
+                "model": MODEL,
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "{}"}, "finish_reason": "stop"}],
+            },
+        )
+
+    for provider in ("groq", "ollama"):
+        llm = build_chat_openai(
+            provider=provider,
+            model=MODEL,
+            base_url=URL,
+            temperature=0.1,
+            top_p=0.1,
+            max_tokens=10,
+            read_timeout_s=5.0,
+            reasoning="off",
+            extras={},
+            max_retries=0,
+            stream=False,
+            http_async_client=httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+        )
+        asyncio.run(llm.ainvoke(MESSAGES))
+    assert seen == ["Bearer gsk-test", "Bearer not-needed"]
+
+
+def test_groq_without_its_key_is_a_clear_error_that_never_shows_a_key(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-other")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with pytest.raises(SettingsError, match="GROQ_API_KEY: not set in the environment"):
+        new(0.1, [], provider="groq")
+    monkeypatch.setenv("GROQ_API_KEY", "  ")
+    with pytest.raises(SettingsError, match="GROQ_API_KEY"):
+        new(0.1, [], provider="groq")

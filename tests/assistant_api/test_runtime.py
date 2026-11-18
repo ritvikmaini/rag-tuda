@@ -239,6 +239,7 @@ def runtime_of(card: str, tmp_path, monkeypatch):
     from assistant_api.settings import load_settings
 
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")  # a hosted card's answer client
     settings = load_settings({**ENV, "RAG__CARD": card}, secrets_dir=tmp_path)
     return settings, rt_module.build_runtime(settings, None, False)
 
@@ -261,6 +262,13 @@ def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) ->
     assert rt.analysis.runnable.bound.disable_streaming and not rt.answer_llm.disable_streaming
     assert rt.analysis.runnable.kwargs["response_format"]["json_schema"]["strict"] is False
     assert rt.analysis.runnable.kwargs["max_tokens"] == settings.profile.generation.analysis_max_tokens == 800
+
+
+def test_a_hosted_card_sends_groqs_key_to_groq_only(tmp_path, monkeypatch) -> None:
+    _, rt = runtime_of("l-groq-gpt-oss-120b", tmp_path, monkeypatch)
+    assert rt.answer_llm.openai_api_key is not None and rt.answer_llm.openai_api_key.get_secret_value() == "gsk-test"
+    analysis_key = rt.analysis.runnable.bound.openai_api_key
+    assert analysis_key is not None and analysis_key.get_secret_value() == "not-needed"  # the local analysis model
 
 
 def test_timeouts_come_from_card(tmp_path, monkeypatch) -> None:

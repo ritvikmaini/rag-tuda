@@ -8,6 +8,7 @@ apart by the exception class and the HTTP status, never by the message: a rate l
 deadline, a timeout and an over-long prompt are named for the caller."""
 
 import asyncio
+import os
 import time
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -16,6 +17,8 @@ import httpx
 import openai
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+
+from rag_core.settings import SettingsError
 
 # the providers whose servers take the options outside the OpenAI chat API
 EXTRAS_PROVIDERS = frozenset({"vllm"})
@@ -48,6 +51,18 @@ def extra_body(provider: str, reasoning: str, extras: Mapping[str, Any]) -> dict
     return {**body, **option}
 
 
+def api_key(provider: str) -> str | None:
+    """The key for the provider: Groq's comes from GROQ_API_KEY in the environment, never from a file; None leaves the client's
+    own OPENAI_API_KEY in place (the local servers ignore it)."""
+    if provider != "groq":
+        return None
+    if not (key := os.environ.get("GROQ_API_KEY", "").strip()):
+        raise SettingsError(
+            "GROQ_API_KEY: not set in the environment (the card's answer comes from Groq) (environment)"
+        )
+    return key
+
+
 def build_chat_openai(
     *,
     provider: str,
@@ -64,10 +79,12 @@ def build_chat_openai(
     http_async_client: httpx.AsyncClient | None = None,
 ) -> ChatOpenAI:
     """Bounded waits on the model server: up to read_timeout_s between two streamed chunks (the guard bounds the whole
-    answer). A streamed answer asks for the usage of the call. The API key comes from OPENAI_API_KEY (compose: not-needed).
+    answer). A streamed answer asks for the usage of the call. The API key of a local server comes from OPENAI_API_KEY (compose: not-needed), Groq's from GROQ_API_KEY.
     The options travel as extra_body (langchain-openai 1.x warns when they come through model_kwargs; the body is the same).
     stream=False fixes the client to one non-streamed request: astream_events around the graph cannot turn its calls into streams."""
     options: dict[str, Any] = {"base_url": base_url, "max_tokens": int(max_tokens)}
+    if key := api_key(provider):
+        options["api_key"] = key
     if body := extra_body(provider, reasoning, extras):
         options["extra_body"] = body
     if http_async_client is not None:
