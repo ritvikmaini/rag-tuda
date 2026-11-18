@@ -22,6 +22,7 @@ members = [
     "indexer",
     "rag-core",
     "rag-testing",
+    "rag-tuda",
 ]
 constraints = [
     { name = "accelerate", specifier = "==1.13.0" },
@@ -206,20 +207,6 @@ overrides = [{ name = "pillow", specifier = "<14" }]
 build-constraints = [
     { name = "setuptools", specifier = "==84.0.0" },
     { name = "wheel", specifier = "==0.48.0" },
-]
-
-[manifest.dependency-groups]
-dev = [
-    { name = "basedpyright" },
-    { name = "deptry" },
-    { name = "hypothesis", specifier = "==6.168.5" },
-    { name = "import-linter" },
-    { name = "jsonschema" },
-    { name = "psycopg", extras = ["binary"] },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
 ]
 
 [[package]]
@@ -2434,6 +2421,41 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.136,<0.137" },
     { name = "httpx", specifier = ">=0.28,<0.29" },
     { name = "uvicorn", specifier = ">=0.44,<0.45" },
+]
+
+[[package]]
+name = "rag-tuda"
+version = "0.1.0"
+source = { editable = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "basedpyright" },
+    { name = "deptry" },
+    { name = "hypothesis" },
+    { name = "import-linter" },
+    { name = "jsonschema" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "basedpyright" },
+    { name = "deptry" },
+    { name = "hypothesis", specifier = "==6.168.5" },
+    { name = "import-linter" },
+    { name = "jsonschema" },
+    { name = "psycopg", extras = ["binary"] },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [[package]]

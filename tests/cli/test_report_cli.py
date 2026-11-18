@@ -1,5 +1,4 @@
 import json
-import os
 import re
 import subprocess
 import sys
@@ -147,9 +146,8 @@ def test_gather_on_this_machine_writes_nothing():
 
 
 def test_console_script_runs():
-    env = {**os.environ, "PYTHONPATH": str(Path(cli.__file__).parents[1])}  # the root package is not installed
-    out = subprocess.run(
-        [sys.executable, "-m", "rag_tuda.cli", "doctor", "--json"], capture_output=True, text=True, env=env
-    )
+    script = Path(sys.executable).parent / "rag"  # installed from the root project's [project.scripts]
+    assert script.is_file()
+    out = subprocess.run([script, "doctor", "--json"], capture_output=True, text=True)
     assert out.returncode in (0, 1)
     json.loads(out.stdout)

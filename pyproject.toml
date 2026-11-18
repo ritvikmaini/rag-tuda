@@ -1,5 +1,22 @@
-# uv workspace root: a virtual root, no package of its own. The members are the packages and the apps; the model
-# servers are their own projects.
+# The root project is the command line (`rag`): standard library only, so `uv run rag doctor` installs nothing heavy. It is also
+# the uv workspace root; the members are the packages and the apps, the model servers are their own projects.
+
+[project]
+name = "rag-tuda"
+version = "0.1.0"
+description = "A local assistant with cited answers over the TU Darmstadt Informatik pages"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+rag = "rag_tuda.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "rag_tuda"
 
 [tool.uv.workspace]
 members = ["packages/rag_core", "packages/rag_testing", "packages/example_profile", "apps/evals", "apps/indexer", "apps/assistant_api"]
@@ -208,7 +225,7 @@ dev = ["pytest", "pytest-asyncio", "pytest-cov", "hypothesis==6.168.5", "ruff", 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
-pythonpath = ["src"]  # tests/cli imports the root package, which no workspace member installs
+pythonpath = ["src"]
 
 [tool.coverage.run]
 branch = true

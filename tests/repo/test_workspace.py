@@ -1,5 +1,5 @@
-"""The uv workspace: a virtual root of its members, constraints that pin every package the images install, an image that
-installs one app and no group, a root build context that lets in only the workspace and the profiles, and hooks that leave
+"""The uv workspace: a root that is the dependency-free CLI project and the members' workspace, constraints that pin every
+package the images install, an image that installs one app and no group, a root build context that lets in only the workspace and the profiles, and hooks that leave
 CRLF scripts, fixtures and role files alone."""
 
 import os
@@ -72,9 +72,10 @@ def root():
     return tomllib.loads(text("pyproject.toml"))
 
 
-def test_the_root_is_a_virtual_workspace_of_rag_core_rag_testing_and_evals():
+def test_the_root_is_the_dependency_free_cli_project_and_the_workspace_root():
     config = root()
-    assert "project" not in config
+    assert config["project"]["name"] == "rag-tuda" and config["project"]["dependencies"] == []
+    assert config["project"]["scripts"] == {"rag": "rag_tuda.cli:main"}
     members = [
         "packages/rag_core",
         "packages/rag_testing",
