@@ -59,6 +59,7 @@ def run(db_settings, fakes, monkeypatch):
 
     def build_corpus(settings, sources, limit, reuse_inputs, *, embedding, options=None):
         call.options.append(options)
+        call.reused.append(reuse_inputs)
         if call.error:
             raise call.error
         return {**BUILT, "sources": call.report} if call.report else BUILT
@@ -70,7 +71,7 @@ def run(db_settings, fakes, monkeypatch):
             "index_counts": {"children": 9, "parents": 7},
             "embeddings": {"cached": 8, "computed": 1},
             "changes": {"added": 1, "changed": 2, "removed": 0},
-            "swapped": True,
+            "swapped": swap,
             "previous_generation": 4,
             "housekeeping": {"dropped_tables": [], "dropped_views": [], "kept": [], "errors": [], "freed_bytes": 0},
         }
@@ -91,6 +92,7 @@ def run(db_settings, fakes, monkeypatch):
         return code, lines
 
     call.error, call.published, call.stats, call.options, call.report = None, published, fakes.stats, [], None
+    call.reused = []
     return call
 
 
@@ -209,7 +211,23 @@ def test_the_source_set_and_resume_come_from_the_command_line(run, flags, option
     assert run.options == [options]
 
 
-@pytest.mark.parametrize("flags", [("--sources",), ("--sources", "all"), ("--sources=",), ("--again",), ("core",)])
+def test_frozen_inputs_come_from_the_command_line_and_reach_the_build_not_the_connectors(run):
+    assert run()[0] == 0 and run("--reuse-inputs")[0] == 0
+    assert run.reused == [False, True] and run.options == [{"sources": "core", "resume": False}] * 2
+
+
+def test_a_build_without_a_swap_stages_the_generation_and_records_nothing(run):
+    code, lines = run("--no-swap")
+    assert code == 0 and run.published == [{"parents": ["p"] * 7, "swap": False, "build_minutes": 0.4}]
+    assert lines[-1] == (
+        "generation 5 staged (not published): 7 sections, 9 chunks, 1 embedded, 8 cached; 1 added, 2 changed, 0 removed"
+    )
+    assert not run.stats.exists() and Lock.at_release == [False]
+
+
+@pytest.mark.parametrize(
+    "flags", [("--sources",), ("--sources", "all"), ("--sources=",), ("--again",), ("core",), ("--no-swap=1",)]
+)
 def test_a_bad_build_flag_prints_the_usage_and_builds_nothing(run, flags):
     assert run(*flags) == (2, [cli.USAGE])
     assert run.options == [] and run.published == []

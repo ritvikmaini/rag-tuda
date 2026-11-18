@@ -25,13 +25,19 @@ SOURCE_SETS = ("core", "full")
 
 
 def build_options(args: list[str]) -> dict[str, Any] | None:
-    """The options of `indexer build [--sources core|full] [--resume]`; None for anything else. The core set is the default,
-    a fresh crawl the other."""
-    options: dict[str, Any] = {"sources": "core", "resume": False}
+    """The options of `indexer build [--sources core|full] [--resume] [--reuse-inputs] [--no-swap]`; None for anything else.
+    The core set, a fresh crawl, fresh inputs and a swap to the new generation are the defaults. `reuse_inputs` builds from
+    what the last build fetched, fetching nothing; `swap` false leaves the new generation staging (`indexer publish <n>`
+    makes it live)."""
+    options: dict[str, Any] = {"sources": "core", "resume": False, "reuse_inputs": False, "swap": True}
     rest = iter(args)
     for arg in rest:
         if arg == "--resume":
             options["resume"] = True
+        elif arg == "--reuse-inputs":
+            options["reuse_inputs"] = True
+        elif arg == "--no-swap":
+            options["swap"] = False
         elif arg == "--sources" or arg.startswith("--sources="):
             chosen = arg.partition("=")[2] if "=" in arg else next(rest, "")
             if chosen not in SOURCE_SETS:
@@ -112,12 +118,15 @@ def build_index(
 ) -> int:
     """One build of every source the profile lists: collect, extract, chunk, gate, embed, write, verify, swap the live views
     to the new generation and housekeep, then the stats file (still under the lock) and the counts per source; a held
-    lock, a database that cannot be reached, a refusing gate or any failed step leaves the live index as it was and exits 1."""
+    lock, a database that cannot be reached, a refusing gate or any failed step leaves the live index as it was and exits 1.
+    Without a swap (`swap` false in `options`) the generation stays staging: no housekeeping, no stats, no snapshot."""
     settings, target, connect = wiring.settings, wiring.target, wiring.connect
+    options = dict(options or {})
+    swap, reuse_inputs = options.pop("swap", True), options.pop("reuse_inputs", False)  # the rest is the connectors'
     lock = gen.BuildLock(target, "cli build", connect)
     try:
         lock.acquire()
-        built = build.build_corpus(settings, sources, None, False, embedding=embedding, options=options)
+        built = build.build_corpus(settings, sources, None, reuse_inputs, embedding=embedding, options=options)
         published = asyncio.run(
             build.write_and_publish(
                 settings,
@@ -125,17 +134,19 @@ def build_index(
                 connect,
                 embedding,
                 built["units"],
-                swap=True,
+                swap=swap,
                 build_minutes=built["minutes_total"],
                 prov=build.provenance(settings, built["embedding"]),
             )
         )
         documents = {name: report["documents"] for name, report in built["sources"].items()}
-        warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
-        gates.record_build_stats(
-            settings.overlay.paths.state_dir,
-            {"parents": built["parents"], "children": built["children"], "documents": documents},
-        )
+        warnings: list[str] = []
+        if swap:
+            warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
+            gates.record_build_stats(
+                settings.overlay.paths.state_dir,
+                {"parents": built["parents"], "children": built["children"], "documents": documents},
+            )
     except gen.BuildBusy as exc:
         out(f"busy: {exc}")
         return 1
@@ -156,8 +167,9 @@ def build_index(
         for line in summary_lines(name, built["sources"][name]):
             out(line)
     counts, embeddings, changes = published["index_counts"], published["embeddings"], published["changes"]
+    state = f"published (previous {published['previous_generation'] or 'none'})" if swap else "staged (not published)"
     out(
-        f"generation {published['generation']} published (previous {published['previous_generation'] or 'none'}): "
+        f"generation {published['generation']} {state}: "
         f"{counts['parents']} sections, {counts['children']} chunks, {embeddings['computed']} embedded, "
         f"{embeddings['cached']} cached; {changes['added']} added, {changes['changed']} changed, "
         f"{changes['removed']} removed"
