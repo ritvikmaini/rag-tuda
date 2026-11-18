@@ -53,8 +53,9 @@ def assistant(tokens: dict[str, str]) -> harness.Assistant:
 
 @pytest.fixture(scope="session")
 def indexer() -> Callable[..., subprocess.CompletedProcess[str]]:
-    """indexer() runs `indexer build` in a one-off container of the harness project and returns the finished process."""
-    return lambda: harness.build_index(GEN.parents[2])
+    """indexer(*flags) runs `indexer build` with those flags in a one-off container of the harness project and returns the
+    finished process."""
+    return lambda *flags: harness.build_index(GEN.parents[2], *flags)
 
 
 @pytest.fixture

@@ -17,7 +17,14 @@ BASE = "deploy/compose.yaml"
 NVIDIA = "deploy/compose.nvidia.yaml"
 VLLM = "deploy/compose.vllm.yaml"
 NATIVE = "deploy/compose.native.yaml"
-COMPOSE_FILES = (BASE, NVIDIA, VLLM, NATIVE, "deploy/compose.ci.yaml", "deploy/compose.ci.example.yaml")
+COMPOSE_FILES = (
+    BASE,
+    NVIDIA,
+    VLLM,
+    NATIVE,
+    "deploy/compose.ci.yaml",
+    "deploy/compose.ci.example.yaml",
+)
 HAS_COMPOSE = (
     shutil.which("docker") is not None
     and subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0
@@ -154,7 +161,7 @@ def test_the_documented_index_build_command_runs_the_indexer_cli():
     assert "--profile build run --rm indexer build`" in readme
     assert services("deploy/compose.yaml")["indexer"]["profiles"] == ["build"]
     harness = open(os.path.join(ROOT, "packages/rag_testing/src/rag_testing/harness.py"), encoding="utf-8").read()
-    assert '"--no-deps", "indexer"]' in harness and '[*command, "build"]' in harness
+    assert '"--no-deps", "indexer"]' in harness and '[*command, "build", *flags]' in harness
 
 
 def all_services(name):

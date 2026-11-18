@@ -224,15 +224,15 @@ class FakeLLM:
         return [c for c in recorded if purpose is None or c["purpose"] == purpose]
 
 
-def build_index(root: Path) -> subprocess.CompletedProcess[str]:
-    """`indexer build` in a one-off container of the harness project (indexer, under the compose profile `build`),
+def build_index(root: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+    """`indexer build [flags]` in a one-off container of the harness project (indexer, under the compose profile `build`),
     run from the repository root. The compose files are those of `just harness example` unless RAG_CI_COMPOSE_FILES names
-    others (`-f` arguments)."""
+    others (`-f` arguments, as `just harness` sets them for its profile)."""
     files = shlex.split(
         os.environ.get("RAG_CI_COMPOSE_FILES", "-f deploy/compose.ci.yaml -f deploy/compose.ci.example.yaml")
     )
     command = ["docker", "compose", *files, "--profile", "build", "run", "--rm", "--no-deps", "indexer"]
-    return subprocess.run([*command, "build"], cwd=root, capture_output=True, text=True, timeout=900)
+    return subprocess.run([*command, "build", *flags], cwd=root, capture_output=True, text=True, timeout=900)
 
 
 def live_generation(db: Any) -> int | None:
