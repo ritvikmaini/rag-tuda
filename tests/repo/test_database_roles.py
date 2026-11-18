@@ -70,13 +70,14 @@ def test_pgvector_gets_every_role_password_for_its_init_scripts():
 
 
 def test_the_role_secrets_point_at_generated_password_files_and_tracked_role_names():
+    # the folder of the generated files is RAG_ROLES_DIR (`rag up` sets it to .rag/secrets/roles), else secrets/
     files = {
         name: spec["file"] for name, spec in load("deploy/compose.yaml")["secrets"].items() if name.startswith("rag_")
     }
     assert {k: v for k, v in files.items() if k.startswith("rag_")} == {
-        "rag_indexer_password": "../secrets/rag_indexer_password.txt",
-        "rag_app_password": "../secrets/rag_app_password.txt",
-        "rag_migrator_password": "../secrets/rag_migrator_password.txt",
+        "rag_indexer_password": "${RAG_ROLES_DIR:-../secrets}/rag_indexer_password.txt",
+        "rag_app_password": "${RAG_ROLES_DIR:-../secrets}/rag_app_password.txt",
+        "rag_migrator_password": "${RAG_ROLES_DIR:-../secrets}/rag_migrator_password.txt",
         "rag_indexer_user": "./pgvector/roles/rag_indexer.txt",
         "rag_app_user": "./pgvector/roles/rag_app.txt",
     }

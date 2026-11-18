@@ -1,0 +1,8 @@
+# Postgres alone, for the native stack: merged over compose.yaml, it publishes pgvector on 127.0.0.1:55432 so that the
+# migrations, the indexer and the backend run as processes on the host:
+#   docker compose -p rag-tuda --env-file .rag/compose.env -f deploy/compose.yaml -f deploy/compose.native.yaml up -d --wait pgvector
+
+services:
+  pgvector:
+    ports:
+      - "127.0.0.1:55432:5432"

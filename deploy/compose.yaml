@@ -1,5 +1,9 @@
-# The rag-tuda stack, project rag-tuda, run from the repository root with the root .env:
+# The rag-tuda stack, project rag-tuda, run from the repository root with the root .env (`rag up --mode compose` writes
+# .rag/compose.env instead and runs the steps below):
 #   docker compose --env-file .env -f deploy/compose.yaml <command> <service>
+# Variables, each with a default so the file renders without an env file: RAG__CARD (the backend's model card),
+# OLLAMA_CONTEXT_LENGTH (the card's window), RAG_ROLES_DIR (the folder of the database secret files, <name>.txt),
+# BACKEND_REFRESH_TOKEN (the backend's Bearer token).
 # This file runs on the CPU with Ollama as the language model server; the only host port is the backend's, on 127.0.0.1.
 #   -f deploy/compose.nvidia.yaml   adds the GPUs to the embedding, reranker and Ollama services
 #   -f deploy/compose.vllm.yaml     replaces Ollama by vLLM (name it last)
@@ -42,7 +46,7 @@ services:
       - RAG__DATABASE__HOST=pgvector
       - RAG__DATABASE__PORT=5432
       # the card's url names the host's Ollama; RAG__LLM_URL moves its local endpoints to the compose service
-      - RAG__CARD=s-qwen3-4b-instruct-2507
+      - RAG__CARD=${RAG__CARD:-s-qwen3-4b-instruct-2507}
       - RAG__LLM_URL=http://ollama:11434/v1
       - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
       - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
@@ -150,7 +154,7 @@ services:
     volumes:
       - ollama-models:/root/.ollama
     environment:
-      - OLLAMA_CONTEXT_LENGTH=8000
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-8000}
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 15s
@@ -260,17 +264,17 @@ volumes:
 
 secrets:
   pg_vector_password:
-    file: ../secrets/pg_vector_password.txt
+    file: ${RAG_ROLES_DIR:-../secrets}/pg_vector_password.txt
   pgdatabase:
-    file: ../secrets/pgdatabase.txt
+    file: ${RAG_ROLES_DIR:-../secrets}/pgdatabase.txt
   vector_user:
-    file: ../secrets/vector_user.txt
+    file: ${RAG_ROLES_DIR:-../secrets}/vector_user.txt
   rag_indexer_password:
-    file: ../secrets/rag_indexer_password.txt
+    file: ${RAG_ROLES_DIR:-../secrets}/rag_indexer_password.txt
   rag_app_password:
-    file: ../secrets/rag_app_password.txt
+    file: ${RAG_ROLES_DIR:-../secrets}/rag_app_password.txt
   rag_migrator_password:
-    file: ../secrets/rag_migrator_password.txt
+    file: ${RAG_ROLES_DIR:-../secrets}/rag_migrator_password.txt
   rag_indexer_user:
     file: ./pgvector/roles/rag_indexer.txt
   rag_app_user:

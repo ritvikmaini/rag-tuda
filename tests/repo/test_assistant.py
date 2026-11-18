@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STACK = {  # the stack's values as RAG__ entries
     "RAG__DATABASE__HOST": "pgvector",
     "RAG__DATABASE__PORT": "5432",
-    "RAG__CARD": "s-qwen3-4b-instruct-2507",
+    "RAG__CARD": "${RAG__CARD:-s-qwen3-4b-instruct-2507}",  # compose.env names another card
     "RAG__LLM_URL": "http://ollama:11434/v1",
     "RAG__MODEL_SERVERS__EMBEDDING_URL": "http://embedding_service:8001",
     "RAG__MODEL_SERVERS__RERANKER_URL": "http://reranker_service:8003",

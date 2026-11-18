@@ -16,7 +16,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BASE = "deploy/compose.yaml"
 NVIDIA = "deploy/compose.nvidia.yaml"
 VLLM = "deploy/compose.vllm.yaml"
-COMPOSE_FILES = (BASE, NVIDIA, VLLM, "deploy/compose.ci.yaml", "deploy/compose.ci.example.yaml")
+NATIVE = "deploy/compose.native.yaml"
+COMPOSE_FILES = (BASE, NVIDIA, VLLM, NATIVE, "deploy/compose.ci.yaml", "deploy/compose.ci.example.yaml")
 HAS_COMPOSE = (
     shutil.which("docker") is not None
     and subprocess.run(["docker", "compose", "version"], capture_output=True).returncode == 0
@@ -92,6 +93,21 @@ def test_compose_renders_every_stack_combination_with_every_secret_set(tmp_path,
     assert result.returncode == 0, result.stderr
 
 
+@needs_compose
+def test_the_stack_takes_the_card_the_window_and_the_secret_folder_from_the_env_file(tmp_path):
+    env = tmp_path / "chosen.env"
+    env.write_text("RAG__CARD=m-qwen3.6-35b-a3b\nOLLAMA_CONTEXT_LENGTH=16000\nRAG_ROLES_DIR=/roles\n", encoding="utf-8")
+    result = render(BASE, args=("--env-file", str(env)))
+    assert result.returncode == 0, result.stderr
+    rendered = json.loads(result.stdout)
+    assert rendered["services"]["backend"]["environment"]["RAG__CARD"] == "m-qwen3.6-35b-a3b"
+    assert rendered["services"]["ollama"]["environment"]["OLLAMA_CONTEXT_LENGTH"] == "16000"
+    files = {name: spec["file"] for name, spec in rendered["secrets"].items() if "file" in spec}
+    assert files["pg_vector_password"] == "/roles/pg_vector_password.txt"
+    assert files["rag_migrator_password"] == "/roles/rag_migrator_password.txt"
+    assert files["rag_app_user"].endswith("deploy/pgvector/roles/rag_app.txt")  # the role names are tracked
+
+
 def test_the_job_reads_runs_through_a_read_only_mount_and_writes_inside_its_container():
     # the job's non-root user cannot write a bind mount owned by the host user; every command writes into the
     # container's own out_dir, and the result is copied out with docker cp
@@ -153,13 +169,23 @@ def test_the_base_stack_runs_on_the_cpu_with_ollama():
         assert not [e for e in spec.get("environment", []) if "cuda" in e.lower() or "RAG_DEVICE" in e], service
 
 
+def default_of(entry):
+    """The default of a `${NAME:-default}` entry value."""
+    return re.fullmatch(r"\$\{\w+:-([^}]*)\}", entry).group(1)
+
+
 def test_ollama_context_length_is_the_default_cards_window():
     from_stack = {e.split("=", 1)[0]: e.split("=", 1)[1] for e in services(BASE)["backend"]["environment"] if "=" in e}
-    card = load_card(from_stack["RAG__CARD"], os.path.join(ROOT, "models", "cards"))
+    card = load_card(default_of(from_stack["RAG__CARD"]), os.path.join(ROOT, "models", "cards"))
     ollama = dict(e.split("=", 1) for e in services(BASE)["ollama"]["environment"])
-    assert int(ollama["OLLAMA_CONTEXT_LENGTH"]) == effective_window(card)
+    assert int(default_of(ollama["OLLAMA_CONTEXT_LENGTH"])) == effective_window(card)
     assert from_stack["RAG__LLM_URL"] == "http://ollama:11434/v1"
     assert card.answer.provider == "ollama"
+
+
+def test_the_native_overlay_publishes_postgres_alone_on_loopback():
+    found = services(NATIVE)
+    assert set(found) == {"pgvector"} and found["pgvector"] == {"ports": ["127.0.0.1:55432:5432"]}
 
 
 def test_the_nvidia_overlay_adds_the_gpus_and_the_device_to_the_model_servers_only():
