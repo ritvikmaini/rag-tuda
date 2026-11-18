@@ -127,6 +127,8 @@ def chunk_documents(
             parent_meta["page_number"] = page
         if mode == "structure":
             parent_meta["section_path"] = " > ".join(path)
+            if marked := sc.paragraphs(text):
+                parent_meta["paragraphs"] = marked
         if prefix and prefix != title_prefix:
             parent_meta["context_header"] = prefix
         parents.append(Parent(text, parent_meta, tuple(Child(prefix + kid) for kid in kids), prefix, source))

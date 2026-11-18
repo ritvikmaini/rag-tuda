@@ -10,9 +10,9 @@ section cut at block boundaries, a long table split by rows (a short Markdown he
 long paragraph split by the recursive splitter; a heading never ends a parent while text follows.
 A parent on more than one page starts with its first page's mark and carries a mark where each
 further page starts (rag_core's context_budget.page_of_position); its page is that of its first
-character. Children are cut inside one page segment of a parent (never across a mark), so each
-child is a substring of its parent. Imports only re, dataclasses and langchain_text_splitters, so
-the tests and the offline harness can load this file by path.
+character. `paragraphs` lists the '§ n' a parent starts a paragraph with. Children are cut inside one page segment of
+a parent (never across a mark), so each child is a substring of its parent. Imports only re, dataclasses and
+langchain_text_splitters, so the tests and the offline harness can load this file by path.
 """
 
 import re
@@ -25,6 +25,10 @@ PAGE_LINE = re.compile(r"^\[Page (\d+)\]$")
 PAGE_MARK = re.compile(r"\[Page \d+\]\n")
 MD_HEADING = re.compile(r"^(#{1,6})\s+(\S.*)$")
 NUMBERED = re.compile(r"^((?:\d{1,2}\.){1,4}\d{0,2})\s+[A-ZÄÖÜ]")
+PARAGRAPH = re.compile(
+    r"^\s*§[ \t]*(\d+[a-z]?)(?:[ \t]+(?!(?:Abs|Absatz|Satz|Nr|Nummer|Ziffer|Buchstabe)\b)[A-ZÄÖÜ][a-zäöüß]|\s*$)"
+)
+LINE_END = re.compile(r"[.:;!?)]$")
 LEGAL = re.compile(r"^(?:§{1,2}\s*\d+[a-z]?|Art(?:ikel|\.)\s*\d+[a-z]?)(?:\s|$)")
 PART = re.compile(r"^(?:Teil|Abschnitt|Kapitel|Anlage|Anhang)\s+(?:[IVXLC]+|\d+[a-z]?)\b")
 ALL_CAPS = re.compile(r"^[A-ZÄÖÜ0-9][A-ZÄÖÜß0-9 .,&/()–-]{3,79}$")
@@ -242,6 +246,37 @@ def structure_parents(
         body, page = assemble(group)
         out.append((body, page if page > 0 else None, common_path(group)))
     return out
+
+
+def _starts_paragraph(previous: str) -> bool:
+    """Whether a line after `previous` can begin a paragraph: previous is blank, a page mark, a sentence end, another
+    paragraph start or a title line (Markdown or all caps), not a line cut in the middle of a sentence."""
+    line = previous.strip()
+    return not line or bool(
+        PAGE_LINE.match(line)
+        or LINE_END.search(line)
+        or PARAGRAPH.match(line)
+        or MD_HEADING.match(line)
+        or ALL_CAPS.match(line)
+    )
+
+
+def paragraphs(text: str) -> List[str]:
+    """The '§ n' a parent's text starts a paragraph with, as '§ n' in reading order, each once: a line that begins with
+    '§ n' and then ends or continues with a title-cased word (a heading, or a paragraph whose heading shares its line),
+    after a blank line, a page mark, a sentence end, a title line or the start of the text. Small sections are merged
+    into one parent and the parent's section path keeps only what they share, so this lists them. A '§ n' inside a
+    sentence, a line wrapped before '§ 22 APB gilt' or '§ 24 Absatz 1', and a bare '§ 3' left by a wrap are references,
+    not paragraphs. A wrapped reference that names a title-cased law ('§ 22 Prüfungsordnung der TU') after a sentence
+    end still counts."""
+    found: List[str] = []
+    previous = ""
+    for line in text.splitlines():
+        m = PARAGRAPH.match(line)
+        if m and _starts_paragraph(previous) and f"§ {m.group(1)}" not in found:
+            found.append(f"§ {m.group(1)}")
+        previous = line
+    return found
 
 
 def page_segments(text: str) -> List[str]:
