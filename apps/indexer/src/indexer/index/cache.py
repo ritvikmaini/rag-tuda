@@ -1,6 +1,6 @@
 """The embedding cache: one table, keyed per collection by the
-embedding model, its revision, the passage prefix and the SHA-256 of the exact text the server embeds after the prefix. A
-build looks every chunk text up first and sends only the misses to the embedding server, in batches of 128; every entry a
+embedding model, its revision, the passage prefix, the vector dimension and the SHA-256 of the exact text the server
+embeds after the prefix. A build looks every chunk text up first and sends only the misses to the embedding server, in batches of 128; every entry a
 build uses gets last_generation = its generation; housekeeping deletes what neither the live nor the previous generation
 used. The first build on an empty cache copies the live generation's vectors when its provenance names the same model and
 revision. Every write runs inside the build lock."""
@@ -15,8 +15,8 @@ from typing import Any
 from indexer.index.ddl import ident
 
 BATCH_SIZE = 128  # texts per request to the embedding server
-COLUMNS = "collection, model, revision, passage_prefix, text_sha256, embedding, last_generation"
-_KEY = "collection = %s AND model = %s AND revision = %s AND passage_prefix = %s"
+COLUMNS = "collection, model, revision, passage_prefix, dimensions, text_sha256, embedding, last_generation"
+_KEY = "collection = %s AND model = %s AND revision = %s AND passage_prefix = %s AND dimensions = %s"
 log = logging.getLogger(__name__)
 
 
@@ -24,17 +24,20 @@ def sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def key(collection: str, embedding: Any, served_revision: str | None) -> tuple[str, str, str, str]:
-    """(collection, model, revision, passage prefix). The revision is the one the server reports in /info (the build's
-    provenance); the profile's only when the server has no /info (an older server image, the harness's fake)."""
-    return (collection, embedding.model, served_revision or embedding.revision, embedding.passage_prefix)
+def key(collection: str, embedding: Any, served_revision: str | None) -> tuple[str, str, str, str, int]:
+    """(collection, model, revision, passage prefix, dimensions). The revision is the one the server reports in /info
+    (the build's provenance); the profile's only when the server has no /info (an older server image, the harness's
+    fake)."""
+    revision = served_revision or embedding.revision
+    return (collection, embedding.model, revision, embedding.passage_prefix, embedding.dimensions)
 
 
-def seed(conn, cache_key: tuple[str, str, str, str]) -> int:
+def seed(conn, cache_key: tuple[str, str, str, str, int]) -> int:
     """Fills an empty cache of this collection from the live generation's chunks when that generation's provenance names
-    the key's model and revision: per distinct text the vector of its chunk with the lowest chunk_id. Returns the entries
-    written (0: the cache has entries, or no such generation)."""
-    collection, model, revision, _ = cache_key
+    the key's model and revision: per distinct text the vector of its chunk with the lowest chunk_id, for the chunks
+    whose vectors have the key's dimension. Returns the entries written (0: the cache has entries, or no such
+    generation)."""
+    collection, model, revision, _, dimensions = cache_key
     if conn.execute("SELECT EXISTS (SELECT 1 FROM embedding_cache WHERE collection = %s)", (collection,)).fetchone()[0]:
         return 0
     row = conn.execute(
@@ -47,11 +50,11 @@ def seed(conn, cache_key: tuple[str, str, str, str]) -> int:
         return 0
     generation, chunks = row
     seeded = conn.execute(
-        f"INSERT INTO embedding_cache ({COLUMNS}) SELECT DISTINCT ON (h) %s::text, %s::text, %s::text, %s::text, h, embedding, "
-        f"%s::integer FROM "
-        f"(SELECT encode(sha256(convert_to(content, 'UTF8')), 'hex') AS h, chunk_id, embedding FROM {ident(chunks)}) t "
-        "ORDER BY h, chunk_id ON CONFLICT DO NOTHING",
-        (*cache_key, generation),
+        f"INSERT INTO embedding_cache ({COLUMNS}) SELECT DISTINCT ON (h) %s::text, %s::text, %s::text, %s::text, "
+        f"%s::integer, h, embedding, %s::integer FROM "
+        f"(SELECT encode(sha256(convert_to(content, 'UTF8')), 'hex') AS h, chunk_id, embedding FROM {ident(chunks)} "
+        "WHERE vector_dims(embedding) = %s) t ORDER BY h, chunk_id ON CONFLICT DO NOTHING",
+        (*cache_key, generation, dimensions),
     ).rowcount
     log.info(f"[Embeddings] seeded {seeded} entries from generation {generation}")
     return seeded

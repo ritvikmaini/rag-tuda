@@ -47,19 +47,19 @@ def tables(port):
     )
     n, _ = gen.begin(conn, TARGET, {"config_hash": "x"})
     names = TARGET.tables(n)
-    for statement in ddl.create_tables(names["parents"], names["children"], "german", 768):
+    for statement in ddl.create_tables(names["parents"], names["children"], 768):
         conn.execute(statement)
     for s in range(2):
         section_id = f"s{s}"
         conn.execute(
             f'INSERT INTO "{names["parents"]}" (section_id, document_id, collection, source, audience, part_index, '
-            "content, metadata) VALUES (%s, 'doc', 'rag', 'example.web', 'public', %s, %s, %s::jsonb)",
+            "content, metadata, lang) VALUES (%s, 'doc', 'rag', 'example.web', 'public', %s, %s, %s::jsonb, 'de')",
             (section_id, s, " ".join(TEXTS[3 * s : 3 * s + 3]), "{}"),
         )
         for i in range(3 * s, 3 * s + 3):
             conn.execute(
                 f'INSERT INTO "{names["children"]}" (chunk_id, section_id, document_id, collection, source, audience, '
-                "content, embedding) VALUES (%s, %s, 'doc', 'rag', 'example.web', 'public', %s, %s::vector)",
+                "content, embedding, lang) VALUES (%s, %s, 'doc', 'rag', 'example.web', 'public', %s, %s::vector, 'de')",
                 (uuid.UUID(int=i).hex, section_id, TEXTS[i], vec(i)),
             )
     for statement in ddl.create_indexes(names["parents"], names["children"]):

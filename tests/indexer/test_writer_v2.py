@@ -11,7 +11,7 @@ import pytest
 from indexer.chunking.units import Child, Parent
 from indexer.index import cache, ddl, writer
 
-KEY = ("example", "m", "r", "")
+KEY = ("example", "m", "r", "", 768)
 
 
 def connector_of(meta):
@@ -272,7 +272,9 @@ def test_the_typed_columns_follow_the_interfaces_rule(settings):
         (web_id, "rag", "example.web", "public", None, 2024, None, page, 2, doc, "T: ", 0, "{}"),
     ]
     by_section = {s["section_id"]: s for s in sections_of(sections)}
-    copied = ddl.CHUNK_COLUMNS[2:13]  # document_id .. header: copied from the section
+    copied = ddl.CHUNK_COLUMNS[
+        2 : ddl.CHUNK_COLUMNS.index("content")
+    ]  # document_id .. twin_key: copied from the section
     for chunk in chunks_of(chunks):
         assert {k: chunk[k] for k in copied} == {k: by_section[chunk["section_id"]][k] for k in copied}
         assert chunk["extra"] == "{}"
@@ -330,7 +332,7 @@ def test_write_v2_takes_its_vectors_from_the_cache_and_writes_vector_text(settin
     kinds = [kind for kind, _ in conn.log]
     assert kinds[:2] == ["execute", "execute"] and kinds[-4:] == ["execute"] * 4
     assert [s for k, s in conn.log if k == "execute"] == [
-        *ddl.create_tables(tables["parents"], tables["children"], "german", 768),
+        *ddl.create_tables(tables["parents"], tables["children"], 768),
         *ddl.create_indexes(tables["parents"], tables["children"]),
     ]
     copies = [s for k, s in conn.log if k == "copy"]
@@ -345,6 +347,51 @@ def test_write_v2_takes_its_vectors_from_the_cache_and_writes_vector_text(settin
     content, embedding = ddl.CHUNK_COLUMNS.index("content"), ddl.CHUNK_COLUMNS.index("embedding")
     assert all(r[embedding] == vector_of(r[content]) for r in chunk_rows)  # each chunk holds its own text's vector
     assert len({r[embedding] for r in chunk_rows}) == 3  # three distinct texts, three distinct vectors
+
+
+DOCUMENT = {
+    "regulation": "po",
+    "degree": ("bachelor",),
+    "programme": ("bsc-informatik", "msc-informatik"),
+    "po_version": (2023,),
+    "archived": True,
+    "valid_from": datetime.date(2022, 1, 13),
+    "lang": "en",
+    "twin_key": "https://x.example/po#abschnitt",
+}
+
+
+def test_typed_columns_written(settings):
+    """Every section and every chunk of a document carries the document metadata, typed; the section's metadata JSON
+    keeps it too (a date as its ISO day, a tuple as a list)."""
+    sections, chunks = writer.rows([parent("p1", ["x", "y"], **DOCUMENT)], settings.profile)
+    (section,) = sections_of(sections)
+    expected = {
+        **DOCUMENT,
+        "degree": ["bachelor"],
+        "programme": ["bsc-informatik", "msc-informatik"],
+        "po_version": [2023],
+    }
+    assert {c: section[c] for c in ddl.DOCUMENT_COLUMNS} == expected
+    for chunk in chunks_of(chunks):
+        assert {c: chunk[c] for c in ddl.DOCUMENT_COLUMNS} == expected
+    stored = json.loads(section["metadata"])
+    assert stored["valid_from"] == "2022-01-13" and stored["programme"] == ["bsc-informatik", "msc-informatik"]
+    assert stored["po_version"] == [2023] and stored["regulation"] == "po"
+    iso = parent("p2", ["x"], valid_from="2022-01-13", po_version=["2015"])  # the ISO text the JSON round trip leaves
+    (row,) = sections_of(writer.rows([iso], settings.profile)[0])
+    assert (row["valid_from"], row["po_version"]) == (datetime.date(2022, 1, 13), [2015])
+
+
+def test_null_not_empty_array(settings):
+    """A document that applies to all has NULL, never an empty array; archived is false and lang the profile's."""
+    for empty in ({}, {"degree": (), "programme": [], "po_version": None, "regulation": "", "twin_key": ""}):
+        sections, chunks = writer.rows([parent("p1", ["x"], **empty)], settings.profile)
+        for row in (*sections_of(sections), *chunks_of(chunks)):
+            assert [row[c] for c in ("regulation", "degree", "programme", "po_version", "twin_key", "valid_from")] == [
+                None
+            ] * 6
+            assert row["archived"] is False and row["lang"] == settings.profile.identity.language
 
 
 @pytest.mark.parametrize(

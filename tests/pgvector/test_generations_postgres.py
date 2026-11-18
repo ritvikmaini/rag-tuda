@@ -3,6 +3,7 @@ container runs the init scripts; every step runs as rag_indexer from the Mac thr
 as rag_app. Each test uses its own collection, so the tests share one cluster. Needs a running Docker (Colima on the
 Mac) and psycopg in the test venv: RUN_DOCKER_TESTS=1."""
 
+import datetime
 import json
 import os
 import shutil
@@ -148,16 +149,16 @@ def test_a_generation_that_fails_verify_is_marked_and_dropped_at_the_next_housek
     n, _ = gen.begin(conn, target, {"git_commit": None, "config_hash": "abc"})
     tables = target.tables(n)
     written = make_v2_pair(conn, tables["children"], tables["parents"])
-    conn.execute(f'DROP INDEX "{tables["children"]}_hnsw"')
-    with pytest.raises(gen.GenerationError, match="no valid hnsw on embedding index"):
+    conn.execute(f'DROP INDEX "{tables["children"]}_fts_de"')
+    with pytest.raises(gen.GenerationError, match="no valid gin on fts_de index"):
         gen.verify(conn, target, n, written)
     with pytest.raises(gen.GenerationError, match="the writer inserted"):
         gen.verify(conn, target, 1, {"children": 7, "parents": 3})
-    gen.mark_failed(conn, target, n, "verify failed: no valid hnsw on embedding index")
+    gen.mark_failed(conn, target, n, "verify failed: no valid gin on fts_de index")
     row = gen.generations(conn, target)[1]
     assert (row["status"], row["detail"], row["config_hash"]) == (
         "failed",
-        "verify failed: no valid hnsw on embedding index",
+        "verify failed: no valid gin on fts_de index",
         "abc",
     )
     assert gen.housekeep(conn, target)["dropped_tables"] == ["c8_g0002_chunks", "c8_g0002_sections"]
@@ -205,10 +206,10 @@ def test_cli_publish_puts_a_staging_generation_live_and_keeps_the_other_staging(
 # --- schema v2: generations of typed tables ----------------------------------------------
 
 
-def make_v2_pair(conn, children, parents, contents=("alpha", "beta", "gamma"), language="german", dims=768):
+def make_v2_pair(conn, children, parents, contents=("alpha", "beta", "gamma"), dims=768, lang="de"):
     """A v2 pair from ddl plus hand INSERTs (no writer): two chunks per section. Returns the
     written counts."""
-    sections, chunks = ddl.create_tables(parents, children, language, dims)
+    sections, chunks = ddl.create_tables(parents, children, dims)
     conn.execute(sections)
     conn.execute(chunks)
     vector = "[" + ",".join(["0.1"] * dims) + "]"
@@ -226,14 +227,14 @@ def make_v2_pair(conn, children, parents, contents=("alpha", "beta", "gamma"), l
         }
         conn.execute(
             f'INSERT INTO "{parents}" (section_id, document_id, collection, source, audience, part_index, content, '
-            f"metadata) VALUES (%s, 'doc', 'example', 'archive', 'internal', %s, %s, %s::jsonb)",
-            (section_id, page - 1, text, json.dumps(meta)),
+            f"metadata, lang) VALUES (%s, 'doc', 'example', 'archive', 'public', %s, %s, %s::jsonb, %s)",
+            (section_id, page - 1, text, json.dumps(meta), lang),
         )
         for index in range(2):
             conn.execute(
                 f'INSERT INTO "{children}" (chunk_id, section_id, document_id, collection, source, audience, content, '
-                f"embedding) VALUES (%s, %s, 'doc', 'example', 'archive', 'internal', %s, %s::vector)",
-                (f"{section_id}:{index}", section_id, f"Titel: {text} {index}", vector),
+                f"embedding, lang) VALUES (%s, %s, 'doc', 'example', 'archive', 'public', %s, %s::vector, %s)",
+                (f"{section_id}:{index}", section_id, f"Titel: {text} {index}", vector, lang),
             )
     for statement in ddl.create_indexes(parents, children):
         conn.execute(statement)
@@ -285,14 +286,28 @@ def test_a_type_mismatch_leaves_every_view_unchanged(connect):
     assert statuses(conn, target) == {1: "live", 2: "staging"}
 
 
-def test_the_fts_column_follows_the_profile_language(connect):
+def test_fts_de_and_fts_en_generated(connect):
+    """fts_de is the German vector of every chunk, fts_en the English one of the chunks with lang = en and NULL for
+    the rest; the gate finds a GIN index on each."""
     conn = connect()
-    make_v2_pair(conn, "c23_chunks", "c23_sections", language="simple")
-    expr = conn.execute(
-        "SELECT pg_get_expr(d.adbin, d.adrelid) FROM pg_attrdef d JOIN pg_attribute a ON a.attrelid = d.adrelid "
-        "AND a.attnum = d.adnum WHERE a.attrelid = 'c23_chunks'::regclass AND a.attname = 'fts'"
-    ).fetchone()[0]
-    assert "'simple'::regconfig" in expr and "german" not in expr
+    make_v2_pair(conn, "c23_chunks", "c23_sections", contents=("Prüfungen", "Prüfungen"), lang="de")
+    make_v2_pair(conn, "c23en_chunks", "c23en_sections", contents=("examinations", "examinations"), lang="en")
+    check = "SELECT bool_and(fts_de = to_tsvector('german', content)), count(fts_en), count(*) FROM "
+    assert conn.execute(check + "c23_chunks").fetchone() == (True, 0, 4)
+    assert conn.execute(check + "c23en_chunks").fetchone() == (True, 4, 4)
+    assert conn.execute("SELECT bool_and(fts_en = to_tsvector('english', content)) FROM c23en_chunks").fetchone() == (
+        True,
+    )
+    assert (
+        conn.execute("SELECT count(*) FROM c23_chunks WHERE fts_de @@ to_tsquery('german', 'prufung')").fetchone()[0]
+        == 4
+    )
+    assert (
+        conn.execute("SELECT count(*) FROM c23en_chunks WHERE fts_en @@ to_tsquery('english', 'examin')").fetchone()[0]
+        == 4
+    )
+    rows = conn.execute("SELECT indexdef FROM pg_indexes WHERE tablename = 'c23en_chunks'").fetchall()
+    assert gen.missing_indexes("children", [(r[0], True, "UNIQUE" in r[0]) for r in rows]) == []
 
 
 def test_verify_v2_counts_orphans_and_indexes(connect):
@@ -310,8 +325,8 @@ def test_verify_v2_counts_orphans_and_indexes(connect):
     m, _ = gen.begin(conn, target, {})
     other = target.tables(m)
     make_v2_pair(conn, other["children"], other["parents"])
-    conn.execute(f'DROP INDEX "{other["children"]}_fts"')
-    with pytest.raises(gen.GenerationError, match="no valid gin on fts index"):
+    conn.execute(f'DROP INDEX "{other["children"]}_fts_en"')
+    with pytest.raises(gen.GenerationError, match="no valid gin on fts_en index"):
         gen.verify(conn, target, m)
 
 
@@ -360,8 +375,8 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
         },
         secrets_dir=str(tmp_path / "secrets"),
     ).profile
-    extra = {  # the example profile lists one public source; these two give the typed audience column another value
-        "pdfs": Source(connector="example.pdfs", audience="internal"),
+    extra = {  # the example profile lists one public source; these two give the source column other values
+        "pdfs": Source(connector="example.pdfs", audience="public"),
         "maps": Source(connector="example.maps", audience="public"),
     }
     sources = {**profile.ingest.sources, **extra}
@@ -395,6 +410,12 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
                 "page_number": 2,
                 "doc_year": "2024",
                 "tags": ("a", "b"),
+                "regulation": "po",
+                "programme": ("bsc-informatik", "msc-informatik"),
+                "po_version": (2023,),
+                "valid_from": "2022-01-13",
+                "lang": "en",
+                "twin_key": "https://docs.example.org/da#s",
             },
             (Child("DA · § 1: Geltung"),),
             "DA · § 1: ",
@@ -431,7 +452,7 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
     app = connect("rag_app")
     joined = app.execute(
         "SELECT s.content, s.metadata->>'source', count(c.*), "
-        "bool_and(c.fts = to_tsvector('german', c.content)) FROM c29_sections s "
+        "bool_and(c.fts_de = to_tsvector('german', c.content)) FROM c29_sections s "
         "JOIN c29_chunks c ON c.section_id = s.section_id GROUP BY 1, 2"
     ).fetchall()
     assert sorted(joined) == sorted([("Öffnungszeiten im Rathaus", "Rathaus", 2, True), ("§ 1 Geltung", "DA", 1, True),
@@ -442,8 +463,22 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
     ]
     typed = app.execute("SELECT source, audience, year, page, header FROM c29_sections").fetchall()
     assert sorted(typed) == sorted([("folder", "public", None, None, "Rathaus: "),
-                                    ("example.pdfs", "internal", 2024, 2, "DA · § 1: "),
+                                    ("example.pdfs", "public", 2024, 2, "DA · § 1: "),
                                     ("example.maps", "public", None, None, None)])  # fmt: skip
     assert (
         app.execute("SELECT count(*) FROM c29_chunks WHERE embedding = %s::vector", (str(vector),)).fetchone()[0] == 4
     )
+    # the document metadata went through COPY into typed arrays and dates; a document without it has NULL, never {}
+    assert app.execute(
+        "SELECT regulation, programme, po_version, degree, valid_from, lang, twin_key, archived FROM c29_sections "
+        "WHERE content = '§ 1 Geltung'"
+    ).fetchone() == ("po", ["bsc-informatik", "msc-informatik"], [2023], None, datetime.date(2022, 1, 13), "en",
+                     "https://docs.example.org/da#s", False)  # fmt: skip
+    assert app.execute(
+        "SELECT regulation, programme, po_version, valid_from, twin_key FROM c29_sections WHERE content = 'Wertstoffhof'"
+    ).fetchone() == (None, None, None, None, None)
+    assert app.execute(
+        "SELECT count(*), count(fts_en), count(programme) FILTER (WHERE programme = ARRAY['bsc-informatik', "
+        "'msc-informatik']) FROM c29_chunks WHERE section_id = (SELECT section_id FROM c29_sections "
+        "WHERE content = '§ 1 Geltung')"
+    ).fetchone() == (1, 1, 1)  # the chunk carries the document's metadata and its English vector

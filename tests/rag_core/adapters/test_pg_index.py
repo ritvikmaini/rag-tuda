@@ -68,7 +68,7 @@ def test_the_statements_read_the_typed_views():
     assert [(h.page_content, dict(h.metadata)) for h in hits] == [
         ("Kind", {"section_id": "p1", "retriever": "semantic", "child_chunk_semantic_search_score": 0.25})
     ]
-    assert "fts @@ plainto_tsquery(%(lang)s, %(query)s) ORDER BY rank DESC LIMIT %(k)s" in pg_index.FTS_AND
+    assert "fts_de @@ plainto_tsquery(%(lang)s, %(query)s) ORDER BY rank DESC LIMIT %(k)s" in pg_index.FTS_AND
     assert "section_id = ANY(%(section_ids)s)" in pg_index.SECTIONS
 
 
@@ -106,11 +106,11 @@ def test_an_empty_vector_result_and_a_cached_term():  # the two branches the oth
 def test_the_or_fallback_supplements_and_skips_seen_texts():
     pool: Any = Pool(
         [
-            ("ts_rank(fts, plainto_tsquery", [("eins", "a", 0.5)]),
+            ("ts_rank(fts_de, plainto_tsquery", [("eins", "a", 0.5)]),
             ("::text as tsq", [("'garag' & 'stellplatz'",)]),
             ('SELECT COUNT(*) FROM "v" WHERE', [(1,)]),
             ('SELECT COUNT(*) FROM "v"', [(100,)]),
-            ("ts_rank(fts, to_tsquery", [("eins", "a", 0.4), ("zwei", "b", 0.3)]),
+            ("ts_rank(fts_de, to_tsquery", [("eins", "a", 0.4), ("zwei", "b", 0.3)]),
         ]
     )
     hits = asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Garage Stellplatz", 3))
@@ -128,7 +128,7 @@ def test_the_or_fallback_supplements_and_skips_seen_texts():
         "remaining": 2,
     }
     # the AND and OR rows are read in binary (text would round fts_rank)
-    assert len(pool.conn.binary) == 2 and all("ts_rank(fts" in t for t in pool.conn.binary)
+    assert len(pool.conn.binary) == 2 and all("ts_rank(fts_de" in t for t in pool.conn.binary)
 
 
 def test_the_or_fallback_logs_no_terms_of_the_question(caplog):  # no question text in any log
@@ -137,11 +137,11 @@ def test_the_or_fallback_logs_no_terms_of_the_question(caplog):  # no question t
     )  # a test of the evals CLI may leave "rag_core" at WARNING
     pool: Any = Pool(
         [
-            ("ts_rank(fts, plainto_tsquery", []),
+            ("ts_rank(fts_de, plainto_tsquery", []),
             ("::text as tsq", [("'garag' & 'stellplatz'",)]),
             ('SELECT COUNT(*) FROM "v" WHERE', [(1,)]),
             ('SELECT COUNT(*) FROM "v"', [(100,)]),
-            ("ts_rank(fts, to_tsquery", [("eins", "a", 0.4)]),
+            ("ts_rank(fts_de, to_tsquery", [("eins", "a", 0.4)]),
         ]
     )
     assert asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Garage Stellplatz", 3))
@@ -155,11 +155,11 @@ def test_a_filtered_frequent_term_is_logged_as_a_count_never_as_the_word(
     counts = lambda p: [(50,)] if p["term"] in ("stadt", "amt") else [(1,)]  # noqa: E731
     pool: Any = Pool(
         [
-            ("ts_rank(fts, plainto_tsquery", []),
+            ("ts_rank(fts_de, plainto_tsquery", []),
             ("::text as tsq", [("'stadt' & 'amt' & 'garag'",)]),
             ('SELECT COUNT(*) FROM "v" WHERE', counts),
             ('SELECT COUNT(*) FROM "v"', [(100,)]),
-            ("ts_rank(fts, to_tsquery", []),
+            ("ts_rank(fts_de, to_tsquery", []),
         ]
     )
     asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Stadt Amt Garage", 3))
@@ -175,7 +175,7 @@ def test_a_failed_search_logs_the_class_never_the_message(caplog):  # a tsquery 
 
 def test_an_and_query_that_fills_k_needs_no_or_fallback():
     rows = [("eins", "a", 0.5), ("zwei", "b", 0.4)]
-    pool: Any = Pool([("ts_rank(fts, plainto_tsquery", rows)])
+    pool: Any = Pool([("ts_rank(fts_de, plainto_tsquery", rows)])
     hits = asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Garage", 2))
     assert [h.page_content for h in hits] == ["eins", "zwei"]
     assert len(pool.conn.sent) == 1  # no tsquery lookup, no term counts, no OR query
@@ -205,7 +205,7 @@ def test_the_edge_rules_of_the_keyword_search_and_the_lookup():
     counts = lambda p: [(50,)] if p["term"] == "stadt" else [(1,)]  # noqa: E731 - "stadt" is in 50 % of 100 children
     mixed: Any = Pool(
         [
-            ("ts_rank(fts, plainto_tsquery", []),
+            ("ts_rank(fts_de, plainto_tsquery", []),
             ("::text as tsq", [("'stadt' & 'garag'",)]),
             ('SELECT COUNT(*) FROM "v" WHERE', counts),
             ('SELECT COUNT(*) FROM "v"', [(100,)]),

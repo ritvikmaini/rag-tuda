@@ -1,7 +1,7 @@
 """The embedding cache and the stable ids on a real cluster: a second write
 embeds nothing and stores the same vectors, an edited text is the only one embedded, seeding copies the live generation's
 vectors only for the same model and revision, housekeeping keeps what the live and the previous generation use (per
-collection), a stable chunk id reads as a uuid (contract_reverse.sql's cast), the document registry follows every publish
+collection), a vector is found only under its own dimension, the document registry follows every publish
 and the change report reads across the switch to stable ids."""
 
 import os
@@ -160,12 +160,21 @@ def test_housekeeping_keeps_what_live_and_previous_use_per_collection(connect, p
     assert gen.housekeep(conn, target)["cache_pruned"] == 0  # live 2, previous 3: both still served
 
 
-def test_a_stable_chunk_id_reads_as_a_uuid(connect, profile):  # contract_reverse.sql's chunk_id::uuid
-    conn, target = connect(), gen.Target.for_collection("e5")
-    n, _, _ = write(conn, target, profile, Embedder(), items())
-    chunks = target.tables(n)["children"]
-    rows = conn.execute(f'SELECT chunk_id, chunk_id::uuid::text FROM "{chunks}"').fetchall()
-    assert len(rows) == 4 and all(u.replace("-", "") == c for c, u in rows)
+def test_a_cached_vector_is_found_and_seeded_only_under_its_dimension(connect, profile):
+    conn, target, embed = connect(), gen.Target.for_collection("e5"), Embedder()
+    e = profile.retrieval.embedding
+    prov = {"config_hash": "x", "embedding_model": e.model, "embedding_revision": e.revision}
+    write(conn, target, profile, embed, items(), prov=prov)
+    conn.execute("DELETE FROM embedding_cache WHERE collection = 'e5'")
+    wider = cache.key("e5", e.model_copy(update={"dimensions": 1024}), None)
+    assert cache.seed(conn, wider) == 0  # the live chunks hold 768-dimensional vectors
+    assert cache.seed(conn, cache.key("e5", e, None)) == 3
+    assert conn.execute("SELECT DISTINCT dimensions FROM embedding_cache WHERE collection = 'e5'").fetchall() == [
+        (768,)
+    ]
+    conn.execute("DELETE FROM embedding_cache WHERE collection = 'e5' AND dimensions = 1024")
+    texts = [c.content for c in writer.rows(items(), profile)[1]]
+    assert cache.fill(conn, wider, 1, embed, texts) == {"cached": 0, "computed": 3}  # the 768 entries do not serve it
 
 
 def registry(conn, collection):

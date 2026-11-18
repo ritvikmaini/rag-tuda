@@ -28,17 +28,17 @@ VECTOR: LiteralString = (
     'FROM "public".{} ORDER BY "embedding" <=> %(vector)s::vector LIMIT %(k)s'
 )
 FTS_AND: LiteralString = (
-    "SELECT content, section_id, ts_rank(fts, plainto_tsquery(%(lang)s, %(query)s)) as rank "
-    "FROM {} WHERE fts @@ plainto_tsquery(%(lang)s, %(query)s) ORDER BY rank DESC LIMIT %(k)s"
+    "SELECT content, section_id, ts_rank(fts_de, plainto_tsquery(%(lang)s, %(query)s)) as rank "
+    "FROM {} WHERE fts_de @@ plainto_tsquery(%(lang)s, %(query)s) ORDER BY rank DESC LIMIT %(k)s"
 )
 FTS_OR: LiteralString = (
-    "SELECT content, section_id, ts_rank(fts, to_tsquery(%(lang)s, %(or_terms)s)) as rank "
-    "FROM {} WHERE fts @@ to_tsquery(%(lang)s, %(or_terms)s) AND NOT fts @@ plainto_tsquery(%(lang)s, "
+    "SELECT content, section_id, ts_rank(fts_de, to_tsquery(%(lang)s, %(or_terms)s)) as rank "
+    "FROM {} WHERE fts_de @@ to_tsquery(%(lang)s, %(or_terms)s) AND NOT fts_de @@ plainto_tsquery(%(lang)s, "
     "%(query)s) ORDER BY rank DESC LIMIT %(remaining)s"
 )
 TSQUERY: LiteralString = "SELECT plainto_tsquery(%(lang)s, %(query)s)::text as tsq"
 COUNT_ALL: LiteralString = "SELECT COUNT(*) FROM {}"
-COUNT_TERM: LiteralString = "SELECT COUNT(*) FROM {} WHERE fts @@ to_tsquery(%(lang)s, %(term)s)"
+COUNT_TERM: LiteralString = "SELECT COUNT(*) FROM {} WHERE fts_de @@ to_tsquery(%(lang)s, %(term)s)"
 SECTIONS: LiteralString = "SELECT section_id, content as text, metadata FROM {} WHERE section_id = ANY(%(section_ids)s)"
 PING: LiteralString = "SELECT 1 FROM {} LIMIT 1"
 CHILD_PROBE: LiteralString = 'SELECT "content", "section_id", "embedding" FROM {} LIMIT 0'

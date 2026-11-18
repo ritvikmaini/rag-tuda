@@ -89,8 +89,22 @@ def _date(value):
     return None
 
 
+def _array(value, cast):
+    """A list of the value's items as `cast` makes them, or None for an absent or empty value: NULL, never an empty array."""
+    return [cast(v) for v in value] if value else None
+
+
+def _json_default(value):
+    """json.dumps for the metadata: a date is its ISO day."""
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    raise TypeError(f"metadata value {value!r} is not JSON serializable")
+
+
 def _typed(meta, prefix, profile, source):
-    """The typed columns every section and its chunks carry. The source is the connector that produced the document."""
+    """The typed columns every section and its chunks carry. The source is the connector that produced the document.
+    The document metadata (ddl.DOCUMENT_COLUMNS) comes from the metadata keys of the same names: degree, programme and
+    po_version as lists, valid_from as an ISO day; a document that states no language has the profile's."""
     audiences = {s.connector: s.audience for s in profile.ingest.sources.values()}
     if source not in audiences:
         raise ValueError(
@@ -109,6 +123,14 @@ def _typed(meta, prefix, profile, source):
         "page": page if page else None,
         "title": meta.get("title"),
         "header": sanitize_text(prefix) or None,
+        "regulation": meta.get("regulation") or None,
+        "degree": _array(meta.get("degree"), str),
+        "programme": _array(meta.get("programme"), str),
+        "po_version": _array(meta.get("po_version"), int),
+        "archived": bool(meta.get("archived")),
+        "valid_from": _date(meta.get("valid_from")),
+        "lang": meta.get("lang") or profile.identity.language,
+        "twin_key": meta.get("twin_key") or None,
     }
 
 
@@ -130,7 +152,9 @@ def rows(parents: list[Parent], profile) -> tuple[list[tuple], list[ChunkRow]]:
                 "source": name,
                 "file-folder": folder,
             }
-            meta = cast(dict, sanitize_metadata(json.loads(json.dumps(combined))))  # a dict comes back as a dict
+            meta = cast(
+                dict, sanitize_metadata(json.loads(json.dumps(combined, default=_json_default)))
+            )  # a dict comes back as a dict
             typed = _typed(meta, p.prefix, profile, p.source)
             content = sanitize_text(p.text)
             sid = section_id(typed["document_id"], meta["part_index"], content)
@@ -172,9 +196,7 @@ def write_v2(conn, embed, tables, parents, profile, *, generation, cache_key) ->
     cache_key: cache.key(...). Vectors go in as text, never through pgvector's binary adapter.
     Returns {"children", "parents"} for verify and {"embeddings": {"cached", "computed"}} for the reply."""
     sections, chunks = rows(parents, profile)
-    for statement in ddl.create_tables(
-        tables["parents"], tables["children"], profile.retrieval.fts_language, profile.retrieval.embedding.dimensions
-    ):
+    for statement in ddl.create_tables(tables["parents"], tables["children"], profile.retrieval.embedding.dimensions):
         conn.execute(statement)
     with conn.cursor().copy(
         f"COPY {ddl.ident(tables['parents'])} ({', '.join(ddl.SECTION_COLUMNS)}) FROM STDIN"

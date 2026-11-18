@@ -15,13 +15,8 @@ SOURCE = open(
 ).read()
 # pg_get_indexdef of a v2 pair the writer built (ddl.create_tables + ddl.create_indexes; no legacy column)
 CHILDREN = [
-    (
-        "CREATE INDEX example_g0014_chunks_hnsw ON public.example_g0014_chunks USING hnsw "
-        "(embedding vector_cosine_ops) WITH (m='16', ef_construction='128')",
-        True,
-        False,
-    ),
-    ("CREATE INDEX example_g0014_chunks_fts ON public.example_g0014_chunks USING gin (fts)", True, False),
+    ("CREATE INDEX example_g0014_chunks_fts_de ON public.example_g0014_chunks USING gin (fts_de)", True, False),
+    ("CREATE INDEX example_g0014_chunks_fts_en ON public.example_g0014_chunks USING gin (fts_en)", True, False),
     (
         "CREATE UNIQUE INDEX example_g0014_chunks_pkey ON public.example_g0014_chunks USING btree (chunk_id)",
         True,
@@ -67,9 +62,9 @@ def test_the_gate_accepts_the_writers_indexes_by_definition_whatever_their_names
 
 
 def test_the_gate_names_a_missing_invalid_or_non_unique_index():
-    assert gen.missing_indexes("children", CHILDREN[1:]) == ["hnsw on embedding"]
-    invalid = [(d, "hnsw" not in d, u) for d, v, u in CHILDREN]
-    assert gen.missing_indexes("children", invalid) == ["hnsw on embedding"]
+    assert gen.missing_indexes("children", CHILDREN[1:]) == ["gin on fts_de"]
+    invalid = [(d, "fts_en" not in d, u) for d, v, u in CHILDREN]
+    assert gen.missing_indexes("children", invalid) == ["gin on fts_en"]
     not_unique = [(d, v, False) for d, v, u in PARENTS]
     assert gen.missing_indexes("parents", not_unique) == ["primary section_id"]
     assert gen.missing_indexes("parents", []) == ["primary section_id", "btree on document_id"]

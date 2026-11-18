@@ -90,6 +90,7 @@ def test_the_writer_gets_the_parents_the_v2_names_and_the_profile(db_settings, m
         "Snowflake/snowflake-arctic-embed-m-v2.0",
         "95c2741480856aa9666782eb4afe11959938017f",
         "",
+        768,
     )
 
 

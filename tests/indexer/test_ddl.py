@@ -20,41 +20,56 @@ def test_the_typed_views_list_their_columns_and_no_legacy_column():
     assert "langchain" not in chunks + sections and "*" not in chunks + sections
 
 
-def test_the_fts_language_comes_from_the_profile_and_is_a_plain_word():
-    # the 'german' check by behaviour, not by reading source: the DDL uses the language it is given
-    chunks = ddl.create_tables("a_sections", "a_chunks", "simple", 768)[1]
-    assert "to_tsvector('simple'::regconfig, content)" in chunks and "german" not in chunks
-    assert "to_tsvector('german'::regconfig, content)" in ddl.create_tables("a_sections", "a_chunks", "german", 768)[1]
+def test_the_document_metadata_is_typed_on_both_tables_and_both_views():
+    sections, chunks = ddl.create_tables("a_sections", "a_chunks", 768)
+    for column in (
+        "regulation text",
+        "degree text[]",
+        "programme text[]",
+        "po_version integer[]",
+        "archived boolean NOT NULL DEFAULT false",
+        "valid_from date",
+        "lang text NOT NULL",
+        "twin_key text",
+    ):
+        assert column in sections and column in chunks, column
+    assert "CHECK (audience = 'public')" in sections
+    views = " ".join(ddl.typed_views("example", "a_chunks", "a_sections"))
+    assert all(c in views for c in ddl.DOCUMENT_COLUMNS) and "fts_de, fts_en" in views
+
+
+def test_the_full_text_columns_are_generated_and_a_chunk_is_written_without_them():
+    chunks = ddl.create_tables("a_sections", "a_chunks", 768)[1]
+    assert "fts_de tsvector NOT NULL GENERATED ALWAYS AS (to_tsvector('german'::regconfig, content)) STORED" in chunks
+    assert "CASE WHEN lang = 'en' THEN to_tsvector('english'::regconfig, content) END" in chunks
+    assert not set(ddl.CHUNK_COLUMNS) & {"fts_de", "fts_en", "fts"}
+    assert ddl.CHUNK_COLUMNS == tuple(c for c in ddl.TYPED_CHUNKS if c not in ("fts_de", "fts_en"))
     with pytest.raises(ValueError):
-        ddl.create_tables("a_sections", "a_chunks", "german'); DROP TABLE x; --", 768)
+        ddl.create_tables("a_sections", "a_chunks", "768")
 
 
-def test_indexes_match_the_hnsw_parameters():
+def test_the_indexes_are_the_full_text_ones_and_there_is_no_vector_index():
     statements = " ".join(ddl.create_indexes("a_sections", "a_chunks"))
-    assert "USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 128)" in statements
-    assert "USING gin (fts)" in statements and "(section_id)" in statements and "(document_id)" in statements
+    assert "USING gin (fts_de)" in statements and "USING gin (fts_en)" in statements
+    assert "(section_id)" in statements and "(document_id)" in statements
+    assert "hnsw" not in statements.lower() and "ivfflat" not in statements.lower()
 
 
 def test_required_indexes_name_their_definitions():
     names = {name for name, _, _ in ddl.REQUIRED_INDEXES["children"]}
-    assert names == {
-        "hnsw on embedding",
-        "gin on fts",
-        "primary chunk_id",
-        "btree on section_id",
-    }
+    assert names == {"gin on fts_de", "gin on fts_en", "primary chunk_id", "btree on section_id"}
 
 
 def test_new_chunk_tables_carry_no_legacy_column():  # new generations have no langchain_* columns
-    chunks = ddl.create_tables("a_sections", "a_chunks", "german", 768)[1]
+    chunks = ddl.create_tables("a_sections", "a_chunks", 768)[1]
     assert "langchain" not in chunks and chunks.endswith("extra jsonb NOT NULL DEFAULT '{}'::jsonb)")
-    assert ddl.CHUNK_COLUMNS == tuple(c for c in ddl.TYPED_CHUNKS if c != "fts")
     assert not [n for n, _, _ in ddl.REQUIRED_INDEXES["children"] if "langchain" in n]
 
 
 def test_the_cache_and_the_registry_are_created_with_the_generation_tables():
     assert gen.DDL[-2:] == (ddl.EMBEDDING_CACHE, ddl.INDEX_DOCUMENTS)
-    assert "PRIMARY KEY (collection, model, revision, passage_prefix, text_sha256)" in ddl.EMBEDDING_CACHE
+    assert "PRIMARY KEY (collection, model, revision, passage_prefix, dimensions, text_sha256)" in ddl.EMBEDDING_CACHE
+    assert "dimensions integer NOT NULL" in ddl.EMBEDDING_CACHE
     assert (
         "embedding vector NOT NULL" in ddl.EMBEDDING_CACHE and "last_generation integer NOT NULL" in ddl.EMBEDDING_CACHE
     )
