@@ -164,3 +164,15 @@ def test_a_bad_card_names_the_file_and_the_key(tmp_path: Path) -> None:
         load_card(path)
     with pytest.raises(SettingsError, match="cannot be read"):
         load_card("missing", tmp_path)
+
+
+def test_a_section_that_is_no_table_names_the_file_and_the_key(tmp_path: Path) -> None:
+    path = tmp_path / "flat.toml"
+    path.write_text(
+        'name = "flat"\nclass = "M"\nstructured_output = "json_object"\nchars_per_token = 3\nprompt_overlay = "large"\n'
+        'slots = 1\nbudget = 5\n[answer]\nprovider = "ollama"\nurl = "http://127.0.0.1:11434/v1"\nmodel = "m"\n'
+        "context_window = 8192\n[gated]\niterative_retrieval = true\nversion_table = true\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(SettingsError, match=r"budget.*flat\.toml"):
+        load_card(path)

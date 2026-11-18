@@ -174,7 +174,11 @@ class Card(CardModel):
         defaults = CLASS_DEFAULTS.get(str(given.get("class", given.get("size_class"))))
         if defaults is None:
             return given  # an unknown class: validation names it
-        merged: dict[str, Any] = {section: {**values, **given.get(section, {})} for section, values in defaults.items()}
+        # a section that is no table (budget = 5) is left to the field validation, which names it
+        merged: dict[str, Any] = {}
+        for section, values in defaults.items():
+            own = given.get(section, {})
+            merged[section] = {**values, **own} if isinstance(own, dict) else own
         return {**given, **merged}
 
     @model_validator(mode="after")
