@@ -123,6 +123,20 @@ def test_an_empty_list_is_refused(make_ctx, pdf_dir):
         sync_pdfs([], make_ctx(), pdf_dir=pdf_dir)
 
 
+def test_an_empty_list_may_be_allowed_and_keeps_what_the_registry_holds(make_ctx, pdf_dir):
+    ctx = make_ctx(served(1, 2, 3))
+    sync_pdfs([entry(1), entry(2), entry(3)], ctx, pdf_dir=pdf_dir)
+    ctx.fetch.calls.clear()
+    result = sync_pdfs([], ctx, pdf_dir=pdf_dir, allow_empty=True)
+    assert sorted(e.url for e in result.retained) == [url(1), url(2), url(3)] and ctx.fetch.calls == []
+    assert registry(ctx) == {url(i): f"h{i}" for i in (1, 2, 3)} and all(
+        local_path(url(i), pdf_dir).exists() for i in (1, 2, 3)
+    )
+    assert (
+        sync_pdfs([], make_ctx(), pdf_dir=pdf_dir.parent / "none", allow_empty=True).entries == []
+    )  # no file, nothing to keep
+
+
 def test_a_limited_run_syncs_the_first_entries_only(make_ctx, pdf_dir):
     ctx = make_ctx(served(1, 2, 3), limit=2)
     result = sync_pdfs([entry(1), entry(2), entry(3)], ctx, pdf_dir=pdf_dir)

@@ -50,14 +50,17 @@ class SyncResult:
         return self._count("missing")
 
 
-def sync_pdfs(entries: list[PdfEntry], ctx: SourceContext, *, pdf_dir: str | Path | None = None) -> SyncResult:
+def sync_pdfs(
+    entries: list[PdfEntry], ctx: SourceContext, *, pdf_dir: str | Path | None = None, allow_empty: bool = False
+) -> SyncResult:
     """Sync `entries` into pdf_dir (default: the context's paths.pdf_dir). ctx.reuse (frozen inputs): nothing is fetched,
     a PDF whose file is missing counts as missing, the registry is not written and the safeguard runs dry. ctx.limit: only
     the first N entries, and no safeguard. A corrupt registry raises CorruptStateError; a corrupt list state is reported in `check` (corrupt) with
     every missing PDF kept. An URL listed twice is synced once (the first entry wins). An empty list raises ValueError: it
-    is a failed crawl, not a list."""
+    is a failed crawl, not a list, unless `allow_empty`: then the list safeguard treats it as a list that shrank to nothing, so
+    every registered PDF is kept for its grace runs."""
     entries = list({entry.url: entry for entry in reversed(entries)}.values())[::-1]
-    if not entries:
+    if not entries and not allow_empty:
         raise ValueError("no PDF entries to sync")
     pdf_dir = pdf_dir or ctx.paths["pdf_dir"]
     registry = reg.load(ctx.state)
