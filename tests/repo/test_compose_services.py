@@ -147,6 +147,8 @@ def test_the_documented_index_build_command_runs_the_indexer_cli():
     harness runs the same words in the same service."""
     dockerfile = open(os.path.join(ROOT, "apps/indexer/Dockerfile"), encoding="utf-8").read()
     assert 'ENTRYPOINT ["indexer"]\nCMD ["--help"]' in dockerfile
+    # sources.yaml and roles.yaml sit beside the profile file, so the image carries the whole profile folder
+    assert "COPY profiles/${PROFILE}/ /app/profile/\nENV RAG_PROFILE=/app/profile/profile.yaml" in dockerfile
     readme = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
     assert "--profile build run --rm indexer build`" in readme
     assert services("deploy/compose.yaml")["indexer"]["profiles"] == ["build"]

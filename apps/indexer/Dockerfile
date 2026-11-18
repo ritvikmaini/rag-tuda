@@ -38,7 +38,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 ARG PROFILE=example
 # the profile is data baked into the image: the image tag fixes every value that decides the index
-COPY profiles/${PROFILE}/profile.yaml /app/profile/profile.yaml
+COPY profiles/${PROFILE}/ /app/profile/
 ENV RAG_PROFILE=/app/profile/profile.yaml
 RUN mkdir -p /app/data/vector_database_contents
 COPY --from=builder /app/.venv /app/.venv
