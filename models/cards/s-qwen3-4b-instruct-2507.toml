@@ -1,6 +1,7 @@
 # Qwen3 4B Instruct 2507 on Ollama; answers without a thinking block, the default of class S
 name = "s-qwen3-4b-instruct-2507"
 class = "S"
+# Ollama turns the schema into a grammar, so every analysis reply is valid JSON of the schema (strict true or false)
 structured_output = "json_schema"
 chars_per_token = 3.3
 prompt_overlay = "small"
@@ -20,3 +21,13 @@ answer_tokens = 700
 [reasoning]
 answer = "off"
 analysis = "off"
+
+# a full 8000-token window (7.3K prompt tokens) prefills at about 430 tokens/s and decodes at about 38 tokens/s on an M1 Max:
+# the first token comes after 18 s and a 700-token answer ends after 36 s (a cold model load adds up to 7 s); a request that
+# is not answered from the prompt cache analyses in 6 s. The limits are about twice the slowest case, for slower Macs.
+[timeouts]
+deadline_s = 150
+idle_s = 60
+llm_read_s = 60
+analysis_s = 40
+retries = 1
