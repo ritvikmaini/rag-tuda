@@ -1,0 +1,20 @@
+name = "m-test-35b"
+class = "M"
+structured_output = "json_schema"
+chars_per_token = 3.3
+prompt_overlay = "large"
+slots = 1
+
+[answer]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "test:35b-a3b"
+context_window = 262144
+
+[budget]
+window_tokens = 16000
+answer_tokens = 1200
+
+[gated]
+iterative_retrieval = true
+version_table = true

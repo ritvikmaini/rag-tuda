@@ -1,0 +1,25 @@
+name = "l-test-groq"
+class = "L"
+structured_output = "json_object"
+chars_per_token = 3.5
+prompt_overlay = "large"
+slots = 1
+
+[answer]
+provider = "groq"
+url = "https://api.groq.com/openai/v1"
+model = "test/120b"
+context_window = 131072
+
+[analysis]
+provider = "ollama"
+url = "http://127.0.0.1:11434/v1"
+model = "test:4b"
+context_window = 32768
+
+[limits]
+tpm = 8000
+
+[budget]
+window_tokens = 16000
+answer_tokens = 1000
