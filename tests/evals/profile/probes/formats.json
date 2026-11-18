@@ -1,0 +1,32 @@
+{
+ "version": "formats-v1",
+ "conversations": [
+  {
+   "id": "FT01",
+   "set": "formats",
+   "turns": [
+    {
+     "q": "Fasse das Arbeitszeitgesetz als Tabelle zusammen."
+    }
+   ]
+  },
+  {
+   "id": "FV01",
+   "set": "formats",
+   "turns": [
+    {
+     "q": "Gib mir eine Liste der Ruhezeiten."
+    }
+   ]
+  },
+  {
+   "id": "FV02",
+   "set": "formats",
+   "turns": [
+    {
+     "q": "Und als Tabelle?"
+    }
+   ]
+  }
+ ]
+}

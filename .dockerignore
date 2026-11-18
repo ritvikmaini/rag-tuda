@@ -1,0 +1,11 @@
+# Root build context: an allowlist. The root also holds data/ (crawl, PDFs), secrets/ and .env, which must stay out;
+# only the workspace and the profiles enter the image builds.
+*
+!pyproject.toml
+!uv.lock
+!packages/
+!apps/
+!profiles/
+**/__pycache__
+**/*.pyc
+**/.venv

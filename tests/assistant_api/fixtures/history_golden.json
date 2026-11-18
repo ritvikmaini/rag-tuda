@@ -1,0 +1,438 @@
+{
+ "conversations": [
+  {
+   "name": "plain",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "completed",
+     "answer": "Antwort 2 [2].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ],
+      [
+       "Frage zwei",
+       "Antwort 2 [2]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "failed in between",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "failed",
+     "answer": null,
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "stopped in between (H1)",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "stopped",
+     "answer": null,
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "edit of the first (H2)",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "completed",
+     "answer": "Antwort 2 [2].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": "00000000-0000-4000-8000-000000000001",
+     "kept": null,
+     "history": []
+    }
+   ]
+  },
+  {
+   "name": "retry of a stopped first (H3)",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "stopped",
+     "answer": null,
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 2 [2].",
+     "replace_from": "00000000-0000-4000-8000-000000000001",
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage zwei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 2 [2]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "too long in between (H5)",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "outcome": "too_long",
+     "answer": null,
+     "replace_from": null,
+     "kept": null,
+     "history": null
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000004",
+     "q": "Frage vier",
+     "outcome": "completed",
+     "answer": "Antwort 4 [4].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ],
+      [
+       "Frage drei",
+       "Antwort 3 [3]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "edit of a busy one, kept placed",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "busy",
+     "answer": null,
+     "replace_from": null,
+     "kept": null,
+     "history": null
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": "00000000-0000-4000-8000-000000000002",
+     "kept": [
+      "00000000-0000-4000-8000-000000000001"
+     ],
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "edit with nothing kept",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "completed",
+     "answer": "Antwort 2 [2].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": "00000000-0000-4000-8000-999999999999",
+     "kept": [],
+     "history": []
+    }
+   ]
+  },
+  {
+   "name": "edit of an unknown id without kept",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "completed",
+     "answer": "Antwort 2 [2].",
+     "replace_from": "00000000-0000-4000-8000-999999999999",
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "edit of a busy one, kept placed before a stored turn",
+   "steps": [
+    {
+     "id": "00000000-0000-4000-8000-000000000001",
+     "q": "Frage eins",
+     "outcome": "completed",
+     "answer": "Antwort 1 [1].",
+     "replace_from": null,
+     "kept": null,
+     "history": []
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000002",
+     "q": "Frage zwei",
+     "outcome": "busy",
+     "answer": null,
+     "replace_from": null,
+     "kept": null,
+     "history": null
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000003",
+     "q": "Frage drei",
+     "outcome": "completed",
+     "answer": "Antwort 3 [3].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000004",
+     "q": "Frage vier",
+     "outcome": "completed",
+     "answer": "Antwort 4 [4].",
+     "replace_from": "00000000-0000-4000-8000-000000000002",
+     "kept": [
+      "00000000-0000-4000-8000-000000000001"
+     ],
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ]
+     ]
+    },
+    {
+     "id": "00000000-0000-4000-8000-000000000005",
+     "q": "Frage fuenf",
+     "outcome": "completed",
+     "answer": "Antwort 5 [5].",
+     "replace_from": null,
+     "kept": null,
+     "history": [
+      [
+       "Frage eins",
+       "Antwort 1 [1]."
+      ],
+      [
+       "Frage vier",
+       "Antwort 4 [4]."
+      ]
+     ]
+    }
+   ]
+  }
+ ]
+}

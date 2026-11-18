@@ -1,0 +1,64 @@
+# The example profile: ten German federal laws (amtliche Werke, § 5 UrhG) in the
+# collection `rag`, read by the example.fixture connector. The harness's example leg bakes it into the indexer and assistant
+# images (PROFILE=example).
+collections:
+  - {name: rag, audiences: [public]}
+retrieval:
+  embedding:
+    model: Snowflake/snowflake-arctic-embed-m-v2.0
+    revision: 95c2741480856aa9666782eb4afe11959938017f
+    dimensions: 768
+    query_prefix: "query: "
+    passage_prefix: ""
+  fts_language: german
+  semantic_k: 30
+  keyword_k: 10
+  fts_extra_stopwords: []
+  max_queries: 6
+  final_k: 14
+  semantic_max_distance: null
+  rerank: {model: BAAI/bge-reranker-v2-m3, revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e, threshold: 0.50,
+           parent_text: true, min_docs: 3}
+ingest:
+  chunking: {mode: structure, parent_chars: 2000, parent_overlap: 100, child_chars: 450, child_overlap: 50,
+             children: recursive, header: tier1}
+  collections:
+    rag: {min_build_ratio: 0.7}
+  extraction: {processing: fast, max_ocr_pages: 500, ocr_pages_per_run: 100, clean_markup: true, min_text_length: 50}
+  # the source header's Geltungsbereich: no groups or areas, so only an exclusion word makes a limit
+  scope: {groups: {}, areas: [], compilations: []}
+  # in build order; a source not listed is not built
+  sources:
+    gesetze: {connector: example.fixture, audience: public, min_documents: 10,
+              base_url: "https://www.gesetze-im-internet.de/"}
+
+# --- the assistant: its effective values (tests/assistant_api/test_settings.py) -----------------------------------------
+identity:
+  bot_name: Beispiel-Assistent
+  language: de
+  locale: de_DE
+  date_format: "%A, der %d.%m.%Y %H:%M:%S"
+  day_names: [Montag, Dienstag, Mittwoch, Donnerstag, Freitag, Samstag, Sonntag]
+ranking:
+  recency_types: []
+  recency_bonus_per_year: 0.01
+  recency_max_bonus: 0.05
+  in_range_bonus: 0.2
+  in_range_by_year: true
+  question_years: true
+  no_recency_in_range: true
+  relevance_floor: 0.0
+  source_min_score: 0.0
+  max_per_document: 0
+history: {turns: 2, max_tokens: 1200, max_age_hours: 12, position: after_system}
+guard: {max_question_chars: 2000, context_window: 8192, safety_margin: 128, source_window_chars: 300, full_sources: 3}
+generation:
+  model: Qwen/Qwen3-14B-AWQ
+  analysis_model: Qwen/Qwen3-14B-AWQ
+  temperature: 0.1
+  analysis_temperature: 0
+  max_tokens: 900
+  analysis_max_tokens: 400
+  disable_thinking: true
+  sampling: {top_k: 50, top_p: 0.1, repetition_penalty: 1.05, frequency_penalty: null, presence_penalty: null}
+formats: {sources_event: before}

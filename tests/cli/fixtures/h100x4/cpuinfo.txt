@@ -1,0 +1,3 @@
+processor	: 0
+model name	: Intel(R) Xeon(R) Platinum 8480+
+cpu cores	: 8

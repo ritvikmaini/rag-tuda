@@ -1,0 +1,23 @@
+{
+ "version": "figures-v1",
+ "conversations": [
+  {
+   "id": "F01",
+   "set": "figures",
+   "turns": [
+    {
+     "q": "Wie viele Wochenstunden darf ich im Durchschnitt arbeiten?"
+    }
+   ]
+  },
+  {
+   "id": "F06",
+   "set": "figures",
+   "turns": [
+    {
+     "q": "Wie viele Wochen dauert der Mutterschutz?"
+    }
+   ]
+  }
+ ]
+}

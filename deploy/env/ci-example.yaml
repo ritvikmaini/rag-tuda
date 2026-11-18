@@ -1,0 +1,6 @@
+# The example leg's overlay: ci.yaml's, with the one source of the example profile reading the
+# mounted law texts (deploy/compose.ci.example.yaml).
+database: {host: pgvector, port: 5432}
+model_servers: {embedding_url: "http://embedding_service:8001"}
+connectors:
+  gesetze: {dir: /app/example}

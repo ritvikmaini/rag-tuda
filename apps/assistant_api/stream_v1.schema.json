@@ -1,0 +1,450 @@
+{
+ "$defs": {
+  "Chunk": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "title": "Content",
+     "type": "string"
+    },
+    "type": {
+     "const": "chunk",
+     "default": "chunk",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Chunk",
+   "type": "object"
+  },
+  "Citation": {
+   "additionalProperties": false,
+   "properties": {
+    "date": {
+     "title": "Date",
+     "type": "string"
+    },
+    "n": {
+     "title": "N",
+     "type": "integer"
+    },
+    "origin": {
+     "title": "Origin",
+     "type": "string"
+    },
+    "page": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Page"
+    },
+    "quote": {
+     "title": "Quote",
+     "type": "string"
+    },
+    "title": {
+     "title": "Title",
+     "type": "string"
+    },
+    "type": {
+     "title": "Type",
+     "type": "string"
+    },
+    "url": {
+     "title": "Url",
+     "type": "string"
+    }
+   },
+   "required": [
+    "n",
+    "url",
+    "page",
+    "title",
+    "type",
+    "origin",
+    "date",
+    "quote"
+   ],
+   "title": "Citation",
+   "type": "object"
+  },
+  "Citations": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "items": {
+      "$ref": "#/$defs/Citation"
+     },
+     "title": "Content",
+     "type": "array"
+    },
+    "type": {
+     "const": "citations",
+     "default": "citations",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Citations",
+   "type": "object"
+  },
+  "Docs": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "items": {
+      "additionalProperties": true,
+      "type": "object"
+     },
+     "title": "Content",
+     "type": "array"
+    },
+    "type": {
+     "const": "docs",
+     "default": "docs",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Docs",
+   "type": "object"
+  },
+  "Done": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "$ref": "#/$defs/DoneContent"
+    },
+    "type": {
+     "const": "done",
+     "default": "done",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Done",
+   "type": "object"
+  },
+  "DoneContent": {
+   "additionalProperties": false,
+   "properties": {
+    "generation": {
+     "anyOf": [
+      {
+       "type": "integer"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Generation"
+    },
+    "outcome": {
+     "enum": [
+      "completed",
+      "failed",
+      "too_long",
+      "busy",
+      "refused"
+     ],
+     "title": "Outcome",
+     "type": "string"
+    },
+    "prompts": {
+     "anyOf": [
+      {
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "type": "integer"
+         },
+         {
+          "type": "null"
+         }
+        ]
+       },
+       "type": "object"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Prompts"
+    },
+    "scope_fallback": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Scope Fallback"
+    }
+   },
+   "required": [
+    "outcome"
+   ],
+   "title": "DoneContent",
+   "type": "object"
+  },
+  "Error": {
+   "additionalProperties": false,
+   "properties": {
+    "code": {
+     "enum": [
+      "busy",
+      "not_ready",
+      "pipeline_error",
+      "timeout",
+      "empty_answer",
+      "exception"
+     ],
+     "title": "Code",
+     "type": "string"
+    },
+    "content": {
+     "title": "Content",
+     "type": "string"
+    },
+    "type": {
+     "const": "error",
+     "default": "error",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content",
+    "code"
+   ],
+   "title": "Error",
+   "type": "object"
+  },
+  "Meta": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "$ref": "#/$defs/MetaContent"
+    },
+    "type": {
+     "const": "meta",
+     "default": "meta",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Meta",
+   "type": "object"
+  },
+  "MetaContent": {
+   "additionalProperties": false,
+   "properties": {
+    "format": {
+     "const": 1,
+     "default": 1,
+     "title": "Format",
+     "type": "integer"
+    },
+    "trace_id": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "title": "Trace Id"
+    },
+    "turn_id": {
+     "title": "Turn Id",
+     "type": "string"
+    }
+   },
+   "required": [
+    "turn_id",
+    "trace_id"
+   ],
+   "title": "MetaContent",
+   "type": "object"
+  },
+  "ShapeFrame": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "enum": [
+      "text",
+      "table",
+      "checklist",
+      "steps",
+      "mindmap"
+     ],
+     "title": "Content",
+     "type": "string"
+    },
+    "type": {
+     "const": "shape",
+     "default": "shape",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "ShapeFrame",
+   "type": "object"
+  },
+  "Status": {
+   "additionalProperties": false,
+   "properties": {
+    "content": {
+     "additionalProperties": true,
+     "title": "Content",
+     "type": "object"
+    },
+    "type": {
+     "const": "status",
+     "default": "status",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Status",
+   "type": "object"
+  },
+  "Variant": {
+   "additionalProperties": false,
+   "properties": {
+    "code": {
+     "anyOf": [
+      {
+       "enum": [
+        "unknown_variant",
+        "no_turn_id",
+        "no_answer",
+        "not_last_question",
+        "no_sources",
+        "formats_off",
+        "state_unavailable",
+        "no_version",
+        "failed"
+       ],
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Code"
+    },
+    "content": {
+     "$ref": "#/$defs/VariantContent"
+    },
+    "type": {
+     "const": "variant",
+     "default": "variant",
+     "title": "Type",
+     "type": "string"
+    }
+   },
+   "required": [
+    "content"
+   ],
+   "title": "Variant",
+   "type": "object"
+  },
+  "VariantContent": {
+   "additionalProperties": false,
+   "properties": {
+    "name": {
+     "maxLength": 20,
+     "title": "Name",
+     "type": "string"
+    },
+    "ok": {
+     "title": "Ok",
+     "type": "boolean"
+    }
+   },
+   "required": [
+    "name",
+    "ok"
+   ],
+   "title": "VariantContent",
+   "type": "object"
+  }
+ },
+ "discriminator": {
+  "mapping": {
+   "chunk": "#/$defs/Chunk",
+   "citations": "#/$defs/Citations",
+   "docs": "#/$defs/Docs",
+   "done": "#/$defs/Done",
+   "error": "#/$defs/Error",
+   "meta": "#/$defs/Meta",
+   "shape": "#/$defs/ShapeFrame",
+   "status": "#/$defs/Status",
+   "variant": "#/$defs/Variant"
+  },
+  "propertyName": "type"
+ },
+ "oneOf": [
+  {
+   "$ref": "#/$defs/Meta"
+  },
+  {
+   "$ref": "#/$defs/Status"
+  },
+  {
+   "$ref": "#/$defs/ShapeFrame"
+  },
+  {
+   "$ref": "#/$defs/Docs"
+  },
+  {
+   "$ref": "#/$defs/Chunk"
+  },
+  {
+   "$ref": "#/$defs/Citations"
+  },
+  {
+   "$ref": "#/$defs/Variant"
+  },
+  {
+   "$ref": "#/$defs/Error"
+  },
+  {
+   "$ref": "#/$defs/Done"
+  }
+ ]
+}

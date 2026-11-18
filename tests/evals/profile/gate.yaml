@@ -1,0 +1,27 @@
+# The gate the evals tests run against: the repository's gate shape with a few small probe sets (tests/evals/profile/probes).
+baseline:
+  noise_floor: 0.9926
+  per_set: {gold: 1.0000, general: 0.9802, figures: 0.9969}
+  ttft_margin_s: 0.30
+retrieval:
+  sets: [gold, general, figures]
+  top_k: 14
+  floor: 0.97
+  volatile: [C1, F06, G36]
+latency: {sets: [gold, general, figures]}
+answers: {rerun_runs: 3, regression_at: 2, hang_s: 125}
+core: [gold, general, figures, history, formats]
+sets:
+  gold:    {file: probes/gold.json}
+  general:   {file: probes/general.json, flaky: ["C1 t1"]}
+  figures: {file: probes/figures.json}
+  history: {file: probes/history.json}
+  formats: {file: probes/formats.json, formats: v1}
+smoke:
+  max_ttft_s: 20
+  probes:
+    - {set: gold, id: G01, turns: [1], kind: lookup}
+    - {set: figures, id: F01, turns: [1], kind: lookup}
+    - {set: general, id: X16, turns: [1], kind: direct}
+    - {set: history, id: H5, turns: [2], kind: too_long}     # sent as a first question
+    - {set: history, id: H2, turns: [1, 3], kind: edit}       # turn 3 replaces turn 1

@@ -1,0 +1,63 @@
+{
+ "version": "history-v1",
+ "conversations": [
+  {
+   "id": "H1",
+   "set": "history",
+   "turns": [
+    {
+     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+    },
+    {
+     "q": "Wie lange dauert die Elternzeit?",
+     "abort_after_s": 3
+    },
+    {
+     "q": "Und was gilt für Ruhepausen?"
+    }
+   ]
+  },
+  {
+   "id": "H2",
+   "set": "history",
+   "turns": [
+    {
+     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+    },
+    {
+     "q": "Und die Ruhepausen?"
+    },
+    {
+     "q": "Wie lang ist die Kündigungsfrist in der Probezeit?",
+     "replace_turn": 1
+    },
+    {
+     "q": "Und die Probezeit?"
+    }
+   ]
+  },
+  {
+   "id": "H5",
+   "set": "history",
+   "turns": [
+    {
+     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+    },
+    {
+     "q": "Und die Ruhepausen?",
+     "repeat": {
+      "text": "Bitte lies diesen Absatz genau.",
+      "times": 70
+     }
+    },
+    {
+     "q": "Wie viele Urlaubstage stehen mir zu?"
+    },
+    {
+     "q": "Und die Ruhepausen?",
+     "replace_turn": 2
+    }
+   ]
+  }
+ ]
+}

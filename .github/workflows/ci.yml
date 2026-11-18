@@ -1,0 +1,54 @@
+# CI: a GitHub-hosted ubuntu runner, only GITHUB_TOKEN, no secrets. One job runs `just ci`, the same command as on a development
+# machine. Pull requests into main (no second run on the merge push), and by hand for any branch; other branches are checked by
+# `just ci` locally.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.23"
+  UV_PYTHON_PREFERENCE: "only-managed"  # never the runner's system Python
+  JUST_VERSION: "1.58.0"
+  # sha256 of the linux x86_64 release tarballs, from each release's checksums file (SHA256SUMS, gitleaks_<v>_checksums.txt),
+  # checked against a download of each tarball; a version bump changes its hash in the same commit
+  JUST_SHA256: "4a5cc2f53e6f0f8c59092a6cc38291eb729d46a7dd95d3ae582008881b84931d"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+jobs:
+  ci:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: free disk (the workspace syncs torch with the CUDA wheels on linux; the images need several GB more)
+        run: >-
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          /usr/local/.ghcup /usr/share/swift /usr/lib/jvm && df -h /
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: just, gitleaks
+        run: |
+          mkdir -p "$HOME/.local/bin" && echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          curl --proto '=https' --tlsv1.2 -sSfLo /tmp/just.tgz "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          echo "$JUST_SHA256  /tmp/just.tgz" | sha256sum -c -
+          tar -xzf /tmp/just.tgz -C "$HOME/.local/bin" just
+          curl --proto '=https' --tlsv1.2 -sSfLo /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C "$HOME/.local/bin" gitleaks
+      - run: just ci

@@ -1,0 +1,16 @@
+# The page's browser suite (Python Playwright and axe), npm run test:page (from web/page)
+[project]
+name = "page-tests"
+version = "0"
+requires-python = ">=3.12"
+dependencies = [
+    "pytest==9.1.1",
+    "playwright==1.63.0",
+    "axe-playwright-python==0.1.8",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+addopts = "--import-mode=importlib"

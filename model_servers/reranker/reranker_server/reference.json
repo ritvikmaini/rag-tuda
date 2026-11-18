@@ -1,0 +1,8 @@
+{
+ "model": "BAAI/bge-reranker-v2-m3",
+ "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+ "query": "Wann endet die Kernarbeitszeit?",
+ "document": "Die Kernarbeitszeit endet um 15:00 Uhr. Gleitzeit gilt fuer alle Aemter.",
+ "score": 0.9951171875,
+ "source": "POST /rerank-multi-query of the reranker server, on a GPU (fp16)"
+}

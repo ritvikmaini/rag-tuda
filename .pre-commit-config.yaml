@@ -1,0 +1,41 @@
+# pre-commit hooks. Commit stage: secrets, ruff, end of file and LF line endings on staged files. Push stage: `just pre-push`.
+# Install per worktree: pre-commit install --hook-type pre-commit --hook-type pre-push --allow-missing-config
+default_stages: [pre-commit]
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # never on tests/contracts/fixtures/ (byte-exact), deploy/pgvector/roles/ (the role
+      # files end without a newline and are mounted as secrets: an added newline would become part of the role name), the page's
+      # vendored libraries (byte-exact: their sha384 is the page's SRI value)
+      # stages pinned: the hook manifest also lists pre-push, which overrides default_stages (the fixer then rewrites files at push)
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+        exclude: &text_exclude '(^tests/contracts/fixtures/|^tests/cli/fixtures/|^deploy/pgvector/roles/|^web/page/vendor/)'
+      - id: mixed-line-ending
+        stages: [pre-commit]
+        args: [--fix=lf]
+        exclude: *text_exclude
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen --all-packages ruff check
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format --check
+        entry: uv run --frozen --all-packages ruff format --check
+        language: system
+        types_or: [python, pyi]
+      - id: just-pre-push
+        name: just pre-push (lint types imports unit contracts)
+        entry: just pre-push
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

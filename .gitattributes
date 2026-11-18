@@ -1,0 +1,21 @@
+# Line endings: LF in the repository and in every checkout, whatever core.autocrlf says.
+* text=auto eol=lf
+
+# Files that run on Linux inside Docker: always text, always LF (a CRLF entrypoint fails with "interpreter not found").
+*.sh         text eol=lf
+Dockerfile*  text eol=lf
+
+# Binaries: never converted.
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.pdf     binary
+*.zip     binary
+*.gz      binary
+*.woff    binary
+*.woff2   binary
+
+# The page's vendored libraries: byte-exact (their sha384 is the page's SRI value), no line-ending conversion.
+web/page/vendor/* -text

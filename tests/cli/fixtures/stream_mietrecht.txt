@@ -1,0 +1,32 @@
+: progress
+
+data: {"type": "meta", "content": {"format": 1, "turn_id": "7d1c2f40-0000-4000-8000-000000000001", "trace_id": null}}
+
+data: {"type": "status", "content": {"step": "analysing"}}
+
+data: {"type": "status", "content": {"step": "understood", "question": "Welche Frist gilt für die Kündigung durch den Mieter?", "intent": "document_question"}}
+
+data: {"type": "status", "content": {"step": "searching", "queries": ["Kündigungsfrist Mieter Wohnraum", "§ 573c BGB Fristen"]}}
+
+: progress
+
+data: {"type": "status", "content": {"step": "found", "documents": 2, "passages": 4}}
+
+data: {"type": "status", "content": {"step": "writing"}}
+
+data: {"type": "shape", "content": "text"}
+
+data: {"type": "docs", "content": [{"page_content": "Die Kündigung ist spätestens am dritten Werktag eines Kalendermonats zum Ablauf des übernächsten Monats zulässig.", "metadata": {"section_id": "bgb-573c", "title": "§ 573c BGB Fristen der ordentlichen Kündigung", "url": "https://example.test/bgb/573c"}}, {"page_content": "Eine Vereinbarung zum Nachteil des Mieters ist unwirksam.", "metadata": {"section_id": "bgb-573c-4", "title": "§ 573c Abs. 4 BGB", "url": "https://example.test/bgb/573c#4"}}]}
+
+data: {"type": "chunk", "content": "Der Mieter kann "}
+
+data: {"type": "chunk", "content": "spätestens am dritten Werktag eines Monats [1] "}
+
+data: {"type": "chunk", "content": "zum Ablauf des übernächsten Monats kündigen. "}
+
+data: {"type": "chunk", "content": "Abweichungen zu seinen Lasten sind unwirksam [2].\n"}
+
+data: {"type": "citations", "content": [{"n": 1, "url": "https://example.test/bgb/573c", "page": null, "title": "§ 573c BGB Fristen der ordentlichen Kündigung", "type": "Gesetz", "origin": "gesetz", "date": "2025-01-01", "quote": "Die Kündigung ist spätestens am dritten Werktag"}, {"n": 2, "url": "https://example.test/bgb/573c#4", "page": 2, "title": "§ 573c Abs. 4 BGB", "type": "Gesetz", "origin": "gesetz", "date": "2025-01-01", "quote": "Eine Vereinbarung zum Nachteil des Mieters ist unwirksam."}]}
+
+data: {"type": "done", "content": {"outcome": "completed", "generation": 3}}
+

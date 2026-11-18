@@ -1,0 +1,312 @@
+"""The retrieval sequence as a service over fakes of its ports (the SQL adapters are the harness's)."""
+
+import asyncio
+import logging
+from datetime import date
+from pathlib import Path
+
+import httpx
+import pytest
+
+from rag_core.adapters.reranker_http import RerankerHttp
+from rag_core.domain.retrieval import Hit, Section
+from rag_core.ports.retrieval import RerankError
+from rag_core.services.retrieval import RetrievalService
+from rag_core.settings import load_profile
+from rag_core.settings.profile import Profile
+from rag_core.settings.sections import Timeouts
+
+PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "example" / "profile.yaml"
+TIMEOUTS = Timeouts(
+    request_deadline_s=120,
+    request_idle_s=45,
+    analysis_s=20,
+    retrieval_s=10,
+    parent_lookup_s=5,
+    reranker_s=15,
+    llm_read_s=60,
+)
+
+
+class Embedder:
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def aembed_query(self, text: str) -> list[float]:
+        self.asked.append(text)
+        return [0.0]
+
+
+class Vector:
+    def __init__(self, texts: dict[str, str], fail: bool = False) -> None:
+        self.texts, self.fail = texts, fail
+
+    async def search(self, vector, k, *, max_distance=None):
+        if self.fail:
+            raise RuntimeError("db down")
+        return [Hit(page_content=t, metadata={"section_id": i, "retriever": "semantic"}) for t, i in self.texts.items()]
+
+
+class FullText(Vector):
+    async def search(self, query, k):  # type: ignore[override]
+        return await Vector.search(self, [0.0], k)
+
+
+class Sections:
+    def __init__(self, sections: dict[str, Section]) -> None:
+        self.sections = sections
+
+    async def get_many(self, section_ids):
+        return {i: self.sections[i] for i in section_ids if i in self.sections}
+
+    async def ping(self) -> None:
+        return None
+
+
+class Deny:
+    def __init__(self, section_id: str) -> None:
+        self.section_id = section_id
+
+    def allows(self, principal, section) -> bool:
+        return section.section_id != self.section_id
+
+
+class Reranker:
+    def __init__(self, scores: dict[str, float] | None) -> None:
+        self.scores = scores
+
+    async def rerank(self, queries, texts, timeout_s):
+        if self.scores is None:
+            raise RerankError("HTTPStatusError boom")
+        return sorted(((self.scores.get(t, 0.0), t) for t in set(texts)), reverse=True)
+
+
+def make_service(vector=None, full_text=None, sections=None, reranker=None, access=None) -> RetrievalService:
+    profile = load_profile(Profile, PROFILE)
+    sections = sections or Sections(
+        {f"p{i}": Section(f"p{i}", f"Parent {i}", {"filename": f"f{i}.pdf"}) for i in range(1, 6)}
+    )
+    return RetrievalService(
+        Embedder(),
+        vector or Vector(CHILDREN),
+        full_text or FullText({}),
+        sections,
+        reranker or Reranker({}),
+        profile.retrieval,
+        profile.ranking,
+        TIMEOUTS,
+        access,
+    )
+
+
+CHILDREN = {"child one": "p1", "child two": "p2", "child three": "p3", "child four": "p4"}
+
+
+def test_children_are_reranked_cut_and_lifted_to_their_parents() -> None:
+    scores = {"Parent 1": 0.9, "Parent 2": 0.8, "Parent 3": 0.1, "Parent 4": 0.05}  # the parent text scores too
+    docs = asyncio.run(make_service(reranker=Reranker(scores)).retrieve(["q"], question="q"))
+    assert [d.page_content for d in docs] == ["Parent 1", "Parent 2", "Parent 3"]  # threshold 0.50, min_docs 3
+    assert all("rank_score" in d.metadata for d in docs)
+
+
+def test_a_reranker_failure_keeps_the_search_order_unscored(caplog) -> None:
+    caplog.set_level(logging.ERROR)
+    docs = asyncio.run(make_service(reranker=Reranker(None)).retrieve(["q"], question="q"))
+    assert docs and all(d.metadata.get("rerank_failed") and d.metadata["cross_encoder_score"] == 0.0 for d in docs)
+    assert (
+        "Error calling reranker multi-query service: HTTPStatusError boom. Falling back to original documents."
+        in caplog.text
+    )
+
+
+def test_the_adapters_failure_is_logged_in_the_backends_words(caplog) -> None:
+    # the log line reads f"...service: {type(e).__name__} {e}. Falling back..." for the exception httpx raised
+    caplog.set_level(logging.ERROR)
+    request = httpx.Request("POST", "http://reranker_service:8003/v2/rerank")
+    with pytest.raises(httpx.HTTPStatusError) as raised:
+        httpx.Response(503, request=request).raise_for_status()
+    old = raised.value
+    expected = (
+        f"Error calling reranker multi-query service: {type(old).__name__} {old}. Falling back to original documents."
+    )
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
+    asyncio.run(
+        make_service(reranker=RerankerHttp("http://reranker_service:8003", client)).retrieve(["q"], question="q")
+    )
+    assert expected in caplog.text
+
+
+def test_every_query_failing_is_an_error() -> None:
+    with pytest.raises(RuntimeError, match="retrieval unavailable: every query failed"):
+        asyncio.run(
+            make_service(vector=Vector(CHILDREN, fail=True), full_text=FullText({}, fail=True)).retrieve(
+                ["q1", "q2"], question="q"
+            )
+        )
+
+
+def test_without_parents_the_chunks_are_the_context(caplog) -> None:
+    caplog.set_level(logging.WARNING)
+    docs = asyncio.run(
+        make_service(
+            reranker=Reranker({"child one": 0.9}), sections=Sections({"none": Section("none", "", {})})
+        ).retrieve(["q"], question="q")
+    )
+    assert docs and docs[0].page_content == "child one"
+    assert "no parents for the matched chunks; answering from the chunks" in caplog.text
+
+
+class FailingSections(Sections):
+    def __init__(self, sections: dict[str, Section], batch: bool = False, lookup: bool = False) -> None:
+        super().__init__(sections)
+        self.batch, self.lookup = batch, lookup
+
+    async def get_many(self, section_ids):
+        if self.batch:  # the first call (the reranker's parent texts) fails, the parents lookup after it works
+            self.batch = False
+            raise RuntimeError("db down")
+        if self.lookup:
+            raise asyncio.TimeoutError
+        return await super().get_many(section_ids)
+
+
+class Verbatim(Reranker):
+    """Returns exactly the scores it was given, also for texts that were not sent."""
+
+    async def rerank(self, queries, texts, timeout_s):
+        return sorted(((score, text) for text, score in (self.scores or {}).items()), reverse=True)
+
+
+def retrieve(sections, scores, vector=None, reranker=Reranker, **changes):
+    profile = load_profile(Profile, PROFILE)
+    rerank = profile.retrieval.rerank.model_copy(update=changes)
+    retrieval = profile.retrieval.model_copy(update={"rerank": rerank})
+    svc = RetrievalService(
+        Embedder(),
+        vector or Vector(CHILDREN),
+        FullText({}),
+        sections,
+        reranker(scores),
+        retrieval,
+        profile.ranking,
+        TIMEOUTS,
+    )
+    return asyncio.run(svc.retrieve(["q"], question="q"))
+
+
+PARENTS = {f"p{i}": Section(f"p{i}", f"Parent {i}", {"filename": f"f{i}.pdf"}) for i in range(1, 6)}
+
+
+def test_a_failing_parent_text_lookup_scores_the_children_alone(caplog) -> None:
+    caplog.set_level(logging.ERROR)
+    docs = retrieve(FailingSections(PARENTS, batch=True), {"child one": 0.9, "child two": 0.8, "child three": 0.7})
+    assert [d.page_content for d in docs][:3] == ["Parent 1", "Parent 2", "Parent 3"]
+    assert "parent texts for reranking unavailable: RuntimeError db down" in caplog.text
+
+
+def test_a_timed_out_parent_lookup_answers_from_the_chunks(caplog) -> None:
+    caplog.set_level(logging.WARNING)
+    docs = retrieve(FailingSections(PARENTS, lookup=True), {"child one": 0.9}, parent_text=False)
+    assert docs and docs[0].page_content == "child one"
+    assert "parent lookup timed out" in caplog.text and "answering from the chunks" in caplog.text
+
+
+def test_without_parent_text_a_reranked_text_that_is_no_document_is_skipped() -> None:
+    scores = {"child one": 0.9, "child two": 0.8, "child three": 0.7, "a text nobody searched": 0.99}
+    docs = retrieve(Sections(PARENTS), scores, reranker=Verbatim, parent_text=False)
+    assert [d.page_content for d in docs] == ["Parent 1", "Parent 2", "Parent 3"]
+
+
+def test_every_child_above_the_threshold_needs_no_min_doc_guarantee() -> None:
+    scores = {"Parent 1": 0.9, "Parent 2": 0.8, "Parent 3": 0.7, "Parent 4": 0.6}
+    assert len(retrieve(Sections(PARENTS), scores)) == 4
+
+
+def test_a_search_that_finds_nothing_returns_nothing() -> None:
+    assert retrieve(Sections(PARENTS), {}, vector=Vector({})) == []
+
+
+def test_a_query_searches_both_ways_and_one_failure_does_not_sink_the_other() -> None:
+    service = make_service(vector=Vector({"v": "a"}), full_text=FullText({}, fail=True))
+    hits = asyncio.run(service._search("q"))
+    assert [h.page_content for h in hits] == ["v"] and service.embedder.asked == ["q"]
+    both = make_service(vector=Vector({}, fail=True), full_text=FullText({}, fail=True))
+    with pytest.raises(RuntimeError, match="every search failed") as raised:
+        asyncio.run(both._search("Personalnummer 4711 Beihilfe"))
+    assert "4711" not in str(raised.value)  # no question text in an error or a log
+
+
+def test_a_failing_search_logs_the_kind_and_the_reason_never_the_query(caplog) -> None:
+    caplog.set_level(logging.ERROR)
+    service = make_service(vector=Vector({"v": "a"}), full_text=FullText({}, fail=True))
+    asyncio.run(service._search("Personalnummer 4711 Beihilfe"))
+    assert "[HybridRetriever] keyword search failed: " in caplog.text
+    assert "4711" not in caplog.text and "Beihilfe" not in caplog.text
+
+
+def test_a_denied_section_is_not_a_parent() -> None:
+    scores = {"Parent 1": 0.9, "Parent 2": 0.8, "Parent 3": 0.1, "Parent 4": 0.05}
+    allowed_hits = asyncio.run(make_service(reranker=Reranker(scores)).retrieve(["q"], question="q"))
+    hits = asyncio.run(make_service(reranker=Reranker(scores), access=Deny("p2")).retrieve(["q"], question="q"))
+    assert "p2" in {h.metadata.get("section_id") for h in allowed_hits}
+    assert "p2" not in {h.metadata.get("section_id") for h in hits}
+
+
+def test_a_denied_sections_children_never_answer() -> (
+    None
+):  # not through the parent text, not through the rerank fallback
+    service = make_service(
+        vector=Vector({"child two": "p2"}), reranker=Reranker({"child two": 0.9, "Parent 2": 0.9}), access=Deny("p2")
+    )
+    assert asyncio.run(service.retrieve(["q"], question="q")) == []
+
+
+def test_the_ranking_policy_is_the_profiles_ranking_with_the_request_dates(monkeypatch) -> None:
+    from rag_core.domain.ranking import RankingPolicy, rank
+    from rag_core.services import retrieval as retrieval_service
+
+    seen: list[RankingPolicy] = []
+
+    def spy(metas, question, policy):
+        seen.append(policy)
+        return rank(metas, question, policy)
+
+    monkeypatch.setattr(retrieval_service, "rank", spy)
+    asyncio.run(
+        make_service(reranker=Reranker({"Parent 1": 0.9})).retrieve(
+            ["q"], question="q", date_from="2024-01-01", date_to="2024-12-31"
+        )
+    )
+    assert seen == [
+        RankingPolicy(
+            relevance_floor=0.0,
+            source_min_score=0.0,
+            max_per_document=0,
+            recency_types=(),
+            recency_bonus_per_year=0.01,
+            recency_max_bonus=0.05,
+            date_from="2024-01-01",
+            date_to="2024-12-31",
+            in_range_bonus=0.2,
+            in_range_by_year=True,
+            question_years=True,
+            no_recency_in_range=True,
+        )
+    ]
+
+
+def test_retrieve_passes_today_to_the_ranking(monkeypatch) -> None:
+    """The offline harness pins the ranking's clock; production passes nothing: the day of the request."""
+    import rag_core.services.retrieval as module
+
+    seen = []
+
+    def capture(metas, question, policy):
+        seen.append(policy.today)
+        return list(range(len(metas))), {}, ""
+
+    monkeypatch.setattr(module, "rank", capture)
+    service = make_service()
+    asyncio.run(service.retrieve(["q"], question="q", today=date(2026, 9, 29)))
+    asyncio.run(service.retrieve(["q"], question="q"))
+    assert seen == [date(2026, 9, 29), None]

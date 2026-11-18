@@ -1,0 +1,53 @@
+{
+ "version": "general-v1",
+ "conversations": [
+  {
+   "id": "S01",
+   "set": "general",
+   "turns": [
+    {
+     "q": "Wie beantrage ich Elternzeit?"
+    }
+   ]
+  },
+  {
+   "id": "S02",
+   "set": "general",
+   "turns": [
+    {
+     "q": "Welche Nachweise gibt der Arbeitgeber aus?"
+    }
+   ]
+  },
+  {
+   "id": "A6",
+   "set": "general",
+   "turns": [
+    {
+     "q": "Wann gilt das Kündigungsschutzgesetz?"
+    }
+   ]
+  },
+  {
+   "id": "C1",
+   "set": "general",
+   "turns": [
+    {
+     "q": "Was regelt das Teilzeitgesetz?"
+    },
+    {
+     "q": "Und die Befristung?"
+    }
+   ]
+  },
+  {
+   "id": "X16",
+   "set": "general",
+   "turns": [
+    {
+     "q": "Erzähl mir einen Witz."
+    }
+   ]
+  }
+ ]
+}

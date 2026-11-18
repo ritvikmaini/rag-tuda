@@ -1,0 +1,17 @@
+[project]
+name = "example-profile"
+version = "0.1.0"
+description = "The example profile's connector: one document per Markdown file of profiles/example/documents"
+requires-python = ">=3.12,<3.13"
+dependencies = ["rag-core"]
+
+# found by the indexer through this entry point group; installed only into the CI images built with PROFILE=example
+[project.entry-points."rag_core.connectors"]
+"example.fixture" = "example_profile.fixture:Fixture"
+
+[tool.uv.sources]
+rag-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

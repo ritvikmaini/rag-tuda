@@ -1,0 +1,93 @@
+# rag-tuda
+
+Cited answers on open-weight models. The assistant answers a question from its indexed documents only, each statement with a
+numbered link to its source; the language model's own knowledge serves only for conversation. It answers in German, or in the
+question's language, and shapes an answer as a table, a checklist, a chart or a mind map when the question calls for one.
+Everything runs on your own hardware; no cloud service sees a question.
+
+Today the repository holds the engine, a single-page chat client and one profile, `profiles/example`: ten German federal
+labour laws, indexed by the `example.fixture` connector. A profile holds everything specific to one document collection.
+
+## Architecture at a glance
+
+```text
+page (web/page) --GET /api/chat, server-sent events--> backend (FastAPI, one pipeline slot)
+  backend: 1 query analysis ............................ vllm (Qwen3-14B-AWQ)
+           2 search: the question's vector ............. embedding_service (snowflake-arctic-embed-m-v2.0)
+                     sections and full text ............ pgvector (views rag_chunks, rag_sections)
+           3 rerank ................................... reranker_service (bge-reranker-v2-m3)
+           4 answer, streamed with citations .......... vllm
+indexer (a one-off container, `indexer build`) -> a new index generation -> views repointed -> the backend reloads it on its next start
+evals (a job container, never running on its own): probe runs, the gate and the smoke, over HTTP to the backend
+```
+
+The stream (format 1) sends `meta` first, then `status` (five steps), `docs`, `chunk`, `citations` and `error` frames, and
+`done` last; each frame is `data: <json>` followed by a blank line. The production compose file publishes no host port;
+everything is reached on the compose network or with `docker exec`.
+
+## Repository layout
+
+| Folder | What it holds |
+|---|---|
+| `src/rag_tuda/` | the command line (`doctor`, `ask`, `add`) and the `.rag/` state (`python -m rag_tuda.state init` writes the token and the database role passwords); standard library only |
+| `apps/` | `assistant_api` (the backend: FastAPI app and runtime, settings, the LangGraph graph, its own image); `indexer` (settings, connectors found by entry point, generations, the one-shot `indexer build` command and its status, housekeep, rollback and compare commands); `evals` (probe runner, gate, stats, compare, rescore, smoke; its own job image) |
+| `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes; never in a service image), workspace members; `example_profile` (the example connector) |
+| `profiles/` | `example/`: `profile.yaml`, `messages.de.yaml`, `prompts/`, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/` |
+| `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
+| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
+| `web/page/` | the chat client: static files, the vendored libraries, its unit and browser tests |
+| `tests/` | unit, contract (`contracts/`), harness (`integration/`) and repository tests |
+| `secrets/` | credential files, never in git |
+| `data/` | runtime data, not in git |
+
+## Setup
+
+The stack needs Docker with compose and, for the model servers and vLLM, a Linux host with an NVIDIA GPU (16 GB). The compose
+file names the project `rag-tuda`, so containers are `rag-tuda-<service>-1` and volumes `rag-tuda_<name>`.
+
+```sh
+git clone <this repository> rag-tuda; cd rag-tuda
+cp .env_example .env    # then set BACKEND_REFRESH_TOKEN
+PYTHONPATH=src python -m rag_tuda.state init    # the secret files under secrets/
+docker compose --env-file .env -f deploy/compose.yaml up -d pgvector
+docker compose --env-file .env -f deploy/compose.yaml --profile migrate run --rm migrate
+docker compose --env-file .env -f deploy/compose.yaml up -d
+```
+
+Then build the first index: `docker compose --env-file .env -f deploy/compose.yaml --profile build run --rm indexer build`.
+The backend reports healthy (`/readyz`) only once an index is published.
+
+Every compose command names the file and the root `.env`; a missing `--env-file` leaves `BACKEND_REFRESH_TOKEN` unset, and the
+backend then refuses every `/api` request.
+
+For development (macOS or Linux): install `uv`, `just`, Docker with compose and buildx (on macOS through Colima: `colima start
+--cpu 6 --memory 12`), gitleaks and pre-commit; then `uv sync --frozen --all-packages`, `pre-commit install --hook-type
+pre-commit --hook-type pre-push` and `just ci`.
+
+## Checks: just ci
+
+`just ci` runs, identically on a development machine and in CI: `lint` (ruff, deptry, gitleaks, the three locks), `types`
+(basedpyright), `imports` (import-linter), `unit` (pytest, the coverage ratchet), `db-tests` (the tests that need a migrated
+pgvector), `contracts` (shared fixtures, the stream schema, the profile's data), `model-servers` (each model server's tests in
+its own environment, with fake models), `images` and `harness` (the real backend and indexer images against fake model
+servers). `just pre-push` (the part without Docker) runs before every push.
+
+`just harness example` runs the example profile's leg: the ten law texts of `profiles/example` are indexed and queried through
+the real images.
+
+## Profiles and sources
+
+A profile holds what is specific to one deployment.
+
+- `profile.yaml` holds the values that decide the index (chunking, extraction, the sources and their minimums, the embedding
+  model) and the assistant's answer-affecting values (identity, ranking, history, guard, generation); it is baked into the
+  indexer and assistant images, so an image tag fixes them. `messages.de.yaml` holds the assistant's German texts, under `labels`
+  the origin labels of the sources, and `prompts/` its four prompts, read by the backend from the image.
+- `gate.yaml` holds the probe sets and thresholds `evals` measures a change against, and the fixed probes of `evals smoke`.
+- `deploy/env/<env>.yaml` holds the technical values of one environment (endpoints, hosts, paths); the assistant's own technical
+  values are `RAG__…` entries in the backend's compose environment (`deploy/compose.yaml`).
+- A source is a connector registered under the entry point group `rag_core.connectors` (today `example.fixture` in
+  `packages/example_profile`) and named in the profile with `connector:`.
+- A new profile is a folder beside `profiles/example` under `profiles/`, built into the indexer, assistant and evals images with
+  `--build-arg PROFILE=<folder>` (the other images carry no profile); a connector package is added with
+  `--build-arg CONNECTORS=<package>` (indexer).

@@ -1,0 +1,309 @@
+# The rag-tuda stack: one file, project rag-tuda, run from the repository root with the
+# root .env:   docker compose --env-file .env -f deploy/compose.yaml <command> <service>
+# Paths are relative to this folder (deploy/). The GPU settings are inline.
+
+name: rag-tuda
+
+x-logging: &default-logging
+  # local driver: json-file logs did not stay readable across a reboot
+  driver: local
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+
+  # --- Backend (RAG engine) ---
+  backend:
+    restart: unless-stopped
+    stop_signal: SIGQUIT
+    build:
+      context: ..
+      dockerfile: apps/assistant_api/Dockerfile
+      args:
+        PROFILE: example
+    logging: *default-logging
+    volumes:
+      - ../data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      - OPENAI_API_KEY=not-needed
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
+      # the assistant's technical settings: RAG__<SECTION>__<KEY>
+      - RAG__DATABASE__HOST=pgvector
+      - RAG__DATABASE__PORT=5432
+      - RAG__MODEL_SERVERS__LLM_URL=http://vllm:8000/v1
+      - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
+      - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
+      - RAG__COMPUTE__SLOTS=1
+      - RAG__COMPUTE__SLOT_WAIT_S=30
+      - RAG__TIMEOUTS__REQUEST_DEADLINE_S=120
+      - RAG__TIMEOUTS__REQUEST_IDLE_S=45
+      - RAG__TIMEOUTS__ANALYSIS_S=20
+      - RAG__TIMEOUTS__RETRIEVAL_S=10
+      - RAG__TIMEOUTS__PARENT_LOOKUP_S=5
+      - RAG__TIMEOUTS__RERANKER_S=15
+      - RAG__TIMEOUTS__LLM_READ_S=60
+      - RAG__HTTP__CORS_DOMAIN=example.org
+      - RAG__TRACING__URL=   # empty: tracing is off (Langfuse needs this URL and its key files)
+    secrets:
+      - source: rag_app_password
+        target: pg_vector_password
+      - source: rag_app_user
+        target: vector_user
+      - pgdatabase
+      - backend_token
+    depends_on:
+      pgvector:
+        condition: service_healthy
+      vllm:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '8.0'
+          memory: 8G
+        reservations:
+          cpus: '2'
+          memory: 4G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # --- Migrate: the assistant's migrations, a one-off of the backend image. Run it after the build and before the
+  # backend's up; profile migrate, so up never starts it ---
+  migrate:
+    image: rag-tuda-backend:latest
+    profiles: [migrate]
+    command: ["python", "-m", "assistant_api.migrate"]
+    logging: *default-logging
+    environment:
+      - RAG_MIGRATE_HOST=pgvector
+    secrets:
+      - pgdatabase
+      - rag_migrator_password
+
+  # --- Embedding Service ---
+  embedding_service:
+    restart: unless-stopped
+    build:
+      context: ../model_servers/embedding
+    logging: *default-logging
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HF_HUB_DISABLE_XET=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - REQUIRE_CUDA=1
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 6G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      # /readyz: the start-up reference check, cached (no GPU work per probe)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/readyz', timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 300s
+
+  # --- Reranker Service ---
+  reranker_service:
+    restart: unless-stopped
+    build:
+      context: ../model_servers/reranker
+    logging: *default-logging
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      - HF_HUB_DISABLE_XET=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - REQUIRE_CUDA=1
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 6G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      # /readyz: the start-up reference check, cached (no GPU work per probe)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/readyz', timeout=4)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # --- vLLM (LLM inference with GPU) ---
+  vllm:
+    image: docker.io/vllm/vllm-openai:v0.31.0@sha256:c1c9f6fd5c109ba7f0546a59f5b2f15fb87f64c77782e90a27b648b42a8e67c3
+    logging: *default-logging
+    restart: unless-stopped
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HUB_OFFLINE=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+        limits:
+          memory: 14G
+    # the pinned model snapshot is loaded offline from the cache; the batch sizes 2048/256 are the ones vLLM 0.17.1 used on
+    # this GPU, pinned so an upgrade keeps them
+    command: >
+      --model Qwen/Qwen3-14B-AWQ
+      --revision 31c69efc29464b6bb0aee1398b5a7b50a99340c3
+      --dtype auto
+      --max-model-len 8192
+      --max-num-batched-tokens 2048
+      --max-num-seqs 256
+      --gpu-memory-utilization ${VLLM_GPU_MEMORY_UTIL:-0.65}
+      --kv-cache-memory-bytes 2147483648
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # --- pgvector (PostgreSQL) ---
+  pgvector:
+    restart: unless-stopped
+    image: docker.io/pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+    logging: *default-logging
+    shm_size: '2g'
+    environment:
+      - POSTGRES_DB_FILE=/run/secrets/pgdatabase
+      - POSTGRES_USER_FILE=/run/secrets/vector_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_vector_password
+    volumes:
+      - ./pgvector/init:/docker-entrypoint-initdb.d
+      - ./pgvector/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./pgvector/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - db-data:/var/lib/postgresql/data:rw
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    secrets:
+      - pg_vector_password
+      - pgdatabase
+      - vector_user
+      - rag_indexer_password
+      - rag_app_password
+      - rag_migrator_password
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U vector_user -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # --- Indexer (data ingestion): a one-off, never started by up (profile build):
+  #   docker compose --env-file .env -f deploy/compose.yaml --profile build run --rm indexer build ---
+  indexer:
+    profiles: [build]
+    build: {context: .., dockerfile: apps/indexer/Dockerfile}
+    logging: *default-logging
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ~/.cache/docling:/root/.cache/docling
+      - ~/.EasyOCR:/root/.EasyOCR
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      - HF_HUB_DISABLE_XET=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+    secrets:
+      - source: rag_indexer_password
+        target: pg_vector_password
+      - source: rag_indexer_user
+        target: vector_user
+      - pgdatabase
+    depends_on:
+      pgvector:
+        condition: service_healthy
+      embedding_service:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 8G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+
+  # --- Evals job: probe runs, gate and smoke against the backend over HTTP ---
+  # Never started by `up` (profile evals). Every invocation, by name and without --rm:
+  #   docker compose --env-file .env -f deploy/compose.yaml --profile evals run --no-deps --name evals-run evals <command>
+  #   docker cp evals-run:/app/out/. data/eval_runs/   (the job writes into its own /app/out; data/eval_runs is read-only)
+  #   docker rm evals-run
+  # Docker refuses a second container of that name, so one probe run at a time.
+  evals:
+    profiles: [evals]
+    build:
+      context: ..
+      dockerfile: apps/evals/Dockerfile
+      args:
+        PROFILE: example
+    logging: *default-logging
+    volumes:
+      - ../data/eval_runs:/app/data/eval_runs:ro
+    environment:
+      - TZ=Europe/Berlin
+      - OPENAI_API_KEY=not-needed
+    secrets:
+      - backend_token
+
+volumes:
+  db-data:
+
+secrets:
+  pg_vector_password:
+    file: ../secrets/pg_vector_password.txt
+  pgdatabase:
+    file: ../secrets/pgdatabase.txt
+  vector_user:
+    file: ../secrets/vector_user.txt
+  rag_indexer_password:
+    file: ../secrets/rag_indexer_password.txt
+  rag_app_password:
+    file: ../secrets/rag_app_password.txt
+  rag_migrator_password:
+    file: ../secrets/rag_migrator_password.txt
+  rag_indexer_user:
+    file: ./pgvector/roles/rag_indexer.txt
+  rag_app_user:
+    file: ./pgvector/roles/rag_app.txt
+  backend_token:
+    environment: BACKEND_REFRESH_TOKEN   # from .env; mounted into the backend and the evals job as /run/secrets/backend_token

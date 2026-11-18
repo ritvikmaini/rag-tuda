@@ -1,0 +1,3 @@
+17179869184
+Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz
+12

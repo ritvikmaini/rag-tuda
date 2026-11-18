@@ -1,0 +1,64 @@
+{
+ "version": "smoke-v1",
+ "conversations": [
+  {
+   "id": "E01",
+   "set": "smoke",
+   "turns": [
+    {
+     "q": "Wie viele Urlaubstage stehen mir zu?"
+    }
+   ]
+  },
+  {
+   "id": "E02",
+   "set": "smoke",
+   "turns": [
+    {
+     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+    }
+   ]
+  },
+  {
+   "id": "E03",
+   "set": "smoke",
+   "turns": [
+    {
+     "q": "Erzähl mir einen Witz."
+    }
+   ]
+  },
+  {
+   "id": "E04",
+   "set": "smoke",
+   "turns": [
+    {
+     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+    },
+    {
+     "q": "Und die Ruhepausen?",
+     "repeat": {
+      "text": "Bitte lies diesen Absatz genau.",
+      "times": 70
+     }
+    }
+   ]
+  },
+  {
+   "id": "E05",
+   "set": "smoke",
+   "turns": [
+    {
+     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+    },
+    {
+     "q": "Und die Ruhepausen?"
+    },
+    {
+     "q": "Wie lang ist die Kündigungsfrist in der Probezeit?",
+     "replace_turn": 1
+    }
+   ]
+  }
+ ]
+}

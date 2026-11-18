@@ -1,0 +1,23 @@
+# The example profile's gate: one small probe set, enough for `evals smoke` and the structural checks. The numbers are
+# placeholders (a profile measures its own baseline with the first round on its index).
+baseline:
+  noise_floor: 1.0
+  per_set: {smoke: 1.0}
+  ttft_margin_s: 0.30
+retrieval:
+  sets: [smoke]
+  top_k: 14
+  floor: 0.97
+latency: {sets: [smoke]}
+answers: {rerun_runs: 3, regression_at: 2, hang_s: 125}
+core: [smoke]
+sets:
+  smoke: {file: probes/smoke.json}
+smoke:
+  max_ttft_s: 20
+  probes:
+    - {set: smoke, id: E01, turns: [1], kind: lookup}
+    - {set: smoke, id: E02, turns: [1], kind: lookup}
+    - {set: smoke, id: E03, turns: [1], kind: direct}
+    - {set: smoke, id: E04, turns: [2], kind: too_long}      # sent as a first question
+    - {set: smoke, id: E05, turns: [1, 3], kind: edit}        # turn 3 replaces turn 1

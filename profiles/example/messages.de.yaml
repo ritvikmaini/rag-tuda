@@ -1,0 +1,25 @@
+# The example profile's user-facing German texts. question.too_long takes {limit}, the limit with a thousands dot.
+guard:
+  not_ready: Der Assistent wird gerade aktualisiert und ist in wenigen Minuten wieder für Sie da.
+  busy: Gerade sind sehr viele Anfragen gleichzeitig eingegangen. Bitte versuchen Sie es in einem Moment noch einmal.
+  error: Entschuldigung, bei der Beantwortung ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es in einem Moment noch einmal.
+  timeout: Die Antwort dauert gerade ungewöhnlich lange, deshalb habe ich abgebrochen. Bitte stellen Sie Ihre Frage in ein paar Minuten noch einmal.
+question:
+  too_long: "Ihre Nachricht ist leider zu lang für mich (höchstens {limit} Zeichen). Bitte kürzen Sie Ihre Frage auf das Wesentliche oder stellen Sie mehrere kürzere Fragen nacheinander, dann helfe ich Ihnen gern weiter."
+variant:
+  refused: Diese Umwandlung ist nur für die letzte Antwort mit Quellen möglich.
+answer:
+  unavailable: Entschuldigung, der KI-Assistent ist derzeit leider nicht verfügbar. Bitte versuchen Sie es später erneut.
+  context_too_long: Entschuldigung, die Frage und die gefundenen Dokumente waren zusammen zu umfangreich für eine Antwort. Bitte stellen Sie die Frage kürzer oder beginnen Sie ein neues Gespräch.
+  past_event: Der in den Dokumenten genannte Termin, {dates}, ist bereits vorbei
+  past_events: Die in den Dokumenten genannten Termine, {dates}, sind bereits vorbei
+  no_newer_event: "; einen neueren Termin nennen die Dokumente nicht"
+docs:
+  none: "Hinweis: Für die Antwort wurden keine Quellen benutzt!"
+# Where a source comes from, in its header and its citation: the type first, then the metadata origin, then the url's host.
+# The example's one source is the law texts (origin website, no source type, no host label).
+labels:
+  source_types: {}
+  origins: {website: Gesetze im Internet}
+  hosts: {}
+  scope: Geltungsbereich laut Dokument  # the source header's line for a document's own scope statement

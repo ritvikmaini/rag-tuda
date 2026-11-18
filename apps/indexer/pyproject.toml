@@ -1,0 +1,43 @@
+[project]
+name = "indexer"
+version = "0.1.0"
+description = "The indexer: collects the profile's sources, extracts, chunks, embeds and publishes index generations"
+requires-python = ">=3.12,<3.13"
+# by range; the root constraints fix every version
+dependencies = [
+  "rag-core[db,http]",
+  "docling[easyocr]>=2.89,<3",
+  "httpx>=0.28,<0.29",
+  "langchain-text-splitters>=0.3.5,<0.4",
+  "lxml>=5.3,<6",
+  "pgvector>=0.2.5,<0.3",
+  "psycopg[binary]>=3.3.3,<3.4",
+  "pydantic>=2.9,<3",
+  "pypdfium2>=5.7,<6",
+  "python-box>=7.1,<8",
+  "pyyaml>=6.0,<7",
+  "requests>=2.32,<3",
+  "torch>=2.2.2,<2.3",
+]
+
+[project.scripts]
+indexer = "indexer.cli:main"
+
+[tool.uv.sources]
+rag-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.deptry.per_rule_ignores]
+# installed but not imported by the indexer's own code
+DEP002 = [
+    "httpx",
+    "lxml",
+    "pgvector",
+    "psycopg",
+    "python-box",
+    "pyyaml",
+    "torch",
+]

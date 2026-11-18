@@ -1,0 +1,44 @@
+{
+ "version": "gold-v1",
+ "conversations": [
+  {
+   "id": "G01",
+   "set": "gold",
+   "turns": [
+    {
+     "q": "Darf ich die Kreditkarte des Arbeitgebers privat nutzen?"
+    }
+   ]
+  },
+  {
+   "id": "G02",
+   "set": "gold",
+   "turns": [
+    {
+     "q": "Welche Ruhepausen sind vorgeschrieben?"
+    },
+    {
+     "q": "Und bei Nachtarbeit?"
+    }
+   ]
+  },
+  {
+   "id": "G03",
+   "set": "gold",
+   "turns": [
+    {
+     "q": "Wie lang ist die Kündigungsfrist in der Probezeit?"
+    }
+   ]
+  },
+  {
+   "id": "G36",
+   "set": "gold",
+   "turns": [
+    {
+     "q": "Wie viele Urlaubstage stehen mir zu?"
+    }
+   ]
+  }
+ ]
+}

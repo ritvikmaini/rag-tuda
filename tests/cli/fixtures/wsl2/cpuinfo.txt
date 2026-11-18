@@ -1,0 +1,3 @@
+processor	: 0
+model name	: AMD Ryzen 7 5800X 8-Core Processor
+cpu cores	: 8

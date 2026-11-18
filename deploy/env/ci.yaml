@@ -1,0 +1,3 @@
+# The harness's overlay for the indexer: the stack's values, with the database and the embedder on the harness network.
+database: {host: pgvector, port: 5432}
+model_servers: {embedding_url: "http://embedding_service:8001"}

@@ -1,0 +1,16 @@
+[project]
+name = "evals"
+version = "0.1.0"
+description = "Black-box evaluation of the assistant: probe runner, gate, stats, compare, rescore, smoke"
+requires-python = ">=3.12,<3.13"
+dependencies = ["rag-core[assistant]", "httpx>=0.28,<0.29", "pydantic>=2.9,<3", "pyyaml>=6.0,<7"]
+
+[project.scripts]
+evals = "evals.cli:main"
+
+[tool.uv.sources]
+rag-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"

@@ -1,0 +1,151 @@
+# The black-box harness: the real backend and indexer images built from this commit, pgvector as in production, fakes for
+# vLLM, the embedder and the reranker, and the evals job. Its own project and network (never rag-tuda: no volume or
+# container can collide with the stack); host ports on 127.0.0.1 only, none of the stack's. Started and torn down by `just harness`,
+# which first writes deploy/ci/.generated/ (secrets and tokens by `python -m rag_tuda.state init`). Paths are
+# relative to this file. Production's resource limits are not copied. In a linked worktree `just harness` sets the project
+# (rag-ci-<id>), the image tags (RAG_CI_TAG = :ci-<id>) and empty RAG_CI_*_PORT (Docker picks the host ports), so two
+# worktrees' harnesses run at once; unset, the plain names and Docker-chosen ports apply.
+name: rag-ci
+
+x-fake: &fake
+  build: {context: .., dockerfile: deploy/fakes/Dockerfile}
+  image: rag-ci-fakes${RAG_CI_TAG:-}
+  networks: [ci]
+
+services:
+  pgvector:
+    image: docker.io/pgvector/pgvector:pg16@sha256:7d400e340efb42f4d8c9c12c6427adb253f726881a9985d2a471bf0eed824dff
+    shm_size: 512m
+    networks: [ci]
+    environment:
+      - POSTGRES_DB_FILE=/run/secrets/pgdatabase
+      - POSTGRES_USER_FILE=/run/secrets/vector_user
+      - POSTGRES_PASSWORD_FILE=/run/secrets/pg_vector_password
+    volumes:
+      - ./pgvector/init:/docker-entrypoint-initdb.d:ro
+      - ./pgvector/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./pgvector/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    # production's command; shared_buffers 4GB would not fit a Colima VM or a CI runner (a technical setting)
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf -c shared_buffers=256MB
+    ports: ["127.0.0.1:${RAG_CI_PG_PORT-25432}:5432"]
+    secrets: [pg_vector_password, pgdatabase, vector_user, rag_indexer_password, rag_app_password, rag_migrator_password]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U vector_user -d postgres"]
+      interval: 2s
+      retries: 60
+
+  backend:
+    build: {context: .., dockerfile: apps/assistant_api/Dockerfile, args: {PROFILE: example}}
+    image: rag-ci-backend${RAG_CI_TAG:-}
+    networks: [ci]
+    volumes:
+      - ./ci/.generated/data:/app/data
+    ports: ["127.0.0.1:${RAG_CI_BACKEND_PORT-28002}:8000"]
+    env_file: [{path: ./ci/.generated/ci.env, required: false}]
+    environment:
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      - OPENAI_API_KEY=not-needed
+      - UVICORN_WORKERS=1
+      # the stack's RAG__ values (deploy/compose.yaml) except the three harness timeouts, so the guard and busy tests finish
+      # in seconds (compute.slot_wait_s, timeouts.request_deadline_s, timeouts.request_idle_s)
+      - RAG__DATABASE__HOST=pgvector
+      - RAG__DATABASE__PORT=5432
+      - RAG__MODEL_SERVERS__LLM_URL=http://vllm:8000/v1
+      - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
+      - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
+      - RAG__COMPUTE__SLOTS=1
+      - RAG__COMPUTE__SLOT_WAIT_S=3
+      - RAG__TIMEOUTS__REQUEST_DEADLINE_S=25
+      - RAG__TIMEOUTS__REQUEST_IDLE_S=5
+      - RAG__TIMEOUTS__ANALYSIS_S=20
+      - RAG__TIMEOUTS__RETRIEVAL_S=10
+      - RAG__TIMEOUTS__PARENT_LOOKUP_S=5
+      - RAG__TIMEOUTS__RERANKER_S=15
+      - RAG__TIMEOUTS__LLM_READ_S=60
+      - RAG__HTTP__CORS_DOMAIN=example.org
+      - RAG__TRACING__URL=   # empty: tracing is off (Langfuse needs this URL and its key files)
+    secrets:
+      - {source: rag_app_password, target: pg_vector_password}
+      - {source: rag_app_user, target: vector_user}
+      - pgdatabase
+      - backend_token
+    depends_on:
+      pgvector: {condition: service_healthy}
+      vllm: {condition: service_healthy}
+      embedding_service: {condition: service_healthy}
+      reranker_service: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 3s
+      retries: 100
+
+  migrate:   # the assistant's migrations, run by `just harness` before its up
+    image: rag-ci-backend${RAG_CI_TAG:-}   # the backend's tag, per worktree
+    profiles: [migrate]
+    command: ["python", "-m", "assistant_api.migrate"]
+    networks: [ci]
+    environment: [RAG_MIGRATE_HOST=pgvector]
+    secrets: [pgdatabase, rag_migrator_password]
+
+  indexer:   # a job: `just harness` runs `indexer build` in it (rag_testing.harness.build_index), never up
+    profiles: [build]
+    build: {context: .., dockerfile: apps/indexer/Dockerfile}
+    image: rag-ci-indexer${RAG_CI_TAG:-}
+    networks: [ci]
+    volumes:
+      - ./ci/.generated/data:/app/data
+      - ./env/ci.yaml:/app/overlay.yaml:ro
+    env_file: [{path: ./ci/.generated/ci.env, required: false}]
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=Europe/Berlin
+      - RAG_OVERLAY=/app/overlay.yaml
+    secrets:
+      - {source: rag_indexer_password, target: pg_vector_password}
+      - {source: rag_indexer_user, target: vector_user}
+      - pgdatabase
+    depends_on:
+      pgvector: {condition: service_healthy}
+      embedding_service: {condition: service_healthy}
+
+  vllm:
+    <<: *fake
+    command: ["python", "-m", "rag_testing.serve", "llm", "--port", "8000"]
+    ports: ["127.0.0.1:${RAG_CI_LLM_PORT-28000}:8000"]
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)"], interval: 2s, retries: 30}
+
+  embedding_service:
+    <<: *fake
+    command: ["python", "-m", "rag_testing.serve", "embedder", "--port", "8001"]
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=2)"], interval: 2s, retries: 30}
+
+  reranker_service:
+    <<: *fake
+    command: ["python", "-m", "rag_testing.serve", "reranker", "--port", "8003"]
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health', timeout=2)"], interval: 2s, retries: 30}
+
+  evals:
+    profiles: [evals]                        # a job: run by tests/integration/test_smoke.py, never by up
+    build: {context: .., dockerfile: apps/evals/Dockerfile, args: {PROFILE: example}}
+    image: rag-tuda-evals${RAG_CI_TAG:-:dev}   # the tag `just images` builds
+    networks: [ci]
+    environment:
+      - TZ=Europe/Berlin
+      - RAG__EVALS__OUT_DIR=/tmp/eval_runs    # the non-root job writes inside its container; nothing reads the runs later
+    secrets: [backend_token]
+
+networks:
+  ci: {}
+
+secrets:
+  pg_vector_password: {file: ./ci/.generated/secrets/pg_vector_password.txt}
+  pgdatabase: {file: ./ci/.generated/secrets/pgdatabase.txt}
+  vector_user: {file: ./ci/.generated/secrets/vector_user.txt}
+  rag_indexer_password: {file: ./ci/.generated/secrets/rag_indexer_password.txt}
+  rag_app_password: {file: ./ci/.generated/secrets/rag_app_password.txt}
+  rag_migrator_password: {file: ./ci/.generated/secrets/rag_migrator_password.txt}
+  rag_indexer_user: {file: ./pgvector/roles/rag_indexer.txt}
+  rag_app_user: {file: ./pgvector/roles/rag_app.txt}
+  backend_token: {file: ./ci/.generated/backend_token.txt}
