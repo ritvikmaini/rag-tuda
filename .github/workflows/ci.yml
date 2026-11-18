@@ -1,5 +1,6 @@
-# CI: a GitHub-hosted ubuntu runner, only GITHUB_TOKEN, no secrets. One job runs `just ci`, the same command as on a development
-# machine. Pull requests into main (no second run on the merge push), and by hand for any branch; other branches are checked by
+# CI: GitHub-hosted runners, only GITHUB_TOKEN, no secrets. The `ci` job (ubuntu) runs `just ci`, the same command as on a
+# development machine; the `cli-macos` job runs the command line's tests on macOS, where `rag doctor` and `rag up` run for
+# users. Pull requests into main (no second run on the merge push), and by hand for any branch; other branches are checked by
 # `just ci` locally.
 name: ci
 
@@ -52,3 +53,16 @@ jobs:
           echo "$GITLEAKS_SHA256  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C "$HOME/.local/bin" gitleaks
       - run: just ci
+
+  # the command line is standard library only: no workspace member and no model library is installed here
+  cli-macos:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv run --frozen pytest -q tests/cli
