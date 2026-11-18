@@ -48,7 +48,7 @@ EXPECTED = {
     "CONTEXT_SAFETY_MARGIN": ("guard.safety_margin", 128),
     "SOURCE_WINDOW_CHARS": ("guard.source_window_chars", 300),
     "FULL_SOURCES": ("guard.full_sources", 3),
-    "ANALYSIS_MAX_TOKENS": ("generation.analysis_max_tokens", 400),
+    "ANALYSIS_MAX_TOKENS": ("generation.analysis_max_tokens", 800),
     "SOURCES_EVENT": ("formats.sources_event", "before"),
 }
 # values the profile names beyond that table: the analysis temperature, the date locale and format, the reranker's revision
