@@ -128,7 +128,7 @@ def make_generate(deps: GraphDeps):
         reserve=deps.card.budget.answer_tokens,
         margin=profile.guard.safety_margin,
         window_chars=profile.guard.source_window_chars,
-        full_sources=profile.guard.full_sources,
+        full_sources=deps.card.budget.full_sources,
     )
     labels = deps.messages.labels.source_labels()
 
@@ -155,9 +155,9 @@ def make_generate(deps: GraphDeps):
         intent = state.get("intent") or "lookup"
         position = profile.history.position
         prior = context_turns(
-            state["messages"], profile.history.turns, profile.history.max_age_hours, datetime.now(timezone.utc)
+            state["messages"], deps.card.budget.history_turns, profile.history.max_age_hours, datetime.now(timezone.utc)
         )
-        chosen = await select_turns(prior, profile.history.max_tokens, deps.counter.count_text)
+        chosen = await select_turns(prior, deps.card.budget.history_tokens, deps.counter.count_text)
         history = as_messages(chosen)
         logger.info(
             f"[History] completed_fresh={len(prior)} kept={len(chosen)} stored_messages={len(state['messages'])}"

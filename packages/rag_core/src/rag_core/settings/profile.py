@@ -40,8 +40,6 @@ class Retrieval(ProfileModel):
     semantic_k: int = Field(gt=0)
     keyword_k: int = Field(gt=0)
     fts_extra_stopwords: tuple[str, ...]
-    max_queries: int = Field(gt=0)
-    final_k: int = Field(gt=0)
     semantic_max_distance: float | None
     rerank: Rerank
 
@@ -145,8 +143,6 @@ class Ranking(ProfileModel):
 
 
 class History(ProfileModel):
-    turns: int = Field(ge=0)
-    max_tokens: int = Field(gt=0)
     max_age_hours: float = Field(ge=0.0)  # 0 = no limit
     position: Literal["after_system", "first"]  # "first" puts the turns before the system message
 
@@ -155,7 +151,6 @@ class Guard(ProfileModel):
     max_question_chars: int = Field(gt=0)  # = the page's QUESTION_LIMIT
     safety_margin: int = Field(ge=0)
     source_window_chars: int = Field(ge=0)
-    full_sources: int = Field(ge=0)
 
 
 class Generation(ProfileModel):

@@ -51,10 +51,12 @@ class RetrievalService:
         retrieval: Retrieval,
         ranking: Ranking,
         timeouts: Timeouts,
+        final_k: int,
         access: AccessFilter | None = None,
     ) -> None:
         self.embedder, self.vector, self.full_text, self.sections = embedder, vector, full_text, sections
         self.reranker, self.retrieval, self.ranking, self.timeouts = reranker, retrieval, ranking, timeouts
+        self.final_k = final_k  # the model card's budget
         self.access = access or AllowAll()
 
     async def _search(self, query: str) -> list[Hit]:
@@ -171,7 +173,7 @@ class RetrievalService:
         for i, doc in enumerate(final_docs):
             doc.metadata["rank_score"] = round(adjusted.get(i, 0.0), 4)
         final_docs = [final_docs[i] for i in kept]
-        result_docs = final_docs[: self.retrieval.final_k]
+        result_docs = final_docs[: self.final_k]
         for i, doc in enumerate(result_docs):
             meta = _metadata(doc)
             score = meta.get("cross_encoder_score", 0) or 0

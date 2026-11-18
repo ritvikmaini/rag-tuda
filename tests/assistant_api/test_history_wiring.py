@@ -19,8 +19,8 @@ def test_the_cut_is_applied_again_once_the_pipeline_slot_is_held():
     assert source.index("rt.slot") < source.index("rt.turns.history(")
 
 
-def test_both_nodes_take_the_history_policy_from_the_profile():
+def test_both_nodes_take_the_history_policy_from_the_card_and_the_profile():
     for name in ("analyse.py", "generate.py"):
         node = open(os.path.join(NODES, name), encoding="utf-8").read()
-        assert "context_turns(" in node and "history.turns" in node and "history.max_age_hours" in node, name
+        assert "context_turns(" in node and "budget.history_turns" in node and "history.max_age_hours" in node, name
     assert "select_turns(" in open(os.path.join(NODES, "generate.py"), encoding="utf-8").read()

@@ -36,7 +36,9 @@ def runtime() -> types.SimpleNamespace:
             model_servers=types.SimpleNamespace(reranker_url="http://reranker_service:8003"),
         ),
         messages=None,
-        card=types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=0)),
+        card=types.SimpleNamespace(
+            timeouts=types.SimpleNamespace(deadline_s=0), budget=types.SimpleNamespace(final_k=8)
+        ),
     )
     return types.SimpleNamespace(
         settings=settings,
@@ -216,7 +218,7 @@ def test_run_info_names_what_a_turn_ran_with() -> None:
         "index_generation": 17
     }
     changed = profile.model_copy(
-        update={"history": profile.history.model_copy(update={"turns": profile.history.turns + 1})}
+        update={"history": profile.history.model_copy(update={"max_age_hours": profile.history.max_age_hours + 1})}
     )
     assert make(changed).config_hash != rt.config_hash
     other = card.model_copy(update={"quirks": card.quirks.model_copy(update={"strip_cjk": not card.quirks.strip_cjk})})

@@ -77,7 +77,7 @@ class Reranker:
         return sorted(((self.scores.get(t, 0.0), t) for t in set(texts)), reverse=True)
 
 
-def make_service(vector=None, full_text=None, sections=None, reranker=None, access=None) -> RetrievalService:
+def make_service(vector=None, full_text=None, sections=None, reranker=None, access=None, final_k=8) -> RetrievalService:
     profile = load_profile(Profile, PROFILE)
     sections = sections or Sections(
         {f"p{i}": Section(f"p{i}", f"Parent {i}", {"filename": f"f{i}.pdf"}) for i in range(1, 6)}
@@ -91,6 +91,7 @@ def make_service(vector=None, full_text=None, sections=None, reranker=None, acce
         profile.retrieval,
         profile.ranking,
         TIMEOUTS,
+        final_k,
         access,
     )
 
@@ -103,6 +104,12 @@ def test_children_are_reranked_cut_and_lifted_to_their_parents() -> None:
     docs = asyncio.run(make_service(reranker=Reranker(scores)).retrieve(["q"], question="q"))
     assert [d.page_content for d in docs] == ["Parent 1", "Parent 2", "Parent 3"]  # threshold 0.50, min_docs 3
     assert all("rank_score" in d.metadata for d in docs)
+
+
+def test_the_result_is_cut_to_the_cards_final_k() -> None:
+    scores = {f"Parent {i}": 0.9 for i in range(1, 5)}
+    docs = asyncio.run(make_service(reranker=Reranker(scores), final_k=2).retrieve(["q"], question="q"))
+    assert len(docs) == 2
 
 
 def test_a_reranker_failure_keeps_the_search_order_unscored(caplog) -> None:
@@ -186,6 +193,7 @@ def retrieve(sections, scores, vector=None, reranker=Reranker, **changes):
         retrieval,
         profile.ranking,
         TIMEOUTS,
+        8,
     )
     return asyncio.run(svc.retrieve(["q"], question="q"))
 

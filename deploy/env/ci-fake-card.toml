@@ -17,6 +17,12 @@ context_window = 8192
 [budget]
 window_tokens = 8192
 answer_tokens = 900
+# the retrieval and history sizes the harness's tests expect (the class M defaults are larger)
+final_k = 14
+full_sources = 3
+history_turns = 2
+history_tokens = 1200
+max_queries = 6
 
 [timeouts]
 deadline_s = 25

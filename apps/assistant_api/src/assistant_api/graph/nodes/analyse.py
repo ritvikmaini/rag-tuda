@@ -11,10 +11,12 @@ from assistant_api.graph.state import AgentState, GraphDeps
 
 
 def make_analyse(deps: GraphDeps):
-    history = deps.profile.history
+    budget, history = deps.card.budget, deps.profile.history
 
     async def rewrite_follow_up_question(state: AgentState) -> dict[str, Any]:
-        prior = context_turns(state["messages"], history.turns, history.max_age_hours, datetime.now(timezone.utc))
+        prior = context_turns(
+            state["messages"], budget.history_turns, history.max_age_hours, datetime.now(timezone.utc)
+        )
         question = state["messages"][-1].content
         analysis, queries = await analyse(
             question=question,
@@ -24,7 +26,7 @@ def make_analyse(deps: GraphDeps):
             prompts=deps.prompts,
             model=deps.analysis,
             timeout_s=deps.card.timeouts.analysis_s,
-            max_queries=deps.profile.retrieval.max_queries,
+            max_queries=budget.max_queries,
             first_turn=not prior,
         )
         # Every run starts from the turn store's input, so these per-turn fields are empty already; the reset guarantees that

@@ -9,7 +9,8 @@ import yaml
 from assistant_api.runtime import Runtime
 from assistant_api.settings import load_settings
 from rag_core.domain.source_meta import SourceLabels
-from rag_core.settings import SettingsError
+from rag_core.settings import SettingsError, load_profile
+from rag_core.settings.profile import Profile
 
 ROOT = Path(__file__).resolve().parents[2]
 PROFILE = ROOT / "profiles" / "example" / "profile.yaml"
@@ -23,8 +24,6 @@ EXPECTED = {
     "PARENT_PLUS_RERANKER_CHILD_VECTOR_COUNT": ("retrieval.semantic_k", 30),
     "BM25_K": ("retrieval.keyword_k", 10),
     "FTS_EXTRA_STOPWORDS": ("retrieval.fts_extra_stopwords", []),
-    "MAX_SEARCH_QUERIES": ("retrieval.max_queries", 6),
-    "VECTOR_COUNT": ("retrieval.final_k", 14),
     "SEMANTIC_MAX_DISTANCE": ("retrieval.semantic_max_distance", None),
     "CROSS_ENCODER_THRESHOLD": ("retrieval.rerank.threshold", 0.5),
     "RERANK_PARENT_TEXT": ("retrieval.rerank.parent_text", True),
@@ -40,14 +39,11 @@ EXPECTED = {
     "RELEVANCE_FLOOR": ("ranking.relevance_floor", 0.0),
     "SOURCE_MIN_SCORE": ("ranking.source_min_score", 0.0),
     "MAX_PARENTS_PER_DOC": ("ranking.max_per_document", 0),
-    "HISTORY_TURNS": ("history.turns", 2),
-    "HISTORY_MAX_TOKENS": ("history.max_tokens", 1200),
     "HISTORY_MAX_AGE_HOURS": ("history.max_age_hours", 12),
     "HISTORY_POSITION": ("history.position", "after_system"),
     "MAX_QUESTION_CHARS": ("guard.max_question_chars", 2000),
     "CONTEXT_SAFETY_MARGIN": ("guard.safety_margin", 128),
     "SOURCE_WINDOW_CHARS": ("guard.source_window_chars", 300),
-    "FULL_SOURCES": ("guard.full_sources", 3),
     "ANALYSIS_MAX_TOKENS": ("generation.analysis_max_tokens", 800),
     "SOURCES_EVENT": ("formats.sources_event", "before"),
 }
@@ -148,6 +144,30 @@ def test_every_assistant_profile_value_is_explained(secrets: Path) -> None:
         if path.split(".")[0] in sections + ("retrieval",)
         and not path.startswith(("retrieval.embedding", "retrieval.fts_language"))
     } | set(NAMED)
+
+
+def test_the_card_holds_the_retrieval_and_history_sizes_and_the_profile_refuses_them(
+    secrets: Path, tmp_path: Path
+) -> None:
+    budget = load_settings(environment(), secrets_dir=secrets).card.budget
+    assert (budget.final_k, budget.full_sources, budget.history_turns, budget.history_tokens, budget.max_queries) == (
+        14,
+        3,
+        2,
+        1200,
+        6,
+    )
+    raw = yaml.safe_load(PROFILE.read_text(encoding="utf-8"))
+    for section, key in (
+        ("retrieval", "final_k"),
+        ("retrieval", "max_queries"),
+        ("guard", "full_sources"),
+        ("history", "turns"),
+    ):
+        changed = {**raw, section: {**raw[section], key: 3}}
+        (tmp_path / "p.yaml").write_text(yaml.safe_dump(changed), encoding="utf-8")
+        with pytest.raises(SettingsError, match=f"{section}.{key}"):
+            load_profile(Profile, tmp_path / "p.yaml")
 
 
 def test_the_environment_supplies_the_technical_values(secrets: Path) -> None:

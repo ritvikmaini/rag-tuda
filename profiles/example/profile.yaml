@@ -14,8 +14,6 @@ retrieval:
   semantic_k: 30
   keyword_k: 10
   fts_extra_stopwords: []
-  max_queries: 6
-  final_k: 14
   semantic_max_distance: null
   rerank: {model: BAAI/bge-reranker-v2-m3, revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e, threshold: 0.50,
            parent_text: true, min_docs: 3}
@@ -50,8 +48,8 @@ ranking:
   relevance_floor: 0.0
   source_min_score: 0.0
   max_per_document: 0
-history: {turns: 2, max_tokens: 1200, max_age_hours: 12, position: after_system}
-guard: {max_question_chars: 2000, safety_margin: 128, source_window_chars: 300, full_sources: 3}
+history: {max_age_hours: 12, position: after_system}
+guard: {max_question_chars: 2000, safety_margin: 128, source_window_chars: 300}
 generation:
   analysis_temperature: 0
   analysis_max_tokens: 800
