@@ -56,15 +56,6 @@ def test_window_is_the_smallest_of_budget_model_and_tokens_per_minute():
     assert cards.window({"budget": {"window_tokens": 16000}, "answer": {"context_window": 4096}}) == 4096
 
 
-def test_the_command_line_computes_the_window_the_backend_does():
-    from rag_core.settings.card import effective_window, load_card
-
-    shipped = sorted(cards.CARDS_DIR.glob("*.toml"))
-    assert len(shipped) == 10
-    for path in shipped:
-        assert cards.window(cards.load(path)) == effective_window(load_card(path))
-
-
 def test_a_named_card_wins_and_a_model_finds_the_card_that_serves_it(scenario):
     m1 = scenario("m1max64")
     assert cards.choose("s-gemma4-e4b", None, m1) == (cards.named("s-gemma4-e4b"), None)

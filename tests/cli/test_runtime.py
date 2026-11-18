@@ -49,12 +49,6 @@ def test_the_cards_sampling_and_extras_go_into_the_derived_model():
     }
 
 
-def test_the_sampling_defaults_are_the_backends():
-    from rag_core.settings.card import Sampling
-
-    assert runtime.SAMPLING == {"temperature": Sampling().temperature, "top_p": Sampling().top_p}
-
-
 def test_the_model_option_changes_the_base_not_the_served_name():
     llm = runtime.resolve(S4B, "native", model="mistral-small3.2:24b")
     assert llm.derived == "rag-s-qwen3-4b-instruct-2507" and llm.base_tag == "mistral-small3.2:24b"
@@ -135,22 +129,6 @@ def test_the_backend_environment():
     assert (moved["RAG__LLM_URL"], moved["RAG__LLM_MODEL"]) == ("http://gpu.lan/v1", "m")
 
 
-def test_the_backend_environment_loads_with_the_services_settings(tmp_path):
-    """The values the native backend gets are accepted by the settings loader (an unknown or missing key would stop it)."""
-    from assistant_api.settings import load_settings
-
-    secrets = tmp_path / "secrets"
-    secrets.mkdir()
-    for name in ("pgdatabase", "vector_user", "pg_vector_password", "backend_token"):
-        (secrets / name).write_text("x", encoding="utf-8")
-    llm = runtime.resolve(M35, "native")
-    env = runtime.backend_env(llm, root=str(ROOT), secrets=str(secrets), profile="example")
-    settings = load_settings(env)
-    assert settings.card.answer.model == "rag-m-qwen3.6-35b-a3b"
-    assert settings.card.answer.url.startswith("http://127.0.0.1")
-    assert settings.overlay.database.port == 55432 and settings.overlay.http.cors_domain == "localhost"
-
-
 def test_the_indexer_gets_the_six_folders_under_rag():
     env = runtime.indexer_env(
         root="/repo", rag="/repo/.rag", secrets="/repo/.rag/secrets/indexer", profile="p", overlay=None
@@ -166,24 +144,6 @@ def test_the_indexer_gets_the_six_folders_under_rag():
     assert env["RAG_SECRETS_DIR"] == "/repo/.rag/secrets/indexer" and "RAG_OVERLAY" not in env
     with_overlay = runtime.indexer_env(root="/r", rag="/r/.rag", secrets="/s", profile="p", overlay="/o.yaml")
     assert with_overlay["RAG_OVERLAY"] == "/o.yaml"
-
-
-def test_the_indexer_environment_loads_with_the_indexers_settings(tmp_path):
-    from indexer.settings import load_settings
-
-    overlay = runtime.overlay_text(str(ROOT), "example", {"gesetze": "documents"})
-    assert overlay is not None
-    (tmp_path / "overlay.yaml").write_text(overlay, encoding="utf-8")
-    env = runtime.indexer_env(
-        root=str(ROOT),
-        rag=str(tmp_path),
-        secrets=str(tmp_path),
-        profile="example",
-        overlay=str(tmp_path / "overlay.yaml"),
-    )
-    settings = load_settings(env)
-    assert settings.endpoints["gesetze"].dir == str(ROOT / "profiles" / "example" / "documents")
-    assert settings.overlay.paths.crawl_dir == str(tmp_path / "crawl") and settings.overlay.database.port == 55432
 
 
 def test_the_overlay_is_json_and_empty_without_folder_sources():
@@ -256,14 +216,3 @@ def test_the_compose_warm_up_targets_the_compose_model_server():
     assert runtime.resolve(S4B, "compose").answer_url == "http://ollama:11434/v1"
     assert runtime.resolve(XL, "compose").answer_url == "http://vllm:8000/v1"
     assert runtime.resolve(S4B, "compose").answer_model == "qwen3:4b-instruct-2507-q4_K_M"
-
-
-def test_a_hosted_cards_environment_loads_with_the_services_settings(tmp_path):
-    from assistant_api.settings import load_settings
-
-    for name in ("pgdatabase", "vector_user", "pg_vector_password", "backend_token"):
-        (tmp_path / name).write_text("x", encoding="utf-8")
-    env = runtime.backend_env(runtime.resolve(GROQ, "native"), root=str(ROOT), secrets=str(tmp_path), profile="example")
-    card = load_settings(env).card
-    assert card.answer.provider == "groq" and card.answer.model == "openai/gpt-oss-120b"
-    assert card.analysis_endpoint.model == "rag-l-groq-gpt-oss-120b-analysis"

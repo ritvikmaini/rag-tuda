@@ -1,15 +1,13 @@
 """The executor, the facts and the pins behind plan_up, and the `up` and `down` commands, with a fake machine."""
 
 import json
-import re
 import stat
 import sys
 from pathlib import Path
 
 import pytest
-import yaml
 
-from rag_tuda import cards, classes, cli, doctor, state, stack
+from rag_tuda import cards, cli, doctor, state, stack
 
 ROOT = Path(__file__).resolve().parents[2]
 S4B = cards.named("s-qwen3-4b-instruct-2507")
@@ -45,19 +43,6 @@ class FakeSystem(stack.System):
 
     def alive(self, pid):
         return pid in self.live
-
-
-def test_the_pins_are_the_ones_the_profile_and_the_images_pin():
-    profile = yaml.safe_load((ROOT / "profiles" / "example" / "profile.yaml").read_text(encoding="utf-8"))["retrieval"]
-    embedding, reranker = stack.PINNED["embedding"], stack.PINNED["reranker"]
-    assert (embedding.repo, embedding.revision) == (profile["embedding"]["model"], profile["embedding"]["revision"])
-    assert (reranker.repo, reranker.revision) == (profile["rerank"]["model"], profile["rerank"]["revision"])
-    for name, pin in stack.PINNED.items():
-        dockerfile = (ROOT / "model_servers" / name / "Dockerfile").read_text(encoding="utf-8")
-        baked = dict(re.findall(r"^ENV (\w+)=(.+)$", dockerfile, re.M))
-        for key, value in pin.env.items():
-            assert baked[key].strip("'") == value, key
-    assert {m.name for m in classes.FIXED_MODELS} >= {embedding.repo, reranker.repo}
 
 
 def test_every_model_server_module_is_the_dockerfiles():

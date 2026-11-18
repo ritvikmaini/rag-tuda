@@ -183,6 +183,10 @@ def third_party_imports(paths):
     return sorted({m.split(".")[0] for m in modules} - local - set(sys.stdlib_module_names))
 
 
+def test_the_command_line_imports_only_the_standard_library():
+    assert set(third_party_imports(["src/rag_tuda"])) - {"rag_tuda"} == set()
+
+
 @pytest.mark.parametrize("service", sorted(CODE))
 def test_every_package_the_code_imports_is_still_installed(service):
     found = installed(service)

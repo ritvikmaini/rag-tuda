@@ -24,7 +24,7 @@ cov_indexer := "73"
 cov_assistant := "88"
 
 # all checks of the gate; db-tests, images and harness need Docker (Colima on the Mac: colima start --cpu 6 --memory 12)
-ci: lint types imports unit db-tests contracts model-servers images (harness "example")
+ci: lint types imports unit cli db-tests contracts model-servers images (harness "example")
 
 # what the pre-push hook runs (no Docker)
 pre-push: lint types imports unit contracts
@@ -79,6 +79,14 @@ unit:
 model-servers:
     cd model_servers/embedding && HF_HUB_OFFLINE=1 uv run --frozen pytest -q
     cd model_servers/reranker && HF_HUB_OFFLINE=1 uv run --frozen pytest -q
+
+# the command line's tests as the cli-macos job runs them: a throwaway environment holding the root project alone, so a test
+# that needs a workspace package or yaml fails here (those belong in tests/repo)
+cli:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    env=$(mktemp -d); trap 'rm -rf "$env"' EXIT
+    UV_PROJECT_ENVIRONMENT="$env/venv" uv run --frozen pytest -q tests/cli
 
 # cross-component contracts, transcripts, limit parity and the profile's data
 contracts:
