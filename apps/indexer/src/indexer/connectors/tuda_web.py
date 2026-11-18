@@ -13,14 +13,14 @@ One fetcher serves the whole crawl, on one thread: it spaces the requests to a h
 response under the crawl folder. A URL cached since the crawl began is not asked for again, so a page fetched for its links
 is not fetched a second time; `--resume` continues the interrupted crawl of the same source set instead of beginning anew.
 
-The report lists what the build summary names: `empty_pages` (a main content selector that finds nothing: the site may have
+The report's `manifest` lists, per kept document this crawl fetched, its URL, content hash, fetch date and metadata, for the
+snapshot manifest the build writes after it publishes. The report also lists what the build summary names: `empty_pages` (a main content selector that finds nothing: the site may have
 changed), `not_indexed` (the fail-closed documents), `copies` (hub copies skipped) and `skipped` (a URL that was not fetched,
 and why). `fetcher_options` are Fetcher's own (a test injects a client and a clock)."""
 
 import dataclasses
-import logging
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -34,6 +34,7 @@ from indexer.connectors.crawl_setup import Host, RecordingFetcher, active_hosts,
 from indexer.crawl.discover import discover, in_scope, stays_in_scope
 from indexer.crawl.extract import Extraction, Link, extract
 from indexer.crawl.fetch import Response, Skipped
+from indexer.crawl.manifest import ManifestDoc
 from indexer.crawl.metadata import (
     Candidate,
     Metadata,
@@ -59,7 +60,6 @@ DOC_TYPES = {
     "info": "Information",
     "form": "Formular",
 }
-log = logging.getLogger(__name__)
 
 
 def derived(metadata: Metadata) -> dict[str, Any]:
@@ -107,16 +107,19 @@ class CachedFile:
 
 @dataclass(frozen=True)
 class Doc:
-    """A document of a page: its URL (the page's, plus the section's anchor), title and extracted entry."""
+    """A document of a page: its URL (the page's, plus the section's anchor), title, extracted entry and the page's response
+    (for the snapshot manifest; the body is dropped, the cache holds it)."""
 
     url: str
     title: str
     entry: PageEntry
+    reply: Response
 
 
 @dataclass(frozen=True)
 class Pdf:
-    """A PDF a page links, fetched: the link, the page it is on, the complete response and the metadata derived for it."""
+    """A PDF a page links, fetched: the link, the page it is on, the response (the body is dropped: `path` is the complete file)
+    and the metadata derived for it."""
 
     link: Link
     hub: Extraction
@@ -177,6 +180,7 @@ class TudaWeb:
             "not_indexed": [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed],
             "copies": list(selection.copies),
             "skipped": crawl.skipped,
+            "manifest": [asdict(m) for m in self._manifest(crawl, kept)],
         }
         if synced:
             report["pdf_sync"] = {
@@ -235,14 +239,28 @@ class TudaWeb:
             for entry in page_entries(page, roles):
                 anchor = f"{page.url}#{entry.section_id}" if entry.section_id else page.url
                 title = " – ".join(dict.fromkeys(t for t in (page.title, entry.heading) if t)) or page.url
-                crawl.docs.append(Doc(anchor, title, entry))
+                crawl.docs.append(Doc(anchor, title, entry, dataclasses.replace(reply, body=b"")))
             for link in page.pdfs:
                 owner = hosts.get(urlsplit(link.url).hostname or "")
                 if link.url in crawl.pdfs or owner is None or not in_scope(owner.source, link.url):
                     continue  # linked from another section, or not the listing host's: a bundle of acts, say
                 pdf = fetcher.get(link.url)
                 if not isinstance(pdf, Skipped):
-                    crawl.pdfs[link.url] = Pdf(link, page, pdf, pdf_metadata(link, page, roles, twins))
+                    crawl.pdfs[link.url] = Pdf(
+                        link, page, dataclasses.replace(pdf, body=b""), pdf_metadata(link, page, roles, twins)
+                    )
+
+    @staticmethod
+    def _manifest(crawl: Crawl, kept: set[str]) -> list[ManifestDoc]:
+        """The snapshot manifest's documents: every kept document this crawl fetched, with its content hash and fetch date."""
+        docs = [
+            ManifestDoc(d.url, d.reply.content_hash, d.reply.fetched, derived(d.entry.metadata)) for d in crawl.docs
+        ]
+        docs += [
+            ManifestDoc(url, p.reply.content_hash, p.reply.fetched, derived(p.metadata))
+            for url, p in crawl.pdfs.items()
+        ]
+        return [d for d in docs if d.url in kept]
 
     @staticmethod
     def _page_item(doc: Doc) -> PageItem:

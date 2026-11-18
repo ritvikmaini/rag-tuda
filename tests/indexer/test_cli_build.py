@@ -3,6 +3,7 @@ per source on stdout and exit 0, or exit 1 when the lock is held, a gate refuses
 write_and_publish are replaced (they have their own tests); the lock and the connection are fakes."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -162,6 +163,27 @@ def test_the_summary_lists_at_most_twenty_pages_of_a_kind(run):
     assert lines[1:22] == [f"note: web: not fetched (http 503): https://x.example/{i}" for i in range(20)] + [
         "note: web: 3 more not fetched"
     ]
+
+
+def test_the_snapshot_manifest_is_written_after_the_swap_and_a_failure_to_write_it_is_a_warning(run, db_settings):
+    run.report = {
+        "web": {
+            "documents": 1,
+            "manifest": [{"url": "https://x.example/a", "content_hash": "h", "fetched": "2026-11-20", "metadata": {}}],
+        }
+    }
+    code, lines = run()
+    assert code == 0 and not [line for line in lines if line.startswith("warning")]
+    crawl = Path(db_settings.overlay.paths.crawl_dir)
+    written = json.loads((crawl.parent / "snapshots" / "5.json").read_text(encoding="utf-8"))  # generation 5
+    assert written["documents"][0]["url"] == "https://x.example/a"
+    (crawl.parent / "snapshots" / "5.json").unlink()
+    (crawl.parent / "snapshots").rmdir()
+    (crawl.parent / "snapshots").write_text("a file where the folder should be", encoding="utf-8")
+    code, lines = run()
+    assert code == 0 and any(
+        line.startswith("warning: the snapshot manifest of generation 5 was not written") for line in lines
+    )
 
 
 def test_the_core_set_and_a_fresh_crawl_are_the_defaults(run):

@@ -13,6 +13,7 @@ from rag_core.ports.sources import DocumentSource
 from rag_core.settings import SettingsError
 
 from indexer import build, gates
+from indexer.crawl.manifest import ManifestDoc, snapshots_dir, write_manifest
 from indexer.index import generations as gen
 from indexer.settings import Settings, Wiring, wire
 from indexer.sources import discover
@@ -80,6 +81,19 @@ def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
     ]
 
 
+def write_snapshot(crawl_dir: str, generation: int, reports: Mapping[str, Mapping[str, Any]]) -> list[str]:
+    """The snapshot manifest of a published generation: the documents the sources' reports list under "manifest". The swap
+    has happened, so a manifest that cannot be written is a warning."""
+    docs = [ManifestDoc(**d) for report in reports.values() for d in report.get("manifest", ())]
+    if not docs:
+        return []
+    try:
+        write_manifest(str(generation), docs, directory=snapshots_dir(crawl_dir))
+    except OSError as exc:
+        return [f"the snapshot manifest of generation {generation} was not written: {exc}"]
+    return []
+
+
 def build_index(
     wiring: Wiring,
     embedding: Any,
@@ -108,6 +122,7 @@ def build_index(
             )
         )
         documents = {name: report["documents"] for name, report in built["sources"].items()}
+        warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
         gates.record_build_stats(
             settings.overlay.paths.state_dir,
             {"parents": built["parents"], "children": built["children"], "documents": documents},
@@ -138,7 +153,7 @@ def build_index(
         f"{embeddings['cached']} cached; {changes['added']} added, {changes['changed']} changed, "
         f"{changes['removed']} removed"
     )
-    for warning in published.get("warnings", ()):
+    for warning in [*published.get("warnings", ()), *warnings]:
         out(f"warning: {warning}")
     return 0
 

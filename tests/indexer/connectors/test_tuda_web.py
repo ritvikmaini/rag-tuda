@@ -503,6 +503,16 @@ def test_build_summary_lists_fail_closed_and_empty_pages(builder):
     assert builder.published and not any("Modulhandbuch_BSc" in line for line in lines if line.startswith("source"))
 
 
+def test_a_published_build_writes_its_snapshot_manifest(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    manifest = json.loads((tmp_path / "snapshots" / "1.json").read_text(encoding="utf-8"))
+    documents_ = {d["url"]: d for d in manifest["documents"]}
+    assert manifest["generation"] == "1" and list(documents_) == sorted(documents_)
+    assert documents_[PO_PDF]["fetched"] == TODAY.isoformat() and len(documents_[PO_PDF]["content_hash"]) == 64
+    assert documents_[PO_PDF]["metadata"]["po_version"] == [2023]
+    assert f"{HUB}#pruefungsordnung_2023" in documents_ and APB_COPY not in documents_ and UNDATED_MHB not in documents_
+
+
 def test_shrunk_build_keeps_live_generation(builder, tmp_path):
     assert builder(EXTRA_PAGES)[0] == 0
     live = list(builder.published)
@@ -515,6 +525,7 @@ def test_shrunk_build_keeps_live_generation(builder, tmp_path):
     refused = [line for line in lines if line.startswith("refused:")]
     assert code == 1 and len(refused) == 1 and "corpus shrank" in refused[0] and "swap refused" in refused[0]
     assert builder.published == live  # nothing was written: the live generation stays
+    assert sorted(p.name for p in (tmp_path / "snapshots").iterdir()) == ["1.json"]
     assert (tmp_path / "state" / gates.STATS_NAME).read_text(encoding="utf-8") == stats  # and the size reference
     # the summary names the pages behind the shrink, before the refusal
     named = f"warning: tu_web: empty page {HUB} (main content selector '.main-column' matched nothing)"
