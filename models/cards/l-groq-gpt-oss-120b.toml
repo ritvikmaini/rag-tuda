@@ -1,4 +1,5 @@
-# gpt-oss-120b on Groq's free tier; the model cannot switch its reasoning off, so it runs at low
+# gpt-oss-120b on Groq's free tier; the model cannot switch its reasoning off, so the answer runs at low (the analysis
+# model on the machine has none)
 name = "l-groq-gpt-oss-120b"
 class = "L"
 structured_output = "json_schema"
@@ -29,4 +30,4 @@ answer_tokens = 1000
 
 [reasoning]
 answer = "low"
-analysis = "low"
+analysis = "off"

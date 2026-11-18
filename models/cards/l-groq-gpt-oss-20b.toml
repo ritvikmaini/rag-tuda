@@ -1,4 +1,5 @@
-# gpt-oss-20b on Groq's free tier, the cheap control for the two larger L cards; reasoning stays at low
+# gpt-oss-20b on Groq's free tier, the cheap control for the two larger L cards; the answer's reasoning stays at low (the
+# analysis model on the machine has none)
 name = "l-groq-gpt-oss-20b"
 class = "L"
 structured_output = "json_schema"
@@ -29,4 +30,4 @@ answer_tokens = 1000
 
 [reasoning]
 answer = "low"
-analysis = "low"
+analysis = "off"
