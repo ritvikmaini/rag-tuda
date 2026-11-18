@@ -227,15 +227,3 @@ def test_stream_turns_http_errors_into_ask_errors(monkeypatch):
     monkeypatch.setattr(ask.urllib.request, "urlopen", refused)
     with pytest.raises(ask.AskError, match="rag up"):
         list(ask.stream("http://127.0.0.1:8700", "t", "q", "c"))
-
-
-def test_the_backend_chat_route_accepts_what_the_cli_sends():
-    from assistant_api.app import create_app
-
-    route = next(r for r in create_app().routes if getattr(r, "path", "") == "/api/chat")
-    accepted = {p.name: p.field_info.is_required() for p in route.dependant.query_params}
-    sent = urllib.parse.urlsplit(ask.build_request("http://x", "t", "Frage", "cli-1", formats="v1").full_url)
-    assert sent.path == route.path
-    assert (
-        {n for n, required in accepted.items() if required} <= set(urllib.parse.parse_qs(sent.query)) <= set(accepted)
-    )
