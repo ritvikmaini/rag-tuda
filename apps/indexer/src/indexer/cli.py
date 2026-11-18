@@ -67,6 +67,15 @@ def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
             "not indexed",
         ),
         *_capped(
+            "warning",
+            name,
+            [
+                f"PDF kept though this crawl did not list it: {url}"
+                for url in report.get("pdf_sync", {}).get("retained", ())
+            ],
+            "PDFs kept",
+        ),
+        *_capped(
             "note",
             name,
             [f"copy skipped, its original is indexed: {url}" for url in report.get("copies", ())],

@@ -136,6 +136,7 @@ REPORT = {
     "not_indexed": [{"url": "https://x.example/mhb.pdf", "missing": ["programme", "po_version"]}],
     "copies": ["https://x.example/copy/apb.pdf"],
     "skipped": [{"url": "https://x.example/down", "reason": "unreachable"}],
+    "pdf_sync": {"retained": ["https://x.example/old.pdf"]},
 }
 LINES = [
     "warning: web: empty page https://x.example/hub (main content selector '.main' matched nothing)",
@@ -143,17 +144,21 @@ LINES = [
     "note: web: copy skipped, its original is indexed: https://x.example/copy/apb.pdf",
     "note: web: not fetched (unreachable): https://x.example/down",
 ]
+RETAINED = "warning: web: PDF kept though this crawl did not list it: https://x.example/old.pdf"
 
 
 def test_the_summary_names_the_pages_a_source_reports(run):
     run.report = {"web": {"documents": 3, **REPORT}}
     code, lines = run()
-    assert code == 0 and lines[:5] == ["source web: 3 documents", *LINES]
+    assert code == 0 and lines[:6] == ["source web: 3 documents", *LINES[:2], RETAINED, *LINES[2:]]
 
 
 def test_a_refused_build_still_names_the_pages_before_the_refusal(run):
     run.error = build.BuildRefused("corpus shrank to 3 parents (last build 9); swap refused", {"web": REPORT})
-    assert run() == (1, [*LINES, "refused: corpus shrank to 3 parents (last build 9); swap refused"])
+    assert run() == (
+        1,
+        [*LINES[:2], RETAINED, *LINES[2:], "refused: corpus shrank to 3 parents (last build 9); swap refused"],
+    )
 
 
 def test_the_summary_lists_at_most_twenty_pages_of_a_kind(run):

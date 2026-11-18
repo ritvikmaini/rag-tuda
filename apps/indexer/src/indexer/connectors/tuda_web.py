@@ -159,15 +159,14 @@ class TudaWeb:
         selection = select_documents(candidates, roles)
         kept = {c.url for c in selection.kept}
         items: list[PageItem | PdfItem] = [self._page_item(d) for d in crawl.docs if d.url in kept]
-        entries = [self._pdf_entry(p) for url, p in crawl.pdfs.items() if url in kept]
-        synced = self._sync(ctx, entries, crawl.pdfs) if entries else None
-        if synced:
-            pdf_dir = ctx.paths["pdf_dir"]
-            items += [
-                PdfItem(str(path), e.url, file_hash(path), e.meta)
-                for e in synced.entries
-                if (path := local_path(e.url, pdf_dir)).is_file()
-            ]
+        merged = self._union_scopes({url: p for url, p in crawl.pdfs.items() if url in kept})
+        synced = self._sync(ctx, [self._pdf_entry(p) for p in merged.values()], crawl.pdfs)
+        pdf_dir = ctx.paths["pdf_dir"]
+        items += [
+            PdfItem(str(path), e.url, file_hash(path), e.meta)
+            for e in synced.entries
+            if (path := local_path(e.url, pdf_dir)).is_file()
+        ]
         if not ctx.reuse:
             ctx.state.save(
                 CRAWL_RUN, {"started": began.isoformat(), "sources": ctx.options["sources"], "complete": True}
@@ -182,16 +181,15 @@ class TudaWeb:
             "skipped": crawl.skipped,
             "manifest": [asdict(m) for m in self._manifest(crawl, kept)],
         }
-        if synced:
-            report["pdf_sync"] = {
-                "downloaded": synced.downloaded,
-                "unchanged": synced.unchanged,
-                "failed": synced.failed,
-                "missing": synced.missing,
-                "removed": synced.removed,
-                "retained": [e.url for e in synced.retained],
-                "list_check": synced.check,
-            }
+        report["pdf_sync"] = {
+            "downloaded": synced.downloaded,
+            "unchanged": synced.unchanged,
+            "failed": synced.failed,
+            "missing": synced.missing,
+            "removed": synced.removed,
+            "retained": [e.url for e in synced.retained],
+            "list_check": synced.check,
+        }
         return SourceResult(items, report, expected_minimum=int(ctx.settings.get("min_documents", 0)))
 
     @staticmethod
@@ -245,10 +243,31 @@ class TudaWeb:
                 if link.url in crawl.pdfs or owner is None or not in_scope(owner.source, link.url):
                     continue  # linked from another section, or not the listing host's: a bundle of acts, say
                 pdf = fetcher.get(link.url)
-                if not isinstance(pdf, Skipped):
+                if not isinstance(pdf, Skipped) and not stays_in_scope(owner.source, pdf, link.url):
+                    crawl.skipped.append({"url": link.url, "reason": "redirected out of scope"})
+                elif not isinstance(pdf, Skipped):
                     crawl.pdfs[link.url] = Pdf(
                         link, page, dataclasses.replace(pdf, body=b""), pdf_metadata(link, page, roles, twins)
                     )
+
+    @staticmethod
+    def _union_scopes(pdfs: Mapping[str, Pdf]) -> dict[str, Pdf]:
+        """One file linked from several hubs (the same hash, the same regulation) is one document, which the first link
+        stands for: its programmes, degrees and PO versions are those of every link. A link that states none stays NULL,
+        which means every programme."""
+        groups: dict[tuple[str, str], list[str]] = {}
+        for url, pdf in pdfs.items():
+            groups.setdefault((pdf.reply.content_hash, pdf.metadata.regulation), []).append(url)
+        merged = dict(pdfs)
+        for urls in groups.values():
+            if len(urls) > 1:
+                first = pdfs[urls[0]]
+                scope = {}
+                for field in ("degree", "programme", "po_version"):
+                    values = [getattr(pdfs[u].metadata, field) for u in urls]
+                    scope[field] = None if None in values else tuple(dict.fromkeys(v for each in values for v in each))
+                merged[urls[0]] = dataclasses.replace(first, metadata=dataclasses.replace(first.metadata, **scope))
+        return merged
 
     @staticmethod
     def _manifest(crawl: Crawl, kept: set[str]) -> list[ManifestDoc]:
@@ -303,7 +322,8 @@ class TudaWeb:
         """The kept PDFs through the PDF sync, which copies the complete files the fetcher holds into the PDF folder, registers
         them by hash and keeps a PDF that this crawl missed for a few builds."""
         files = {url: pdf.reply.path for url, pdf in pdfs.items() if pdf.reply.path}
-        result = sync_pdfs(entries, dataclasses.replace(ctx, fetch=PdfFiles(files)), pdf_dir=ctx.paths["pdf_dir"])  # pyright: ignore[reportArgumentType]
+        with_files = dataclasses.replace(ctx, fetch=PdfFiles(files))  # pyright: ignore[reportArgumentType]
+        result = sync_pdfs(entries, with_files, pdf_dir=ctx.paths["pdf_dir"], allow_empty=True)
         if result.check.get("corrupt"):
             raise CorruptStateError(f"the PDF list state cannot be used: {result.check['error']}")
         return result

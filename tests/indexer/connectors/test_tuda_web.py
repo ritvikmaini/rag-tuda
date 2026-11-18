@@ -3,11 +3,13 @@ of the source set, the documents and PDFs with their metadata, the fail-closed s
 complete files, the crawl cache and resume, and the contact in the user agent. No request leaves the process."""
 
 import json
+import re
 import shutil
 from collections import Counter
 from datetime import date, timedelta
 from importlib.metadata import entry_points
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 import pypdfium2 as pdfium
@@ -56,7 +58,7 @@ LADADI_HTML = (
 )
 
 
-def sources_yaml(*, extra_seeds=()) -> dict:
+def sources_yaml(*, extra_seeds=(), extra_prefixes=()) -> dict:
     """The profile's three kinds of host in miniature, with the paths of the mini-site: the faculty (sitemap, link-following,
     English twins), the university's host (its APB under /media/dezernat_ii/hochschulrecht/) and a full-set host."""
     ordnungen = pages.ORDNUNGEN
@@ -67,7 +69,7 @@ def sources_yaml(*, extra_seeds=()) -> dict:
                 "set": "core",
                 "seeds": [HUB, STUDIENBUERO, *extra_seeds],
                 "sitemap": [f"https://{FB20}/sitemap.de.xml"],
-                "prefixes": [f"{ordnungen}/ordnungen_bsc_informatik", f"{pages.STUDIENBUERO}/", media],
+                "prefixes": [f"{ordnungen}/ordnungen_bsc_informatik", f"{pages.STUDIENBUERO}/", media, *extra_prefixes],
                 "exclude": [],
                 "depth": 1,
                 "twins": True,
@@ -299,6 +301,81 @@ def test_an_interrupted_download_keeps_the_pdf_the_registry_already_holds(tu, ma
     assert PO_PDF in pdfs(later) and later.report["pdf_sync"]["retained"] == [
         PO_PDF
     ]  # kept for a few builds, not dropped
+
+
+def without_pdf_links(page: str) -> str:
+    return re.sub(r'<a [^>]*\.pdf"[^>]*>.*?</a>', "", page, flags=re.S)
+
+
+def test_pdfs_that_vanish_from_intact_pages_are_kept_for_a_few_builds_and_named(tu, make_context, served):
+    ctx = make_context()
+    connector(site(served)).collect(ctx)
+    pages_without = {
+        url: (
+            "text/html",
+            without_pdf_links(
+                FACULTY.get(urlsplit(url).path).text if FB20 in url else UNIVERSITY.get(urlsplit(url).path).text
+            ),
+        )
+        for url in (HUB, INTERN_INDEX)
+    }
+    later = connector(site(served, pages_without), TODAY + timedelta(days=1)).collect(ctx)
+    assert f"{HUB}#pruefungsordnung_2023" in documents(later)  # the pages are intact
+    assert set(pdfs(later)) == {PO_PDF, APB_ORIGINAL}  # and their PDFs are kept, as for a partial list
+    assert sorted(later.report["pdf_sync"]["retained"]) == sorted([PO_PDF, APB_ORIGINAL])
+    lines = cli.summary_lines("tu_web", later.report)
+    assert f"warning: tu_web: PDF kept though this crawl did not list it: {PO_PDF}" in lines
+    assert registry(ctx).keys() >= {PO_PDF, APB_ORIGINAL}
+
+
+def test_a_pdf_whose_redirect_ends_outside_its_scope_is_not_indexed_and_is_named(tu, make_context, served):
+    elsewhere = f"https://{FB20}/media/informatik/other/x.pdf"
+    moved = lambda request: httpx.Response(302, headers={"location": elsewhere})  # noqa: E731
+    net = site(served, {PO_PDF: moved, elsewhere: ("application/pdf", pages.PO_2023)})
+    ctx = make_context()
+    result = connector(net).collect(ctx)
+    assert PO_PDF not in pdfs(result) and PO_PDF not in registry(ctx) and elsewhere not in pdfs(result)
+    assert {"url": PO_PDF, "reason": "redirected out of scope"} in result.report["skipped"]
+    assert f"note: tu_web: not fetched (redirected out of scope): {PO_PDF}" in cli.summary_lines(
+        "tu_web", result.report
+    )
+
+
+MSC_HUB = f"https://{FB20}{pages.ORDNUNGEN}/ordnungen_msc_informatik.de.jsp"
+MSC_PDF = (
+    f"https://{FB20}/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/"
+    "pruefungsordnung_9/Ordnung_des_Studiengangs_M_Sc_Informatik_PO_2023.pdf"
+)
+
+
+def test_one_file_linked_from_two_programme_hubs_gets_both_programmes(tu, make_context, served):
+    msc_hub = (
+        '<html><head><title>Ordnungen M.Sc.</title></head><body><div class="main-column">'
+        '<section class="content-section" id="pruefungsordnung_2023"><h3>Prüfungsordnung 2023</h3>'
+        f'<a href="{MSC_PDF}">Ordnung des Studiengangs M.Sc. Informatik PO 2023</a></section></div></body></html>'
+    )
+    (tu / "sources.yaml").write_text(
+        yaml.safe_dump(
+            sources_yaml(
+                extra_seeds=(MSC_HUB,),
+                extra_prefixes=(
+                    f"{pages.ORDNUNGEN}/ordnungen_msc_informatik",
+                    "/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/",
+                ),
+            )
+        ),
+        encoding="utf-8",
+    )
+    net = site(served, {MSC_HUB: ("text/html", msc_hub), MSC_PDF: ("application/pdf", pages.PO_2023)})
+    result = collect(net, make_context)
+    both = pdfs(result)[PO_PDF].metadata  # the first link; the file is the same
+    assert pdfs(result)[MSC_PDF].file_hash == pdfs(result)[PO_PDF].file_hash
+    assert (both["programme"], both["degree"], both["po_version"]) == (
+        ["bsc-informatik", "msc-informatik"],
+        ["bachelor", "master"],
+        [2023],
+    )
+    assert both["regulation"] == "po"
 
 
 def test_every_url_is_asked_for_once_per_build(tu, make_context, served):
