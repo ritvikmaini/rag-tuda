@@ -103,6 +103,15 @@ def test_a_subdomain_of_a_city_host_is_not_the_main_site():
     assert Sources.model_validate({"hosts": {"digitales-rathaus.darmstadt.de": host}})
 
 
+def test_pdf_twin_pairs_are_empty_by_default_and_need_listed_https_hosts():
+    assert Sources.model_validate(sources()).pdf_twins == []
+    pair = {"de": "https://a.example/media/apb.pdf", "en": "https://a.example/media/apb-english.pdf"}
+    assert Sources.model_validate({**sources(), "pdf_twins": [pair]}).pdf_twins[0].en == pair["en"]
+    for bad in ({**pair, "en": "https://b.example/apb-english.pdf"}, {**pair, "de": "http://a.example/apb.pdf"}):
+        with pytest.raises(ValidationError, match="listed hosts"):
+            Sources.model_validate({**sources(), "pdf_twins": [bad]})
+
+
 def test_an_empty_host_list_is_refused():
     with pytest.raises(ValidationError):
         Sources.model_validate({"hosts": {}})

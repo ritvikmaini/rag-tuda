@@ -3,6 +3,7 @@ keys, except a source entry, whose connector-specific keys the connector validat
 
 import re
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -283,10 +284,18 @@ class CrawlHost(ProfileModel):
     full: FullBuild | None = None
 
 
+class PdfTwin(ProfileModel):
+    """A German PDF and its English counterpart: both get the German URL as their twin key."""
+
+    de: str
+    en: str
+
+
 class Sources(ProfileModel):
-    """sources.yaml: the crawl's host allow-list. Every other host is refused by the crawler."""
+    """sources.yaml: the crawl's host allow-list (every other host is refused by the crawler) and the PDF twin pairs."""
 
     hosts: dict[str, CrawlHost] = Field(min_length=1)
+    pdf_twins: list[PdfTwin] = []  # none by default: PDFs have no twin key unless a pair is listed
 
     @model_validator(mode="after")
     def _hosts_are_wellformed(self) -> "Sources":
@@ -309,6 +318,12 @@ class Sources(ProfileModel):
                 raise ValueError(f"{host}: only a core host has a full block")
             if (entry.depth and not entry.prefixes) or (entry.full and entry.full.depth and not entry.full.prefixes):
                 raise ValueError(f"{host}: links are followed inside prefixes, so a depth needs prefixes")
+        for pair in self.pdf_twins:
+            if any(
+                urlsplit(url).scheme != "https" or urlsplit(url).hostname not in self.hosts
+                for url in (pair.de, pair.en)
+            ):
+                raise ValueError(f"{pair.de}: a PDF twin pair is https URLs on listed hosts")
         return self
 
 
