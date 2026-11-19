@@ -2,6 +2,7 @@
 // From web/page: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createFrameParser, readFrames } from "../api/frames.js";
 import { questionUrl } from "../api/urls.js";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detectLang, getLang, providerLine, setLang }
@@ -9,6 +10,9 @@ import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detect
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from "../model/thinking.js";
 import { sourceCards } from "../model/sources.js";
+import { handleFrame } from "../ui/ask.js";
+import { state } from "../ui/state.js";
+import { takeVariantFrame } from "../features/variants.js";
 import { recordStatus } from "../model/turns.js";
 import { chipChoices } from "../ui/chips.js";
 import { contactParts } from "../render/markdown.js";
@@ -42,6 +46,59 @@ test("the watchdog waits as long as the backend's meta frame says (test_watchdog
     assert.equal(watchdogExpired(Object.assign({}, session, { lastData: 240000 }), 250001), true);
     assert.equal(watchdogExpired(Object.assign({}, session, { lastData: 100000 }), 200000), true);
     assert.equal(watchdogExpired(Object.assign({}, session, { lastData: 100000 }), 190000), false);
+});
+
+test("comment lines are not frames, whole or split across reads (test_comment_lines_are_ignored)", () => {
+    const frame = obj => "data: " + JSON.stringify(obj) + "\n\n";
+    const a = { type: "chunk", content: "Hallo: Welt" };
+    const b = { type: "chunk", content: "\n: kein Kommentar" };
+    const stream = frame({ type: "meta", content: {} }) + ": progress\n\n" + frame(a) + ": progress\n\n: progress\n\n" + frame(b);
+    const all = parts => parts.flat().map(f => f.type + (f.content && f.content.length !== undefined ? f.content : ""));
+    const whole = createFrameParser();
+    assert.deepEqual(all([whole.push(stream), whole.end()]), ["meta", "chunkHallo: Welt", "chunk\n: kein Kommentar"]);
+    // every cut position gives the same frames
+    for (let cut = 1; cut < stream.length; cut++) {
+        const parser = createFrameParser();
+        assert.deepEqual(all([parser.push(stream.slice(0, cut)), parser.push(stream.slice(cut)), parser.end()]),
+            ["meta", "chunkHallo: Welt", "chunk\n: kein Kommentar"], "cut at " + cut);
+    }
+    // a stream that ends inside a comment loses nothing
+    const cutOff = createFrameParser();
+    assert.deepEqual(all([cutOff.push(frame(a) + ": prog"), cutOff.end()]), ["chunkHallo: Welt"]);
+});
+
+test("comment lines keep the watchdog alive (test_comment_lines_keep_watchdog_alive)", async () => {
+    const chunks = [": progress\n\n", ": progress\n\n", 'data: {"type":"done","content":{}}\n\n'].map(text => new TextEncoder().encode(text));
+    const body = { getReader: () => ({ read: async () => (chunks.length ? { done: false, value: chunks.shift() } : { done: true }) }) };
+    const session = Object.assign({ startedAt: 0, lastData: 0 }, watchdogLimits({ deadline_s: 240, idle_s: 90 }));
+    const got = [];
+    const before = Date.now();
+    await readFrames(body, session, frame => got.push(frame.type));
+    assert.deepEqual(got, ["done"]);
+    assert.ok(session.lastData >= before);   // set by the comment-only reads too: they are bytes from the backend
+    // 100 s after the last bytes the page would have given up; right after them it does not
+    assert.equal(watchdogExpired(session, session.lastData + 100000), true);
+    assert.equal(watchdogExpired(Object.assign({}, session, { startedAt: session.lastData }), session.lastData + 1000), false);
+});
+
+test("the meta frame sets the limits of the running question and of a running variant (test_meta_sets_session_limits)", t => {
+    const meta = { type: "meta", content: { format: 1, turn_id: "t", deadline_s: 240, idle_s: 90 } };
+    const expected = watchdogLimits(meta.content);
+    const turn = { id: "t", question: "Q" };
+    const session = Object.assign({ turn }, watchdogLimits());
+    state.live = session;
+    t.after(() => { state.live = null; });
+    handleFrame(turn, {}, meta);
+    assert.deepEqual([session.silenceMs, session.totalMs], [expected.silenceMs, expected.totalMs]);
+    // another turn's meta frame does not touch it
+    handleFrame({ id: "other" }, {}, { type: "meta", content: { deadline_s: 10, idle_s: 5 } });
+    assert.equal(session.totalMs, expected.totalMs);
+    // a variant: the same frame sets the limits and the backend's confirmation is kept
+    const run = { session: Object.assign({}, watchdogLimits()), turn, view: {}, version: { answer: "" }, confirmed: false };
+    takeVariantFrame(run, meta);
+    assert.equal(run.session.totalMs, expected.totalMs);
+    takeVariantFrame(run, { type: "variant", content: { ok: true } });
+    assert.equal(run.confirmed, true);
 });
 
 test("a retry after a network failure forgets the earlier refusal (test_retry_clears_stale_failure_flags)", () => {

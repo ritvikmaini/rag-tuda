@@ -168,6 +168,35 @@ def test_progress_signals_keep_a_working_request_alive_and_are_not_forwarded():
     assert out == [("chunk", "Antwort")]
 
 
+def test_a_reasoning_only_stretch_is_written_as_throttled_comment_lines(monkeypatch):
+    # a model that thinks for a long time sends PROGRESS only: the guard's silence limit is met, and the page's watchdog must see
+    # the same activity, as SSE comment lines (no data frames), at most one per PROGRESS_COMMENT_EVERY_S
+    monkeypatch.setattr(rg, "PROGRESS_COMMENT_EVERY_S", 0.1)
+
+    async def producer():
+        for _ in range(30):
+            await asyncio.sleep(0.02)
+            yield rg.PROGRESS
+        yield frame("chunk", "Antwort")
+
+    out = collect(rg.guard(producer, deadline_s=5, idle_s=0.3, meta=META, messages=MESSAGES))
+    comments = [f for f in out if f.startswith(":")]
+    assert comments == [": progress\n\n"] * len(comments)
+    assert 3 <= len(comments) <= 7  # 0.6 s of thinking, one line per 0.1 s at most
+    assert kinds_and_contents([f for f in out if not f.startswith(":")]) == [("chunk", "Antwort")]
+    assert out[0].startswith("data: ") and out[-1].startswith("data: ")  # comments sit between frames, never inside one
+
+
+def test_a_fast_request_writes_no_comment_lines():
+    async def producer():
+        yield rg.PROGRESS
+        yield rg.PROGRESS
+        yield frame("chunk", "Antwort")
+
+    out = collect(rg.guard(producer, deadline_s=5, idle_s=1, meta=META, messages=MESSAGES))
+    assert not [f for f in out if f.startswith(":")]
+
+
 def test_progress_signals_do_not_outlive_the_total_deadline():
     async def producer():
         while True:

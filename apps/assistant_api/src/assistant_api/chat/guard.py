@@ -5,6 +5,9 @@ time with an answer or a message in the page's language. The page ignores `error
 
 - total deadline and maximum silence between two frames; on expiry the pipeline
   task is cancelled (which closes the model stream and frees the concurrency slot)
+- while the pipeline only signals PROGRESS, the guard writes an SSE comment line (`: progress`) once the stream has been quiet for
+  PROGRESS_COMMENT_EVERY_S, so the page's watchdog sees the same activity as the guard's silence limit; a comment line is no
+  data frame (the page and the evals reader skip it)
 - an `error` frame from the pipeline is followed by the message of its code, in the page's language (`messages`)
 - an exception in the pipeline, or an answer without any text, ends with the error message
 - a `variant` frame (a version switch or the end of a variant) counts as an answer
@@ -33,8 +36,9 @@ logger = logging.getLogger(__name__)
 _DONE = object()
 # The pipeline yields PROGRESS while it works without sending anything (slot acquired,
 # analysis, retrieval, reranking, a model chunk without text such as a reasoning model's
-# thinking): it counts as activity for the silence limit and is never forwarded to the page.
+# thinking): it counts as activity for the silence limit; the page sees it only as the throttled comment line below.
 PROGRESS = ": progress"
+PROGRESS_COMMENT_EVERY_S = 5.0  # the quiet time after which a PROGRESS item is written as a comment line
 CANCEL_WAIT_S = 5.0  # how long the guard waits for the cancelled pipeline to clean up
 TEXT_KEYS = {
     "busy": "guard.busy",
@@ -98,10 +102,12 @@ async def guard(
     task = asyncio.create_task(produce())
     started = loop.time()
     text_sent, failed, declared = False, False, None
+    last_sent = loop.time()  # when the stream last wrote something
     final: str | None = None
     error: str | None = None
     try:
         yield fr.encode(meta)
+        last_sent = loop.time()
         while True:
             left = deadline_s - (loop.time() - started)
             try:
@@ -138,11 +144,15 @@ async def guard(
                 yield done(final)
                 return
             if item == PROGRESS:
+                if loop.time() - last_sent >= PROGRESS_COMMENT_EVERY_S:
+                    last_sent = loop.time()
+                    yield PROGRESS + "\n\n"
                 continue
             if isinstance(item, fr.Declared):
                 declared = item.outcome
                 continue
             yield fr.encode(item)
+            last_sent = loop.time()
             if isinstance(item, fr.Chunk) and item.content:
                 text_sent = True
             elif isinstance(item, fr.Variant):

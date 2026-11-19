@@ -1,5 +1,5 @@
 import { withToken } from "../api/auth.js";
-import { createFrameParser } from "../api/frames.js";
+import { createFrameParser, readFrames } from "../api/frames.js";
 import { variantUrl } from "../api/urls.js";
 import { TEXT, VARIANT_LABELS } from "../config.js";
 import { citationEntries } from "../model/citations.js";
@@ -63,6 +63,27 @@ export async function startVariant(turn, view, name) {
     save();
 }
 
+// One frame of a variant's stream: the answer text, its citations and shape, the request's limits (meta) and the backend's
+// confirmation (variant). run: { session, turn, view, version, confirmed }.
+export function takeVariantFrame(run, frame) {
+    if (!frame || typeof frame !== "object") return;
+    const { session, turn, view, version } = run;
+    if (frame.type === "chunk" && frame.content) {
+        version.answer += String(frame.content);
+        turn.answer = version.answer;
+        pump(turn, view);
+    } else if (frame.type === "citations") {
+        version.citations = citationEntries(frame.content);
+    } else if (frame.type === "shape") {
+        version.shape = shapeName(frame.content);
+        turn.shape = version.shape;
+    } else if (frame.type === "meta") {
+        Object.assign(session, watchdogLimits(frame.content));
+    } else if (frame.type === "variant") {
+        run.confirmed = !!(frame.content && frame.content.ok);
+    }
+}
+
 // Streams one variant like a question (same limits and stop button); ok only with the backend's confirmation.
 export async function streamVariant(turn, view, version) {
     const session = Object.assign({ turn, view, controller: new AbortController(), stopped: false, timedOut: false, timer: 0,
@@ -76,38 +97,12 @@ export async function streamVariant(turn, view, version) {
     }, 500);
     updateSend();
     let fetched = false;
-    let confirmed = false;
-    const take = frame => {
-        if (!frame || typeof frame !== "object") return;
-        if (frame.type === "chunk" && frame.content) {
-            version.answer += String(frame.content);
-            turn.answer = version.answer;
-            pump(turn, view);
-        } else if (frame.type === "citations") {
-            version.citations = citationEntries(frame.content);
-        } else if (frame.type === "shape") {
-            version.shape = shapeName(frame.content);
-            turn.shape = version.shape;
-        } else if (frame.type === "meta") {
-            Object.assign(session, watchdogLimits(frame.content));
-        } else if (frame.type === "variant") {
-            confirmed = !!(frame.content && frame.content.ok);
-        }
-    };
+    const run = { session, turn, view, version, confirmed: false };
     try {
         const response = await fetch(variantUrl(turn.question, store.id, turn.id, version.name, false),
             withToken({ signal: session.controller.signal, cache: "no-store" }));
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        const parser = createFrameParser();
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            session.lastData = Date.now();
-            parser.push(decoder.decode(value, { stream: true })).forEach(take);
-        }
-        parser.push(decoder.decode()).concat(parser.end()).forEach(take);
+        await readFrames(response.body, session, frame => takeVariantFrame(run, frame));
         fetched = true;
     } catch (error) {
         fetched = false;
@@ -115,7 +110,7 @@ export async function streamVariant(turn, view, version) {
     window.clearInterval(session.timer);
     const stopped = session.stopped && !session.timedOut;
     state.live = null;
-    return { ok: fetched && confirmed && version.answer.trim() !== "", stopped };
+    return { ok: fetched && run.confirmed && version.answer.trim() !== "", stopped };
 }
 
 // A tab click: the backend puts that version into the history first; the page switches only when it confirms.

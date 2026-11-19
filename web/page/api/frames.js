@@ -5,9 +5,24 @@ import { FRAME_MARK } from "../config.js";
 // The backend writes frames as 'data: {json}' without terminators; the Node proxy's failure frame is
 // 'event: error\ndata: {json}\n\n'. A frame ends where its JSON parses; the marker text inside an
 // answer is kept by extending the piece to the next marker until it parses.
+// Lines that start with ":" are SSE comments (the backend's ": progress" while it works without sending anything): they carry
+// no data and are dropped here; a frame's JSON is one line, so such a line is never part of one.
+const COMMENT_LINE = /(^|\n):[^\n]*\n/g;
+const COMMENT_TAIL = /(^|\n):[^\n]*$/;
+
 export function createFrameParser() {
     let buffer = "";
     function drain(final) {
+        buffer = buffer.replace(COMMENT_LINE, "$1");
+        // a comment still arriving is set aside until its line is complete
+        const tail = final ? null : COMMENT_TAIL.exec(buffer);
+        if (tail) buffer = buffer.slice(0, tail.index + tail[1].length);
+        const frames = scan(final);
+        if (tail) buffer += tail[0].slice(tail[1].length);
+        else if (final) buffer = buffer.replace(COMMENT_TAIL, "$1");
+        return frames;
+    }
+    function scan(final) {
         const frames = [];
         let pos = 0;
         for (;;) {
@@ -61,4 +76,19 @@ export function createFrameParser() {
             return drain(true);
         },
     };
+}
+
+// Reads a response body to its end: every read counts as sign of life for the watchdog (session.lastData), comment lines
+// included, and the frames it completes go to onFrame.
+export async function readFrames(body, session, onFrame) {
+    const reader = body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    const parser = createFrameParser();
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        session.lastData = Date.now();
+        parser.push(decoder.decode(value, { stream: true })).forEach(onFrame);
+    }
+    parser.push(decoder.decode()).concat(parser.end()).forEach(onFrame);
 }

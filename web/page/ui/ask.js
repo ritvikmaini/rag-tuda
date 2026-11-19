@@ -1,5 +1,5 @@
 import { withToken } from "../api/auth.js";
-import { createFrameParser } from "../api/frames.js";
+import { readFrames } from "../api/frames.js";
 import { questionUrl } from "../api/urls.js";
 import { getLang } from "../i18n.js";
 import { renderTabs } from "../features/variants.js";
@@ -58,16 +58,7 @@ export async function stream(turn, view) {
             withToken({ signal: session.controller.signal, cache: "no-store" }));
         recordStatus(turn, response.status);
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder("utf-8");
-        const parser = createFrameParser();
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            session.lastData = Date.now();
-            parser.push(decoder.decode(value, { stream: true })).forEach(frame => handleFrame(turn, view, frame));
-        }
-        parser.push(decoder.decode()).concat(parser.end()).forEach(frame => handleFrame(turn, view, frame));
+        await readFrames(response.body, session, frame => handleFrame(turn, view, frame));
         ok = true;
     } catch (error) {
         ok = false;
