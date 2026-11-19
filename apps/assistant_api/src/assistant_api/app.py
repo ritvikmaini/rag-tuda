@@ -4,10 +4,13 @@ A failed load or Langfuse login leaves the app degraded: /readyz says so, and a 
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -16,12 +19,28 @@ from rag_core.adapters.langfuse import init_langfuse
 from rag_core.adapters.pg_index import read_pool
 from rag_core.domain.resilience import dispose_engines
 
-from assistant_api.api import chat, ops
+from assistant_api.api import chat, ops, profile
 from assistant_api.api.deps import limiter, set_chat_rate
 from assistant_api.api.middleware import security_headers_and_cors
 from assistant_api.chat.turns_store import TurnStore, store_conninfo
 from assistant_api.runtime import build_runtime, heal, reload, stop_retiring
 from assistant_api.settings import AssistantSettings, load_settings
+
+
+class Page(StaticFiles):
+    """The page's files: GET and HEAD only, any other method on a path no route serves is a 404 like everywhere else."""
+
+    async def get_response(self, path: str, scope):
+        if scope["method"] not in ("GET", "HEAD"):
+            raise HTTPException(status_code=404)
+        return await super().get_response(path, scope)
+
+
+def page_dir() -> Path | None:
+    """The folder of the page: RAG_PAGE_DIR (the image sets it), else web/page of the checkout this file sits in; None when it
+    does not exist (the backend then serves the API only)."""
+    found = Path(os.environ.get("RAG_PAGE_DIR") or Path(__file__).resolve().parents[4] / "web" / "page")
+    return found if found.is_dir() else None
 
 
 def create_app(settings: AssistantSettings | None = None) -> FastAPI:
@@ -33,6 +52,9 @@ def create_app(settings: AssistantSettings | None = None) -> FastAPI:
     app.middleware("http")(security_headers_and_cors)
     app.include_router(ops.router)
     app.include_router(chat.router)
+    app.include_router(profile.router)
+    if (page := page_dir()) is not None:  # last: the routes above win, the page answers every other GET
+        app.mount("/", Page(directory=page, html=True), name="page")
     return app
 
 

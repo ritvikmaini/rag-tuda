@@ -132,6 +132,7 @@ def test_the_root_build_context_is_an_allowlist():
         "!apps/",
         "!profiles/",
         "!models/",
+        "!web/page/",
     ]
 
 

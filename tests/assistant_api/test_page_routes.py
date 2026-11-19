@@ -1,4 +1,5 @@
-"""The first frame of an answer names the request's limits and the model that answers."""
+"""The page and the API beside it: the page is static and open, /api/* wants the Bearer token, /api/profile lists the
+programmes and PO versions of roles.yaml and the model that answers, and the first frame of an answer names the request's limits."""
 
 import json
 import types
@@ -7,6 +8,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from rag_core.settings import load_profile
 from rag_core.settings.card import load_card
 from rag_core.settings.profile import Roles
 
@@ -39,6 +41,63 @@ def app_with(card: Path = FAKE_CARD, roles: Roles | None = None) -> tuple[TestCl
     )
     app.state.runtime = rt
     return TestClient(app), rt
+
+
+@pytest.fixture
+def page(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    (tmp_path / "ui").mkdir()
+    (tmp_path / "index.html").write_text("<!DOCTYPE html><title>Assistant</title>", encoding="utf-8")
+    (tmp_path / "ui" / "start.js").write_text("export const x = 1;", encoding="utf-8")
+    monkeypatch.setenv("RAG_PAGE_DIR", str(tmp_path))
+    return tmp_path
+
+
+def test_the_page_is_open_and_the_api_wants_the_token(page: Path) -> None:
+    client, _ = app_with()
+    assert "<title>Assistant</title>" in client.get("/").text
+    assert client.get("/ui/start.js").status_code == 200
+    assert client.get("/healthz").json() == {"status": "ok"}
+    for path in ("/api/profile", "/api/chat?question=Hallo&conversation_id=u"):
+        assert client.get(path).status_code == 401, path
+        assert client.get(path, headers={"Authorization": "Bearer wrong"}).status_code == 401, path
+    assert client.get("/api/profile", headers=AUTH).status_code == 200
+    # the static mount answers only GET: a route that does not exist stays a 404 for every method
+    assert client.get("/nothing.js").status_code == 404
+    assert client.post("/v1/admin/reload", headers=AUTH).status_code == 404
+    assert client.get("/").headers["X-Frame-Options"] == "DENY"
+
+
+def test_without_a_page_folder_the_app_serves_the_api_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RAG_PAGE_DIR", str(tmp_path / "missing"))
+    client, _ = app_with()
+    assert client.get("/").status_code == 404
+    assert client.get("/healthz").status_code == 200
+
+
+def test_profile_endpoint_lists_programmes() -> None:
+    roles = load_profile(Roles, ROOT / "profiles" / "tu-informatik" / "roles.yaml")
+    client, _ = app_with(roles=roles)
+    body = client.get("/api/profile", headers=AUTH).json()
+    assert body["degrees"] == ["bachelor", "master", "promotion"]
+    by_id = {p["id"]: p for p in body["programmes"]}
+    assert list(by_id) == list(roles.programmes)
+    assert by_id["bsc-informatik"] == {
+        "id": "bsc-informatik",
+        "label_de": "B.Sc. Informatik",
+        "label_en": "B.Sc. Informatik",
+        "degree": "bachelor",
+        "po_versions": [2023, 2015],
+    }
+    assert [p["po_versions"] for p in body["programmes"] if p["degree"] == "master"] == [[2023, 2015], [2023]]
+    assert body["po_versions"] == [2023, 2015]
+    assert body["answer"] == {"model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm", "remote": False}
+
+
+def test_profile_without_roles_lists_nothing_and_names_a_remote_provider() -> None:
+    client, _ = app_with(GROQ_CARD)
+    body = client.get("/api/profile", headers=AUTH).json()
+    assert (body["degrees"], body["programmes"], body["po_versions"]) == ([], [], [])
+    assert body["answer"]["provider"] == "groq" and body["answer"]["remote"] is True
 
 
 def test_meta_carries_deadline_and_provider(monkeypatch: pytest.MonkeyPatch) -> None:
