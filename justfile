@@ -11,7 +11,7 @@ export RAG_CI_TAG := if ci_id == "" { "" } else { ":ci-" + ci_id }
 ci_project := if ci_id == "" { "rag-ci" } else { "rag-ci-" + ci_id }
 # The coverage ratchet: branch coverage per member, measured and rounded down. A lowered number is a review finding; a change
 # that raises coverage may raise its number.
-cov_rag_core := "86"  # measured 86.41; domain/status_groups.py (25%) is mostly untested
+cov_rag_core := "97"  # measured 97.77
 # rag_core files measured with apps/assistant_api under the assistant's floor instead of rag_core's: untyped domain code,
 # and the SQL and HTTP adapters the harness covers. The rag_core floor measures the other files (prompts, retrieval,
 # analysis and the other services)
@@ -20,8 +20,8 @@ cov_evals := "90"  # measured 90.90
 cov_rag_testing := "87"  # measured 87.77
 # the indexer (measured 73.01; its builds are covered by the harness)
 cov_indexer := "73"
-# apps/assistant_api and the rag_core_assistant_covered files together (measured 88.86; rounded down)
-cov_assistant := "88"
+# apps/assistant_api and the rag_core_assistant_covered files together (measured 91.24; rounded down)
+cov_assistant := "91"
 
 # all checks of the gate; db-tests, images and harness need Docker (Colima on the Mac: colima start --cpu 6 --memory 12)
 ci: lint types imports unit cli db-tests contracts model-servers images (harness "example") (harness "tu")
