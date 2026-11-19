@@ -464,8 +464,11 @@ def test_variant_inputs_hold_what_generate_read_from_the_checkpoint() -> None:
         "intent",
         "language",
         "scope_fallback",
+        "filter",
     }
-    assert inputs["scope_fallback"] is False
+    assert inputs["scope_fallback"] is False and inputs["filter"] is None
+    kept = Filter(programme=("bsc-informatik",), po_version=(2015,), include_archived=True, po_source="chip")
+    assert variant_inputs(dataclasses.replace(v, filter=kept), "shorter", "v1")["filter"] == kept
     assert [m.content for m in inputs["messages"]] == ["Frage eins", "Antwort eins.", "Wie melde ich mich krank?"]
     assert inputs["messages"][-1].id == "t2" and inputs["messages"][-1].type == "human"
     assert (

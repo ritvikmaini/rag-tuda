@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, List, Optional, Sequence, Tuple
 
+from rag_core.domain.filters import Filter
 from rag_core.domain.types import Message
 
 Turn = Tuple[Any, Any]
@@ -46,6 +47,9 @@ class PastTurn:
     question: str
     answer: str
     asked_at: datetime
+    applied_filter: Optional[dict[str, Any]] = (
+        None  # the turn's hard filter as stored (Filter.as_json()); None = it ran unfiltered
+    )
 
 
 @dataclass(frozen=True)
@@ -61,7 +65,8 @@ class LastTurn:
 @dataclass(frozen=True)
 class VariantInput:
     """What a variant's run needs from the store: the target question, the history before it, its stored candidates in
-    their grouped order with what the query analysis found, and the shape the variant is written in."""
+    their grouped order with what the query analysis found, the shape the variant is written in and the hard filter the turn
+    ran with."""
 
     turn_id: str
     question: str
@@ -73,6 +78,7 @@ class VariantInput:
     language: str
     shape: str
     scope_fallback: bool = False  # the turn was an out-of-scope question answered from its documents
+    filter: Optional[Filter] = None  # the hard filter the turn ran with (None = unfiltered): the variant runs on it
 
 
 def valid_turn_id(value) -> Optional[str]:

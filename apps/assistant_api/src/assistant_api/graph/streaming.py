@@ -6,7 +6,7 @@ status_frame(event) turns one LangGraph v2 stream event of a pipeline node run i
 the steps in German; the backend only sends the step and its facts. The facts are the ones the pipeline
 already logs (the [QueryAnalysis] line) and traces in Langfuse, so every step a user sees can be traced there.
 
-Steps: analysing (query analysis starts), understood (standalone question and intent), searching (the
+Steps: analysing (query analysis starts), understood (standalone question, intent and the applied hard filter), searching (the
 document search starts, with its search terms; only document intents reach it), found (documents in the
 answer context), writing (the answer starts)."""
 
@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from rag_core.domain.answer_shapes import shape_log_line
+from rag_core.domain.filters import Filter
 from rag_core.domain.language import strip_foreign
 from rag_core.domain.source_meta import select_sources_for_display
 
@@ -46,11 +47,14 @@ def _status(event):
     if name == REWRITE_NODE and kind == "on_chain_end":
         output = data.get("output")
         output = output if isinstance(output, dict) else {}
-        return {
+        content = {
             "step": "understood",
             "question": str(output.get("standalone_question") or "").strip(),
             "intent": str(output.get("intent") or ""),
         }
+        if isinstance(output.get("filter"), Filter):  # none while filtering is off: the key is left out
+            content["applied_filter"] = output["filter"].as_json()
+        return content
     if name == SEARCH_NODE and kind == "on_chain_start":
         state = data.get("input")
         state = state if isinstance(state, dict) else {}

@@ -44,6 +44,26 @@ def test_understood_carries_only_the_question_and_intent():
     }
 
 
+def test_understood_names_the_applied_filter_when_the_run_has_one():
+    from rag_core.domain.filters import Filter
+
+    applied = Filter(("bachelor",), ("bsc-informatik",), (2015,), None, None, True, "chip")
+    event = {
+        "event": "on_chain_end",
+        "name": "rewrite_follow_up_question",
+        "data": {"output": {"standalone_question": "Frage?", "intent": "lookup", "filter": applied}},
+    }
+    assert content(ss.status_frame(event)) == {
+        "step": "understood",
+        "question": "Frage?",
+        "intent": "lookup",
+        "applied_filter": applied.as_json(),
+    }
+    off = {"standalone_question": "Frage?", "intent": "lookup", "filter": None}  # filtering off: no key
+    event["data"] = {"output": off}
+    assert "applied_filter" not in content(ss.status_frame(event))
+
+
 def test_a_direct_reply_on_the_first_turn_reports_no_search():
     # The first turn adds the typed text to retrieval_queries for every intent;
     # a direct reply never searches, so no search terms may reach the page.

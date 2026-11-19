@@ -1,5 +1,5 @@
 """The conversation's LangChain messages: the history policy's turns as prompt messages, the new question as stored, the
-stored turns as messages, and a variant's run input."""
+stored turns as messages, the filter the next question starts from, and a variant's run input."""
 
 import uuid
 from collections.abc import Mapping, Sequence
@@ -9,7 +9,10 @@ from typing import Any, Optional
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
+from rag_core.domain.filters import Filter
 from rag_core.domain.history import TS_KEY, PastTurn, Turn, VariantInput, clean_answer
+
+from assistant_api.chat.turns_store import stored_filter
 
 
 def to_messages(pairs: Sequence[tuple[str, str]]) -> list[BaseMessage]:
@@ -53,6 +56,12 @@ def history_messages(past: Sequence[PastTurn]) -> list[BaseMessage]:
     return out
 
 
+def previous_filter(past: Sequence[PastTurn]) -> Filter | None:
+    """The hard filter the newest of the earlier turns ran with: the start of the next question's filter. None when there is
+    no earlier turn, when it ran unfiltered or when its stored filter is unreadable (logged)."""
+    return stored_filter(past[-1].applied_filter) if past else None
+
+
 def documents(candidates: Sequence[Mapping[str, Any]]) -> list[Document]:
     return [Document(page_content=c["page_content"], metadata=dict(c.get("metadata") or {})) for c in candidates]
 
@@ -73,4 +82,5 @@ def variant_inputs(v: VariantInput, variant: str, formats: str) -> dict[str, Any
         "intent": v.intent,
         "language": v.language,
         "scope_fallback": v.scope_fallback,
+        "filter": v.filter,
     }

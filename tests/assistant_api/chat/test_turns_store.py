@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import uuid
+from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -11,6 +12,8 @@ import psycopg
 import pytest
 from psycopg.conninfo import make_conninfo
 from rag_core.adapters.pg_index import read_pool
+from rag_core.domain.filters import Filter
+from rag_core.domain.history import VariantInput
 from rag_testing import harness
 
 from assistant_api.chat import turns_store as ts
@@ -57,7 +60,7 @@ def doc(text: str, section_id: str, score: float = 0.5) -> SimpleNamespace:
     )
 
 
-def result(answer, candidates=(), sources=(), shape="text", scope_fallback=False, usage=None):
+def result(answer, candidates=(), sources=(), shape="text", scope_fallback=False, usage=None, applied=None):
     return SimpleNamespace(
         usage=usage or {},
         scope_fallback=scope_fallback,
@@ -65,7 +68,7 @@ def result(answer, candidates=(), sources=(), shape="text", scope_fallback=False
         requested_shape=shape,
         candidates=list(candidates),
         sources=list(sources),
-        analysis={"standalone_question": "Frage?", "intent": "lookup", "language": "Deutsch"},
+        analysis={"standalone_question": "Frage?", "intent": "lookup", "language": "Deutsch", "filter": applied},
         first_chunk=None,
     )
 
@@ -84,13 +87,16 @@ async def ask(
     shape="text",
     scope_fallback=False,
     usage=None,
+    applied=None,
 ):
     t = ts.TurnRecord(turn_id=turn_id or str(uuid.uuid4()), conversation_id=conversation, question=question)
     await store.begin(t, replace_from, kept)
     past = None
     if outcome not in ("too_long", "busy"):
         past = await store.history(t, replace_from, kept)
-    t.result = result(answer if outcome == "completed" else None, candidates, sources, shape, scope_fallback, usage)
+    t.result = result(
+        answer if outcome == "completed" else None, candidates, sources, shape, scope_fallback, usage, applied
+    )
     t.run = {"collection": "example", "index_generation": 1, "config_hash": "abc", "prompts": {"rag-generation": 2}}
     await store.finish(t, outcome)
     return t, past
@@ -260,6 +266,41 @@ def test_a_fallback_turn_stores_the_flag_in_its_context_and_its_variant_input_re
 
     rows, taken = run(work)
     assert rows == [(False,), (True,)] and taken.scope_fallback is True
+
+
+def test_the_applied_filter_is_stored_with_the_turn_and_read_by_the_history_and_by_a_variant():
+    """SQL NULL is a turn run without filtering, an empty filter is a stored object; the history hands the next question its
+    turn's filter and a variant input the filter of the turn it changes."""
+    conv = "applied-" + uuid.uuid4().hex
+    kept = Filter(("bachelor",), ("bsc-informatik",), (2015,), None, date(2026, 10, 1), True, "chip")
+
+    async def work(store):
+        await ask(store, conv, "Frage eins", applied=Filter())
+        _, seen_by_second = await ask(store, conv, "Frage zwei", applied=None)
+        last, seen_by_third = await ask(
+            store, conv, "Frage drei", applied=kept, candidates=[doc("Q", "p1")], sources=[{"section_id": "p1"}]
+        )
+        fourth = ts.TurnRecord(
+            str(uuid.uuid4()), conv, "Frage vier"
+        )  # read, not stored: what the next question starts from
+        async with store.pool.connection() as conn:
+            rows = await (
+                await conn.execute(
+                    "SELECT applied_filter IS NULL, applied_filter FROM chat.turns WHERE conversation_id = %s "
+                    "ORDER BY created_at",
+                    (conv,),
+                )
+            ).fetchall()
+        return (
+            rows,
+            [p[-1].applied_filter for p in (seen_by_second, seen_by_third, await store.history(fourth, None, None))],
+            await store.variant_input(conv, "shorter", last.turn_id),
+        )
+
+    rows, handed, taken = run(work)
+    assert [r[0] for r in rows] == [False, True, False] and rows[2][1] == kept.as_json()
+    assert handed == [Filter().as_json(), None, kept.as_json()]  # the newest earlier turn's filter, as stored
+    assert Filter.from_json(handed[2]) == kept and isinstance(taken, VariantInput) and taken.filter == kept
 
 
 def test_finish_writes_the_row_and_one_context_for_a_completed_lookup():

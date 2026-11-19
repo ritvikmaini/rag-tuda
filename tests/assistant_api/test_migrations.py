@@ -24,10 +24,22 @@ def first_migration():
     return module
 
 
-def test_migrations_squashed_schema() -> None:
-    """One file, one head, and the end schema of the turn tables: the nullable error column is part of the first CREATE."""
-    assert [p.name for p in (migrate.MIGRATIONS / "versions").glob("*.py")] == ["0001_initial.py"]
-    assert ScriptDirectory.from_config(migrate.alembic_config()).get_heads() == ["0001"]
+def second_migration():
+    path = migrate.MIGRATIONS / "versions" / "0002_applied_filter.py"
+    spec = importlib.util.spec_from_file_location("m0002", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_migrations_chain_and_the_turn_tables_schema() -> None:
+    """A linear chain of two files with one head; the first creates the turn tables (the nullable error column is part of
+    its CREATE), the second adds the applied filter."""
+    assert sorted(p.name for p in (migrate.MIGRATIONS / "versions").glob("*.py")) == [
+        "0001_initial.py",
+        "0002_applied_filter.py",
+    ]
+    assert ScriptDirectory.from_config(migrate.alembic_config()).get_heads() == ["0002"]
     m = first_migration()
     assert (m.revision, m.down_revision) == ("0001", None)
     turns = next(" ".join(s.split()) for s in m.UPGRADE if s.startswith("CREATE TABLE chat.turns "))
@@ -35,10 +47,20 @@ def test_migrations_squashed_schema() -> None:
     assert m.DOWNGRADE[0] == "DROP TABLE chat.turn_context, chat.turn_versions, chat.turns"
 
 
+def test_the_second_migration_adds_a_nullable_applied_filter_column_and_drops_it_again() -> None:
+    m = second_migration()
+    assert (m.revision, m.down_revision) == ("0002", "0001")
+    assert [" ".join(s.split()) for s in m.UPGRADE][0] == "ALTER TABLE chat.turns ADD COLUMN applied_filter jsonb"
+    assert m.DOWNGRADE == ("ALTER TABLE chat.turns DROP COLUMN applied_filter",)
+    sql = "\n".join(m.UPGRADE + m.DOWNGRADE)
+    assert ":" not in sql.replace("::", "") and "%" not in sql  # op.execute reads a colon as a bind
+
+
 def test_pending_lists_the_revisions_after_the_current_one() -> None:
     cfg = migrate.alembic_config()
-    assert migrate.pending(cfg, ()) == ["0001"]
-    assert migrate.pending(cfg, ("0001",)) == []
+    assert migrate.pending(cfg, ()) == ["0001", "0002"]
+    assert migrate.pending(cfg, ("0001",)) == ["0002"]
+    assert migrate.pending(cfg, ("0002",)) == []
 
 
 def test_main_pending_exit_codes(monkeypatch, tmp_path: Path, capsys) -> None:
@@ -50,15 +72,18 @@ def test_main_pending_exit_codes(monkeypatch, tmp_path: Path, capsys) -> None:
 
     monkeypatch.setattr(migrate, "current", lambda url: ())
     assert main("--pending") == 3
-    assert capsys.readouterr().out == "[Migrate] pending: 0001\n"
+    assert capsys.readouterr().out == "[Migrate] pending: 0001, 0002\n"
     monkeypatch.setattr(migrate, "current", lambda url: ("0001",))
+    assert main("--pending") == 3
+    assert capsys.readouterr().out == "[Migrate] pending: 0002\n"
+    monkeypatch.setattr(migrate, "current", lambda url: ("0002",))
     assert main("--pending") == 0
-    assert capsys.readouterr().out == "[Migrate] nothing pending; at 0001\n"
+    assert capsys.readouterr().out == "[Migrate] nothing pending; at 0002\n"
     monkeypatch.setattr(
-        migrate, "current", lambda url: ("0002",)
+        migrate, "current", lambda url: ("0003",)
     )  # a rollback left a newer schema than this image knows
     assert main("--pending") == 4
-    assert capsys.readouterr().out == "[Migrate] the database is at 0002, which this image does not know\n"
+    assert capsys.readouterr().out == "[Migrate] the database is at 0003, which this image does not know\n"
 
 
 def test_the_first_migration_creates_spec_6_6_and_grants_before_it_creates() -> None:
@@ -120,7 +145,7 @@ def test_the_harness_database_has_the_tables_with_least_privilege() -> None:
 
     common = {"host": "127.0.0.1", "port": harness.DB_PORT, "dbname": secret("pgdatabase"), "autocommit": True}
     with psycopg.connect(user="rag_migrator", password=secret("rag_migrator_password"), **common) as conn:
-        assert conn.execute("SELECT version_num FROM chat.alembic_version").fetchall() == [("0001",)]
+        assert conn.execute("SELECT version_num FROM chat.alembic_version").fetchall() == [("0002",)]
         owners = dict(conn.execute("SELECT tablename, tableowner FROM pg_tables WHERE schemaname = 'chat'").fetchall())
         assert owners == {t: "rag_migrator" for t in ("alembic_version", "turns", "turn_versions", "turn_context")}
         grants = set(
@@ -133,6 +158,10 @@ def test_the_harness_database_has_the_tables_with_least_privilege() -> None:
             "SELECT data_type, is_nullable, column_default FROM information_schema.columns "
             "WHERE table_schema = 'chat' AND table_name = 'turns' AND column_name = 'error'"
         ).fetchall() == [("text", "YES", None)]
+        assert conn.execute(
+            "SELECT data_type, is_nullable, column_default FROM information_schema.columns "
+            "WHERE table_schema = 'chat' AND table_name = 'turns' AND column_name = 'applied_filter'"
+        ).fetchall() == [("jsonb", "YES", None)]
         assert grants == {
             (t, "rag_app", p)
             for t in ("turns", "turn_versions", "turn_context")
@@ -293,7 +322,7 @@ def test_every_upgrade_only_adds() -> None:
 
 
 @pytest.mark.skipif(not (os.environ.get("RUN_DOCKER_TESTS") and (GEN / "ci.env").exists()), reason="needs the harness")
-def test_0001_goes_down_and_up_and_pending_sees_it() -> None:
+def test_the_migrations_go_down_and_up_and_pending_sees_them() -> None:
     import psycopg
     from alembic import command
     from rag_testing import harness
@@ -317,11 +346,14 @@ def test_0001_goes_down_and_up_and_pending_sees_it() -> None:
         try:
             command.downgrade(cfg, "base")
             assert conn.execute(turns).fetchone() == (None,)
-            assert migrate.current(url) == () and migrate.pending(cfg, migrate.current(url)) == ["0001"]
+            assert migrate.current(url) == () and migrate.pending(cfg, migrate.current(url)) == ["0001", "0002"]
         finally:
             command.upgrade(cfg, "head")
         assert conn.execute(turns).fetchone() == ("chat.turns",)
-        assert migrate.current(url) == ("0001",)
+        assert migrate.current(url) == ("0002",)
+        assert conn.execute(
+            "SELECT to_regclass('chat.turns'), count(*) FROM information_schema.columns WHERE table_schema = 'chat' AND table_name = 'turns' AND column_name = 'applied_filter'"
+        ).fetchone() == ("chat.turns", 1)
 
 
 def test_the_secrets_folder_defaults_to_the_environments(tmp_path: Path) -> None:

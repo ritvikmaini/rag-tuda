@@ -22,6 +22,7 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 from rag_core.adapters.db import credentials
 from rag_core.domain.answer_shapes import SHAPE_VARIANTS, shape_of, turn_variant_problem
+from rag_core.domain.filters import Filter
 from rag_core.domain.history import LastTurn, PastTurn, VariantInput, cut_turns
 from rag_core.domain.retrieval import section_identity
 from rag_core.domain.source_meta import select_sources_for_display
@@ -40,7 +41,7 @@ INSERT = (
     "VALUES (%s, %s, %s, %s, 'failed', clock_timestamp()) ON CONFLICT (turn_id) DO NOTHING RETURNING turn_id"
 )
 SUPERSEDE = "UPDATE chat.turns SET superseded_by = %s WHERE turn_id = ANY(%s::uuid[]) AND turn_id <> %s"
-HISTORY = """SELECT t.turn_id::text, t.question, coalesce(v.text, t.answer, ''), t.created_at
+HISTORY = """SELECT t.turn_id::text, t.question, coalesce(v.text, t.answer, ''), t.created_at, t.applied_filter
 FROM chat.turns t LEFT JOIN chat.turn_versions v ON v.turn_id = t.turn_id AND v.active
 WHERE t.conversation_id = %s AND t.superseded_by IS NULL AND t.outcome = 'completed' AND t.turn_id <> %s
   AND t.created_at < coalesce((SELECT s.created_at FROM chat.turns s WHERE s.turn_id = %s), clock_timestamp())
@@ -50,7 +51,7 @@ LAST = """SELECT t.turn_id::text, t.outcome = 'completed' AND btrim(coalesce(t.a
 FROM chat.turns t
 WHERE t.conversation_id = %s AND t.superseded_by IS NULL AND t.outcome NOT IN ('too_long', 'busy')
 ORDER BY t.created_at DESC, t.turn_id DESC LIMIT 1"""
-TARGET = """SELECT t.question, t.created_at, t.answer_shape, c.sections, o.shape
+TARGET = """SELECT t.question, t.created_at, t.answer_shape, c.sections, o.shape, t.applied_filter
 FROM chat.turns t JOIN chat.turn_context c ON c.turn_id = t.turn_id
 LEFT JOIN chat.turn_versions o ON o.turn_id = t.turn_id AND o.name = 'original'
 WHERE t.turn_id = %s"""
@@ -72,7 +73,7 @@ SELECT_VERSION = (
 FINISH = (
     "UPDATE chat.turns SET outcome = %s, standalone_question = %s, intent = %s, answer = %s, answer_shape = %s, "
     "retrieved_section_ids = %s, cited_section_ids = %s, prompts = %s, collection = %s, index_generation = %s, "
-    "config_hash = %s, stage_ms = %s, usage = %s, error = %s WHERE turn_id = %s"
+    "config_hash = %s, stage_ms = %s, usage = %s, error = %s, applied_filter = %s WHERE turn_id = %s"
 )
 CONTEXT = "INSERT INTO chat.turn_context (turn_id, sections) VALUES (%s, %s) ON CONFLICT (turn_id) DO NOTHING"
 GENERATION = "SELECT generation FROM index_generations WHERE collection = %s AND status = 'live'"
@@ -167,8 +168,20 @@ def turn_context(
     )
 
 
+def stored_filter(applied: Any) -> Filter | None:
+    """The filter a turn row holds (its jsonb as read); None for SQL NULL, a turn that ran without filtering, and for a value that
+    is no filter (logged: the carry-over is lost, the answer is not)."""
+    if applied is None:
+        return None
+    try:
+        return Filter.from_json(applied)
+    except (TypeError, ValueError, AttributeError) as exc:
+        logger.warning("[Turns] a stored filter is unreadable and is not carried: %s: %s", type(exc).__name__, exc)
+        return None
+
+
 def _past(rows: Sequence[Any]) -> list[PastTurn]:
-    return [PastTurn(turn_id=r[0], question=r[1], answer=r[2], asked_at=r[3]) for r in rows]
+    return [PastTurn(turn_id=r[0], question=r[1], answer=r[2], asked_at=r[3], applied_filter=r[4]) for r in rows]
 
 
 class TurnStore:
@@ -258,6 +271,7 @@ class TurnStore:
         candidates = list(getattr(r, "candidates", None) or [])
         sources = list(getattr(r, "sources", None) or [])
         usage = dict(getattr(r, "usage", None) or {})
+        applied = analysis.get("filter")  # the analysis step's resolved filter; None = the turn ran without filtering
         retrieved = [str((d.metadata or {}).get("section_id") or "") for d in candidates]
         cited = (
             [str(s.get("section_id") or "") for s in select_sources_for_display(sources, answer, "cited")]
@@ -282,6 +296,7 @@ class TurnStore:
                     Jsonb(stage_ms(t)),
                     Jsonb(usage) if usage else None,
                     t.error,
+                    Jsonb(applied.as_json()) if isinstance(applied, Filter) else None,
                     t.turn_id,
                 ),
             )
@@ -320,7 +335,7 @@ class TurnStore:
                 target = await (await conn.execute(TARGET, (variant_of,))).fetchone()
                 if target is None:  # the checked turn has its context row under the lock; none means a broken store
                     return "state unavailable"
-                question, asked_at, answer_shape, sections, original_shape = target
+                question, asked_at, answer_shape, sections, original_shape, applied = target
                 rows = await (await conn.execute(HISTORY, (conversation_id, variant_of, variant_of))).fetchall()
             shape = variant if variant in SHAPE_VARIANTS else shape_of(original_shape or answer_shape)
             return VariantInput(
@@ -334,6 +349,7 @@ class TurnStore:
                 language=sections.get("language") or "",
                 shape=shape,
                 scope_fallback=sections.get("scope_fallback") is True,
+                filter=stored_filter(applied),
             )
         except Exception as exc:
             logger.warning("[Variant] take-out failed: %s", exc)

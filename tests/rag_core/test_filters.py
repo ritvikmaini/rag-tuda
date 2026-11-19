@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from rag_core.domain.cohort import po_for_term
 from rag_core.domain.filters import Chips, Filter, check_chips, resolve_filter
 from rag_core.domain.query_analysis import QueryAnalysis
@@ -259,3 +260,16 @@ def test_the_po_source_names_where_the_year_came_from() -> None:
     term = resolve("Ich studiere M.Sc. Informatik seit WiSe 2024/25")
     assert resolve("Und die Frist?", previous=term).po_source == "term"  # a term-derived PO stays "in der Regel"
     assert resolve("Und die Frist?", previous=resolve("Was gilt in PO 2015?")).po_source == "carried"
+
+
+def test_a_filter_round_trips_through_json_with_its_tuples_and_its_date() -> None:
+    import json
+
+    full = Filter(("master",), ("msc-informatik",), (2015, 2023), ("po",), date(2026, 10, 1), True, "chip")
+    assert Filter.from_json(json.loads(json.dumps(full.as_json()))) == full
+    assert Filter.from_json(json.loads(json.dumps(Filter().as_json()))) == Filter()
+    assert full.as_json()["date"] == "2026-10-01" and full.as_json()["po_version"] == [2015, 2023]
+    assert Filter.from_json({}) == Filter()
+    for bad in ({"degree": "master"}, {"date": "gestern"}):
+        with pytest.raises((TypeError, ValueError)):
+            Filter.from_json(bad)

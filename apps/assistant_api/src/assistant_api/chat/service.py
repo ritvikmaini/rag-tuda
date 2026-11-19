@@ -18,7 +18,13 @@ from rag_core.domain.history import kept_ids, valid_turn_id
 
 from assistant_api.chat.guard import PROGRESS
 from assistant_api.chat.turns_store import TurnRecord
-from assistant_api.graph.history import documents, history_messages, question_message, variant_inputs
+from assistant_api.graph.history import (
+    documents,
+    history_messages,
+    previous_filter,
+    question_message,
+    variant_inputs,
+)
 from assistant_api.graph.store import VARIANT_CODES
 from assistant_api.graph.streaming import StreamResult, run_stream
 from assistant_api.graph.tracing import run_config
@@ -138,6 +144,7 @@ async def pipeline(
                 + [question_message(question, turn or clean_turn_id, datetime.now(timezone.utc))],
                 "variant": None,
                 "formats": FORMATS_VERSION if formats_on else "",
+                "filter": previous_filter(past),  # the analysis step resolves this question's filter from it
             }
         else:
             # the stored context of the turn: the run changes nothing until its version is kept below

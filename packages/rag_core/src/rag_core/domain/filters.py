@@ -35,6 +35,40 @@ class Filter:
     # "carried" (the previous turn's; a term-derived one stays "term"); None without a PO
     po_source: str | None = None
 
+    def as_json(self) -> dict[str, Any]:
+        """The filter as plain JSON (lists, the date as ISO text): what the turn store keeps and the status frame names."""
+        return {
+            "degree": None if self.degree is None else list(self.degree),
+            "programme": None if self.programme is None else list(self.programme),
+            "po_version": None if self.po_version is None else list(self.po_version),
+            "regulation": None if self.regulation is None else list(self.regulation),
+            "date": None if self.date is None else self.date.isoformat(),
+            "include_archived": self.include_archived,
+            "po_source": self.po_source,
+        }
+
+    @classmethod
+    def from_json(cls, data: Mapping[str, Any]) -> "Filter":
+        """The filter `as_json` wrote; a field the data lacks is not filtered. Raises ValueError or TypeError on a value of
+        the wrong kind."""
+
+        def values(name: str) -> tuple[Any, ...] | None:
+            value = data.get(name)
+            if value is not None and not isinstance(value, list):
+                raise TypeError(f"{name}: a list or null, not {type(value).__name__}")
+            return None if value is None else tuple(cast("list[Any]", value))
+
+        day = data.get("date")
+        return cls(
+            degree=values("degree"),
+            programme=values("programme"),
+            po_version=values("po_version"),
+            regulation=values("regulation"),
+            date=None if day is None else dt.date.fromisoformat(day),
+            include_archived=data.get("include_archived") is True,
+            po_source=data.get("po_source"),
+        )
+
 
 @dataclass(frozen=True)
 class Chips:
