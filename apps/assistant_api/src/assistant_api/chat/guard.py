@@ -38,7 +38,7 @@ _DONE = object()
 # analysis, retrieval, reranking, a model chunk without text such as a reasoning model's
 # thinking): it counts as activity for the silence limit; the page sees it only as the throttled comment line below.
 PROGRESS = ": progress"
-PROGRESS_COMMENT_EVERY_S = 5.0  # the quiet time after which a PROGRESS item is written as a comment line
+PROGRESS_COMMENT_EVERY_S = 2.5  # the quiet time after which a PROGRESS item is written as a comment line
 CANCEL_WAIT_S = 5.0  # how long the guard waits for the cancelled pipeline to clean up
 TEXT_KEYS = {
     "busy": "guard.busy",
