@@ -40,7 +40,7 @@ docs:
   none: "Note: No sources were used for this answer!"
 labels:
   source_types: {}
-  origins: {}
+  origins: {documents: Your own documents}
   hosts:
     www.informatik.tu-darmstadt.de: Department of Computer Science, TU Darmstadt
     www.intern.tu-darmstadt.de: University regulations, TU Darmstadt

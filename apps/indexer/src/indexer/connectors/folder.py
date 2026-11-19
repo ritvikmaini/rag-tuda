@@ -5,12 +5,15 @@ A page is titled by the first "# " line of its text (else the file name without 
 block ("---" lines around YAML) whose keys doc_type, date (YYYY-MM-DD) and url override the defaults; the block itself is not
 indexed. A PDF is handed to the indexer's extraction as it is.
 
-url: the front matter url, else the profile entry's base_url plus the relative path without its suffix, else
-"folder:<relative path>" (never an absolute path: citations must not carry where the folder lives).
+url: the front matter url, else the profile entry's base_url plus the relative path without its suffix (each part
+percent-encoded), else "folder:<relative path>" (never an absolute path: citations must not carry where the folder lives).
+Two files with one url are refused, naming both. A symlink to a file outside the folder is skipped.
+origin: "website" for a folder that copies a site (the entry has a base_url), else "documents" (the user's own files).
 doc_type: the front matter, else the profile entry's doc_type, else "Dokument".
 The profile entry's other keys: base_url, doc_type, min_documents (the source gate)."""
 
 import datetime
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -66,9 +69,22 @@ class Folder:
         if ctx.data_dir is None:
             raise RuntimeError("folder: the overlay names no directory (connectors.<source>.dir)")
         root = ctx.data_dir
-        files = sorted(p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in SUFFIXES)
+        real_root = root.resolve()
+        files = sorted(
+            p
+            for p in root.rglob("*")
+            if p.is_file() and p.suffix.lower() in SUFFIXES and p.resolve().is_relative_to(real_root)
+        )
         files = files[: ctx.limit or None]
         items = [self.item(path, path.relative_to(root), ctx.settings) for path in files]
+        seen: dict[str, Path] = {}
+        for path, item in zip(files, items):
+            if item.url in seen:
+                raise ValueError(
+                    f"{seen[item.url].relative_to(root).as_posix()} and {path.relative_to(root).as_posix()} "
+                    f"both have the url {item.url}"
+                )
+            seen[item.url] = path
         return SourceResult(
             items,
             {"files": len(items)},
@@ -80,16 +96,25 @@ class Folder:
         meta: dict[str, Any] = {}
         text = ""
         if path.suffix.lower() != ".pdf":
-            meta, text = split_front_matter(path.read_text(encoding="utf-8"), name)
+            try:
+                raw = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(f"{name}: not UTF-8 ({exc.reason} at byte {exc.start})") from exc
+            meta, text = split_front_matter(raw, name)
         base_url = settings.get("base_url")
-        url = meta.get("url") or (f"{base_url}{rel.with_suffix('').as_posix()}" if base_url else f"folder:{name}")
+        origin = "website" if base_url else "documents"
+        url = meta.get("url") or (
+            f"{base_url.rstrip('/')}/{urllib.parse.quote(rel.with_suffix('').as_posix())}"
+            if base_url
+            else f"folder:{name}"
+        )
         doc_type = meta.get("doc_type") or settings.get("doc_type") or "Dokument"
         if path.suffix.lower() == ".pdf":
             return PdfItem(
                 str(path),
                 url,
                 file_hash(path),
-                {"url": url, "download_url": url, "doc_type": doc_type, "origin": "website"},
+                {"url": url, "download_url": url, "doc_type": doc_type, "origin": origin},
             )
         date = day(meta.get("date"), name)
         return PageItem(
@@ -100,7 +125,7 @@ class Folder:
                 "url": url,
                 "source_type": "page",
                 "doc_type": doc_type,
-                "origin": "website",
+                "origin": origin,
                 "section": "",
                 "doc_year": int(date[:4]) if date else None,
                 "doc_date": date,

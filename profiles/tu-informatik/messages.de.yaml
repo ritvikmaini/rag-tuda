@@ -40,7 +40,7 @@ docs:
 # Where a source comes from, in its header and its citation: the type first, then the metadata origin, then the url's host.
 labels:
   source_types: {}
-  origins: {}
+  origins: {documents: Eigene Dokumente}
   hosts:
     www.informatik.tu-darmstadt.de: Fachbereich Informatik, TU Darmstadt
     www.intern.tu-darmstadt.de: Hochschulrecht, TU Darmstadt

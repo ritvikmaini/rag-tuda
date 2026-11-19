@@ -133,3 +133,48 @@ def test_a_bad_front_matter_is_refused_with_the_file_name(tmp_path: Path, text: 
 def test_the_connector_is_found_by_its_entry_point() -> None:
     found = {ep.name: ep for ep in entry_points(group="rag_core.connectors")}
     assert found["folder"].load() is Folder
+
+
+def test_an_own_folder_is_labelled_as_documents_and_a_site_copy_as_website(tmp_path: Path) -> None:
+    write(tmp_path, "a.md", "# A\n")
+    tiny_pdf(tmp_path / "b.pdf")
+    own = Folder().collect(ctx(tmp_path)).items
+    assert [i.metadata["origin"] for i in own] == ["documents", "documents"]
+    site = Folder().collect(ctx(tmp_path, base_url=BASE)).items
+    assert [i.metadata["origin"] for i in site] == ["website", "website"]
+
+
+def test_two_files_with_one_url_are_refused_naming_both(tmp_path: Path) -> None:
+    write(tmp_path, "a.md", "# A\n")
+    write(tmp_path, "a.txt", "Text\n")
+    with pytest.raises(ValueError, match=r"a\.md.*a\.txt|a\.txt.*a\.md"):
+        Folder().collect(ctx(tmp_path, base_url=BASE))
+
+
+def test_a_front_matter_url_repeated_by_another_file_is_refused(tmp_path: Path) -> None:
+    write(tmp_path, "a.md", "---\nurl: https://x.example/p\n---\n# A\n")
+    write(tmp_path, "b.md", "---\nurl: https://x.example/p\n---\n# B\n")
+    with pytest.raises(ValueError, match="https://x.example/p"):
+        Folder().collect(ctx(tmp_path))
+
+
+def test_a_symlink_out_of_the_folder_is_skipped_and_one_inside_is_kept(tmp_path: Path) -> None:
+    folder, outside = tmp_path / "docs", tmp_path / "secret.md"
+    write(folder, "a.md", "# A\n")
+    outside.write_text("# Geheim\n", encoding="utf-8")
+    (folder / "leak.md").symlink_to(outside)
+    (folder / "same.md").symlink_to(folder / "a.md")
+    assert [i.url for i in Folder().collect(ctx(folder)).items] == ["folder:a.md", "folder:same.md"]
+
+
+def test_a_file_that_is_not_utf8_is_named(tmp_path: Path) -> None:
+    (tmp_path / "alt.txt").write_bytes("Prüfung".encode("latin-1"))
+    with pytest.raises(ValueError, match=r"alt\.txt.*UTF-8"):
+        Folder().collect(ctx(tmp_path))
+
+
+@pytest.mark.parametrize("base", ["https://docs.example.org", "https://docs.example.org/"])
+def test_the_base_url_joins_with_one_slash_and_the_path_is_quoted(tmp_path: Path, base: str) -> None:
+    write(tmp_path, "Studien ordnung/Teil 1.md", "# T\n")
+    (item,) = Folder().collect(ctx(tmp_path, base_url=base)).items
+    assert item.url == "https://docs.example.org/Studien%20ordnung/Teil%201"
