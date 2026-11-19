@@ -21,6 +21,7 @@ def test_the_defaults_are_the_compose_paths(profile):
         "extracted_dir": "/app/data/extracted",
         "pdf_dir": "/app/data/pdfs",
         "skipped_pdfs_log": "/app/data/skipped_pdfs_page_limit.json",
+        "user_sources": "/app/data/sources.json",
     }
 
 

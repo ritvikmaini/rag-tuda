@@ -167,6 +167,17 @@ def test_a_symlink_out_of_the_folder_is_skipped_and_one_inside_is_kept(tmp_path:
     assert [i.url for i in Folder().collect(ctx(folder)).items] == ["folder:a.md", "folder:same.md"]
 
 
+def test_a_label_puts_the_source_name_into_the_relative_url(tmp_path: Path) -> None:
+    write(tmp_path, "sub/a.md", "# A\n")
+    (item,) = Folder().collect(ctx(tmp_path, label="house")).items
+    assert item.url == "folder:house/sub/a.md" and str(tmp_path) not in item.url
+
+
+def test_a_folder_that_is_gone_reports_it_instead_of_dropping_its_documents_silently(tmp_path: Path) -> None:
+    result = Folder().collect(ctx(tmp_path / "moved"))
+    assert result.items == [] and result.report == {"files": 0, "missing_folder": str(tmp_path / "moved")}
+
+
 def test_a_file_that_is_not_utf8_is_named(tmp_path: Path) -> None:
     (tmp_path / "alt.txt").write_bytes("Prüfung".encode("latin-1"))
     with pytest.raises(ValueError, match=r"alt\.txt.*UTF-8"):

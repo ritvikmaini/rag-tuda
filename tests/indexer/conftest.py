@@ -42,6 +42,7 @@ def moved(tmp_path):
         "extracted_dir": "extracted",
         "pdf_dir": "pdfs",
         "skipped_pdfs_log": "skipped.json",
+        "user_sources": "sources.json",
     }
     return {key: str(tmp_path / name) for key, name in names.items()}
 

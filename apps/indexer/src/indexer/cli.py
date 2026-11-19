@@ -57,9 +57,14 @@ def _capped(level: str, name: str, lines: list[str], more: str) -> list[str]:
 
 
 def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
-    """What a source's report names for the build summary: pages whose content could not be found (the site may have
+    """What a source's report names for the build summary: a folder that is gone, pages whose content could not be found (the site may have
     changed), documents not indexed for lacking required metadata, hub copies skipped, and URLs not fetched with the reason."""
     return [
+        *(
+            [f"warning: {name}: folder not found, its documents are not indexed: {report['missing_folder']}"]
+            if report.get("missing_folder")
+            else []
+        ),
         *_capped(
             "warning",
             name,

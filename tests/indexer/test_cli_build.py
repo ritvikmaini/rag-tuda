@@ -244,3 +244,10 @@ def test_a_missing_database_secret_file_is_named_and_exits_1(settings, fakes, mo
     out = []
     code = cli.main(["build"], settings=settings, embedding=fakes.Embedding(None), sources={}, out=out.append)
     assert code == 1 and "pgdatabase" in out[-1]
+
+
+def test_the_summary_warns_about_a_folder_that_is_gone():
+    report = {"files": 0, "missing_folder": "/home/me/docs"}
+    assert cli.summary_lines("house", report) == [
+        "warning: house: folder not found, its documents are not indexed: /home/me/docs"
+    ]

@@ -7,7 +7,8 @@ indexed. A PDF is handed to the indexer's extraction as it is.
 
 url: the front matter url, else the profile entry's base_url plus the relative path without its suffix (each part
 percent-encoded), else "folder:<relative path>" (never an absolute path: citations must not carry where the folder lives).
-Two files with one url are refused, naming both. A symlink to a file outside the folder is skipped.
+Without a base_url the entry's `label` (the source's name) leads the path: "folder:<label>/<relative path>", so two
+folders with a README.md stay two documents. Two files with one url are refused, naming both. A symlink to a file outside the folder is skipped.
 origin: "website" for a folder that copies a site (the entry has a base_url), else "documents" (the user's own files).
 doc_type: the front matter, else the profile entry's doc_type, else "Dokument".
 The profile entry's other keys: base_url, doc_type, min_documents (the source gate)."""
@@ -69,6 +70,14 @@ class Folder:
         if ctx.data_dir is None:
             raise RuntimeError("folder: the overlay names no directory (connectors.<source>.dir)")
         root = ctx.data_dir
+        if (
+            not root.is_dir()
+        ):  # a moved or mistyped folder: the build says so instead of dropping its documents silently
+            return SourceResult(
+                [],
+                {"files": 0, "missing_folder": str(root)},
+                expected_minimum=int(ctx.settings.get("min_documents", 0)),
+            )
         real_root = root.resolve()
         files = sorted(
             p
@@ -103,9 +112,12 @@ class Folder:
             meta, text = split_front_matter(raw, name)
         base_url = settings.get("base_url")
         origin = "website" if base_url else "documents"
+        label = settings.get("label")
         url = meta.get("url") or (
             f"{base_url.rstrip('/')}/{urllib.parse.quote(rel.with_suffix('').as_posix())}"
             if base_url
+            else f"folder:{label}/{name}"
+            if label
             else f"folder:{name}"
         )
         doc_type = meta.get("doc_type") or settings.get("doc_type") or "Dokument"

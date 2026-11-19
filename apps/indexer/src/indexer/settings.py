@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, ValidationError
 from rag_core.adapters.db import connect_direct
 from rag_core.settings import OverlaySection, SettingsError, load, load_profile
-from rag_core.settings.profile import Profile
+from rag_core.settings.profile import Profile, Source
 from rag_core.settings.sections import DatabaseSection, ModelServersSection
 
 from indexer.index.generations import Target
@@ -53,6 +53,7 @@ class PathsSection(OverlaySection):
     extracted_dir: str = "/app/data/extracted"  # the PDF extraction cache
     pdf_dir: str = "/app/data/pdfs"
     skipped_pdfs_log: str = "/app/data/skipped_pdfs_page_limit.json"
+    user_sources: str = "/app/data/sources.json"  # the folders `rag add` registered; a missing file lists none
 
 
 class Overlay(OverlaySection):
@@ -91,6 +92,31 @@ class Settings:
         return hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
+def user_folders(path: str) -> dict[str, str]:
+    """name -> folder of the sources file `rag add` writes ({"sources": [{"name", "target"}]}); none when the file is missing or empty."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise SettingsError(f"{path}: cannot be read ({exc.strerror})") from None
+    if not text.strip():
+        return {}
+    try:
+        entries = json.loads(text)["sources"]
+        if not isinstance(entries, list):
+            raise TypeError
+    except (ValueError, KeyError, TypeError):
+        raise SettingsError(f'{path}: not a sources file ({{"sources": [{{"name": ..., "target": ...}}]}})') from None
+    folders: dict[str, str] = {}
+    for i, entry in enumerate(entries):
+        for key in ("name", "target"):
+            if not isinstance(entry, dict) or not isinstance(entry.get(key), str) or not entry[key]:
+                raise SettingsError(f'{path}: sources[{i}] needs a "{key}" (a string), got {entry!r}')
+        folders[entry["name"]] = entry["target"]
+    return folders
+
+
 def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | None = None) -> Settings:
     profile_path = environ.get("RAG_PROFILE")
     if not profile_path:
@@ -113,6 +139,17 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | No
             endpoints[name] = Endpoint.model_validate(entries.get(name) or {})
         except ValidationError as exc:
             raise SettingsError(f"connectors.{name}: {exc.errors()[0]['msg']} (overlay)") from None
+    folders = user_folders(overlay.paths.user_sources)
+    if folders:  # beside the profile's sources: each a folder source without a base_url, so its urls read folder:<path>
+        if clash := sorted(set(folders) & set(profile.ingest.sources)):
+            raise SettingsError(f"{overlay.paths.user_sources}: {clash[0]!r} is a source of the profile already")
+        added = {
+            name: Source.model_validate({"connector": "folder", "audience": "public", "label": name})
+            for name in folders
+        }
+        ingest = profile.ingest.model_copy(update={"sources": {**profile.ingest.sources, **added}})
+        profile = profile.model_copy(update={"ingest": ingest})
+        endpoints |= {name: Endpoint(dir=target) for name, target in folders.items()}
     return Settings(profile, overlay, endpoints, Path(profile_path).parent)
 
 
