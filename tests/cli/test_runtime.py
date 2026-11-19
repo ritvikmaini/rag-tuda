@@ -100,6 +100,12 @@ def test_a_bad_mode():
         runtime.resolve(S4B, "swarm")
 
 
+def test_the_native_backend_serves_the_page_of_the_checkout_it_was_started_from():
+    llm = runtime.resolve(S4B, "native")
+    env = runtime.backend_env(llm, root="/elsewhere/rag", secrets="/s", profile="example")
+    assert env["RAG_PAGE_DIR"] == "/elsewhere/rag/web/page"
+
+
 def test_the_backend_environment():
     llm = runtime.resolve(S4B, "native")
     env = runtime.backend_env(llm, root="/repo", secrets="/repo/.rag/secrets/backend", profile="example")
@@ -107,6 +113,7 @@ def test_the_backend_environment():
         "RAG_PROFILE": "/repo/profiles/example/profile.yaml",
         "RAG_SECRETS_DIR": "/repo/.rag/secrets/backend",
         "RAG_CARDS_DIR": "/repo/models/cards",
+        "RAG_PAGE_DIR": "/repo/web/page",
         "RAG__CARD": "s-qwen3-4b-instruct-2507",
         "RAG__LLM_MODEL": "rag-s-qwen3-4b-instruct-2507",
         "RAG__DATABASE__HOST": "127.0.0.1",

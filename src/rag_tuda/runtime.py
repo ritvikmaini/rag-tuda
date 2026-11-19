@@ -145,6 +145,7 @@ def backend_env(llm: Llm, *, root: str, secrets: str, profile: str) -> dict[str,
         "RAG_PROFILE": str(PurePath(root, "profiles", profile, "profile.yaml")),
         "RAG_SECRETS_DIR": secrets,
         "RAG_CARDS_DIR": str(PurePath(root, "models", "cards")),
+        "RAG_PAGE_DIR": str(PurePath(root, "web", "page")),  # the page the backend serves at /
         "RAG__CARD": llm.card,
         **database_env(),
         "RAG__MODEL_SERVERS__EMBEDDING_URL": endpoint("embedding"),
