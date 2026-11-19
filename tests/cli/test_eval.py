@@ -27,6 +27,10 @@ def recorded(tmp_path, a: stack.Args) -> state.State:
 
 
 def job(tmp_path, a=None, f=None, **flags):
+    if flags.get("retrieval_only"):  # the assistant's module is part of this build
+        module = tmp_path / rag_eval.RETRIEVAL_FILE
+        module.parent.mkdir(parents=True, exist_ok=True)
+        module.touch()
     a = a or stack.Args(S4B["name"])
     options = {"retrieval_only": False, "ablation": False, **flags}
     (step,) = rag_eval.plan(recorded(tmp_path, a), f or facts(tmp_path), a, **options)
@@ -50,6 +54,12 @@ def test_retrieval_only_runs_the_assistants_module(tmp_path):
     assert step.argv[3:] == ("--package", "assistant-api", "python", "-m", "assistant_api.retrieval_eval")
     assert step.env["RAG__CARD"] == S4B["name"] and step.env["RAG_SECRETS_DIR"].endswith("secrets/backend")
     assert job(tmp_path, retrieval_only=True, ablation=True).argv[-2:] == ("assistant_api.retrieval_eval", "--ablation")
+
+
+def test_retrieval_only_says_when_this_build_has_no_such_module(tmp_path):
+    a = stack.Args(S4B["name"])
+    with pytest.raises(stack.StackError, match="^retrieval-only eval is not available in this build$"):
+        rag_eval.plan(recorded(tmp_path, a), facts(tmp_path), a, retrieval_only=True, ablation=False)
 
 
 def test_a_hosted_card_gets_its_key_by_name_for_the_analysis_only_run(tmp_path):
@@ -118,7 +128,18 @@ class Recorder(stack.System):
         return False
 
 
+def test_the_command_prints_one_line_and_fails_without_the_module(repo, monkeypatch, capsys):
+    system = Recorder()
+    monkeypatch.setattr(stack, "System", lambda: system)
+    monkeypatch.setattr(stack, "gather", lambda root, current, card, hardware, a, *r: facts(repo, card))
+    assert cli.main(["eval", "--retrieval-only"]) == 1
+    assert capsys.readouterr().err == "retrieval-only eval is not available in this build\n" and system.ran == []
+
+
 def test_the_command_runs_the_job_on_the_recorded_card(repo, monkeypatch, capsys):
+    module = repo / rag_eval.RETRIEVAL_FILE
+    module.parent.mkdir(parents=True)
+    module.touch()
     system = Recorder()
     monkeypatch.setattr(stack, "System", lambda: system)
     monkeypatch.setattr(stack, "gather", lambda root, current, card, hardware, a, *r: facts(repo, card))
