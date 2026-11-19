@@ -2,8 +2,18 @@
 tests/contracts/test_answer_shapes.py; evals never imports the assistant. Every run is an internal run: a link to an internal document
 is not a leak and there is no internal-source check."""
 
+import os
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass, fields
+from functools import lru_cache
 from typing import Any
+
+import yaml
+
+from evals.settings import load_settings
+from rag_core.domain.language import detect
+from rag_core.domain.notes import appended_lines, po_line
 
 LEAK_PATTERN = re.compile(r"PdfPipelineOptions|Image not available|\[Page \d+\]|Dokumentenauszüge")
 EMOJI_PATTERN = re.compile("[\U0001f300-\U0001faff\U0001f1e6-\U0001f1ff☀-➿⭐⭕]")
@@ -424,6 +434,123 @@ def group_values_failed(answer, expect):
     return failed
 
 
+# ---- the TU profile's answer checks: the numbered sources, the answer's language, the address form and the lines code
+# appends. The lines' wording and conditions are the producer's (rag_core.domain.notes) over the profile's messages, so
+# check and producer cannot drift.
+
+
+@dataclass(frozen=True)
+class AnswerTexts:
+    """The wording of the appended lines, one field per property of rag_core.domain.notes.Texts."""
+
+    po_line: str = ""
+    po_line_term: str = ""
+    po_one: str = ""
+    po_programme: str = ""
+    non_binding: str = ""
+    visa_disclaimer: str = ""
+
+
+@lru_cache
+def load_answer_texts(profile_dir: str) -> tuple[dict[str, AnswerTexts], Mapping[str, Any]]:
+    """({"de": texts, "en": texts}, the roles' programmes) of a profile folder: the `answer` section of its
+    messages.<language>.yaml files and the programmes of roles.yaml."""
+    texts = {}
+    for language in ("de", "en"):
+        with open(os.path.join(profile_dir, f"messages.{language}.yaml"), encoding="utf-8") as fh:
+            answer = (yaml.safe_load(fh) or {}).get("answer") or {}
+        texts[language] = AnswerTexts(**{f.name: str(answer.get(f.name) or "") for f in fields(AnswerTexts)})
+    with open(os.path.join(profile_dir, "roles.yaml"), encoding="utf-8") as fh:
+        return texts, (yaml.safe_load(fh) or {}).get("programmes") or {}
+
+
+def cited_numbers(answer: str) -> set[int]:
+    """The source numbers an answer cites, from [1], [1, 2] and [1][2]."""
+    return {int(n) for found in FMT_CITE.findall(answer) for n in re.findall(r"\d+", found)}
+
+
+def _prose(answer: str) -> str:
+    return LINK.sub(" ", FMT_CITE.sub(" ", answer.replace("**", "")))
+
+
+def _flat(text: str) -> str:
+    return " ".join(text.split())
+
+
+def citations_map_to_sources(answer: str, numbers: Any) -> bool:
+    """Every [n] of the answer is the number of a source."""
+    return cited_numbers(answer) <= set(numbers)
+
+
+def answer_language_matches(answer: str, language: str) -> bool:
+    """The answer is written in the question's language (`de` | `en`), read by the stopword detector."""
+    return detect(_prose(answer)) == language
+
+
+def sie_form(answer: str) -> bool:
+    """A German answer has no informal pronoun; an answer in another language passes."""
+    prose = _prose(answer)
+    return detect(prose) != "de" or not INFORMAL_PATTERN.search(prose)
+
+
+def _cited(answer: str, source_metadata: Mapping[int, Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    return [source_metadata[n] for n in sorted(cited_numbers(answer)) if n in source_metadata]
+
+
+def po_line_present(
+    answer: str,
+    source_metadata: Mapping[int, Mapping[str, Any]],
+    texts: AnswerTexts,
+    programmes: Mapping[str, Mapping[str, Any]],
+    language: str,
+) -> bool:
+    """The PO-version line the cited sources call for (either wording: the plain one or the start-term one) is in the
+    answer; no cited source bound to a version, no line."""
+    cited = _cited(answer, source_metadata)
+    expected = {po_line(cited, programmes, texts, english=language == "en", term=term) for term in (False, True)}
+    expected.discard("")
+    return not expected or any(_flat(line) in _flat(answer) for line in expected)
+
+
+def visa_disclaimer_present(
+    answer: str,
+    source_metadata: Mapping[int, Mapping[str, Any]],
+    texts: AnswerTexts,
+    programmes: Mapping[str, Mapping[str, Any]],
+    language: str,
+) -> bool:
+    """The disclaimer is in the answer whenever the producer would append it for the cited sources."""
+    lines = appended_lines(
+        _cited(answer, source_metadata), programmes, texts, english=language == "en", term=False, answer=""
+    )
+    return texts.visa_disclaimer not in lines or _flat(texts.visa_disclaimer) in _flat(answer)
+
+
+def answer_failures(answer: str, expect: Mapping[str, Any], meta: Mapping[str, Any]) -> list[str]:
+    """The failed answer checks of an expectation. Keys: citations_map_to_sources, po_line_present, sie_form,
+    visa_disclaimer_present (true) and answer_language_matches (the question's language). The sources come from the
+    turn's meta: `citations` (the numbers the citations frame lists) and `source_metadata` ({n: the source's metadata});
+    the wording from the profile folder the evals settings name."""
+    failed = []
+    if expect.get("citations_map_to_sources") and not citations_map_to_sources(answer, meta.get("citations") or ()):
+        failed.append("citations_map_to_sources")
+    if expect.get("answer_language_matches") and not answer_language_matches(answer, expect["answer_language_matches"]):
+        failed.append("answer_language_matches")
+    if expect.get("sie_form") and not sie_form(answer):
+        failed.append("sie_form")
+    lines = [check for check in (po_line_present, visa_disclaimer_present) if expect.get(check.__name__)]
+    if lines:
+        language = detect(_prose(answer))
+        texts, programmes = load_answer_texts(load_settings().evals.profile_dir)
+        source_metadata = meta.get("source_metadata") or {}
+        failed += [
+            check.__name__
+            for check in lines
+            if not check(answer, source_metadata, texts[language], programmes, language)
+        ]
+    return failed
+
+
 def turn_expect(turn, original_shape):
     """The checks of a turn: every English variant gets the language check, and the shape "original" means the shape of
     the conversation's last question (every version is made from the original answer)."""
@@ -503,6 +630,7 @@ def evaluate_turn(answer, sources, errors, expect, meta=None):
         failed.append("variant")
     if expect.get("language") == "en" and not looks_english(answer):
         failed.append("language")
+    failed += answer_failures(answer, expect, meta)
     checks["failed"] = failed
     checks["auto_pass"] = not failed
     checks["manual_review"] = bool(expect.get("manual"))
