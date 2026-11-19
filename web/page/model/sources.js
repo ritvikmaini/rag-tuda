@@ -83,6 +83,7 @@ export function sourceCards(docs, nowYear) {
             const type = String(meta.doc_type || TEXT.document);
             const year = yearFor(url, meta);
             const page = Number(meta.page_number);
+            const poVersion = poVersions(meta.po_version);
             card = {
                 url,
                 title: titleFor(url, meta),
@@ -91,9 +92,9 @@ export function sourceCards(docs, nowYear) {
                 year,
                 page: Number.isInteger(page) && page > 0 ? page : null,
                 ns: [],
-                old: isOld(year, nowYear),
+                old: !poVersion.length && isOld(year, nowYear),  // a regulation still serves its cohorts after its year
                 isForm: type === FORM_TYPE,
-                poVersion: poVersions(meta.po_version),
+                poVersion,
                 officialUrl: officialLink(meta.official_url),
             };
             byUrl.set(url, card);

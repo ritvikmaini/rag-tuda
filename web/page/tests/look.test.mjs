@@ -314,6 +314,14 @@ test("a PO source card shows the PO version and links the official publication (
     assert.ok(!links(quiet).some(a => a.attrs.href === ISSUE || /^javascript/.test(a.attrs.href || "")));
 });
 
+test("a versioned regulation never gets the older-document chip, any other source keeps the age rule", () => {
+    const [po] = sourceCards([poDoc()], 2026);
+    assert.equal(po.year, 2023);
+    assert.equal(po.old, false);
+    const [other] = sourceCards([poDoc({ po_version: null })], 2026);
+    assert.equal(other.old, true);
+});
+
 test("06151 numbers and e-mail addresses become links, other numbers do not (test_contact_linkifier)", () => {
     const parts = text => plain(contactParts(text));
     assert.deepEqual(parts("Rufen Sie 06151 16-23456 an."), [
