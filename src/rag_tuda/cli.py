@@ -56,7 +56,9 @@ def _up(args: argparse.Namespace) -> int:
         if warning:
             print(f"warning: {warning}", file=sys.stderr)
         current = state.ensure(root)
-        up = stack.Args(card["name"], args.mode, args.profile, args.model, args.llm_url)
+        up = stack.Args(
+            card["name"], args.mode or doctor.default_mode(hardware), args.profile, args.model, args.llm_url
+        )
         steps = stack.plan_up(current, stack.gather(root, current, card, hardware, up), up)
         if not _confirm(steps, args.yes):
             return 1
@@ -140,7 +142,11 @@ def main(argv: list[str] | None = None) -> int:
     u.add_argument("--model", help="a model for the answers: the Ollama model the card's derived model is made from")
     u.add_argument("--llm-url", help="an OpenAI-compatible server you run; the stack does not manage it")
     u.add_argument("--profile", default="example", help="the profile to index and answer from (default %(default)s)")
-    u.add_argument("--mode", choices=runtime.MODES, default="native", help="native (Mac) or compose (Linux, WSL2)")
+    u.add_argument(
+        "--mode",
+        choices=runtime.MODES,
+        help="native or compose (default: native on an Apple-silicon Mac, else compose)",
+    )
     u.add_argument("--yes", action="store_true", help="confirm the model downloads")
     u.set_defaults(run=_up)
     w = sub.add_parser("down", help="stop the stack (safe to repeat; data stays)")

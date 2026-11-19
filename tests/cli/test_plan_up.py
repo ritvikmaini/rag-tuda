@@ -449,3 +449,40 @@ def test_compose_rejects_what_it_cannot_do(tmp_path, current):
         stack.plan_up(current, facts(tmp_path), args(mode="compose", llm_url="http://x/v1"))
     with pytest.raises(ValueError, match="hosted"):
         stack.plan_up(current, facts(tmp_path, GROQ), args(GROQ, mode="compose"))
+
+
+def test_a_server_the_user_runs_is_noted_as_not_having_its_window_set(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path), args(llm_url="http://gpu.lan:8080/v1"))
+    (note,) = [s.text for s in steps if s.kind == "say" and "num_ctx" in s.text]
+    assert "http://gpu.lan:8080/v1" in note and "8000" in note
+    assert not [s for s in stack.plan_up(current, facts(tmp_path, ollama_up=True), args()) if "num_ctx" in s.text]
+
+
+def test_a_changed_profile_builds_the_index_again(tmp_path, current):
+    for mode in ("native", "compose"):
+        before = args(mode=mode)
+        extra = {"compose_images": True} if mode == "compose" else {}
+        done = settled(tmp_path, **extra) if mode == "native" else facts(tmp_path, hf=ALL_HF, index_built=True, **extra)
+        assert "run:index-build" not in names(stack.plan_up(settle(current, before), done, before))
+        after = args(mode=mode, profile="tu-informatik")
+        assert "run:index-build" in names(stack.plan_up(settle(current, before), done, after))
+
+
+def test_compose_builds_the_indexer_and_evals_images_with_the_others(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, hf=ALL_HF), args(mode="compose"))
+    (build,) = [s for s in steps if s.name == "build"]
+    assert build.argv[-5:] == ("--profile", "build", "--profile", "evals", "build")
+
+
+def test_the_list_of_a_running_compose_ollama_beats_the_recorded_models(tmp_path, current):
+    a = args(mode="compose")
+    remembered = state.State(current.dir, current.token, current.passwords, {**current.data, "compose_models": [TAG]})
+    removed = facts(tmp_path, hf=ALL_HF, compose_images=True, index_built=True, compose_ollama_up=True)
+    assert [s.name for s in stack.plan_up(remembered, removed, a) if s.name.startswith("pull-")] == [f"pull-{TAG}"]
+
+
+def test_a_model_server_without_its_environment_says_the_first_start_installs_it(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, ollama_up=True, no_venv=frozenset({"embedding"})), args())
+    text = {s.name: s.text for s in steps if s.kind == "spawn"}
+    assert "installs its Python environment" in text["embedding"]
+    assert "installs" not in text["reranker"]

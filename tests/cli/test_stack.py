@@ -187,10 +187,26 @@ def test_ollama_tags_and_parameters_are_parsed():
     )
 
 
+def test_a_list_valued_parameter_is_compared_by_its_lines():
+    shown = json.dumps({"parameters": 'num_ctx 8000\nstop   "<|a|>"\nstop   "<|b|>"'})
+    have = stack.parse_parameters(shown)
+    assert stack.same_parameters(have, {"num_ctx": 8000, "stop": ["<|b|>", "<|a|>"]})
+    assert not stack.same_parameters(have, {"stop": ["<|a|>"]})
+
+
 def test_the_hugging_face_cache_follows_the_environment(tmp_path):
     assert stack.hf_cache({"HF_HUB_CACHE": "/a"}) == Path("/a")
     assert stack.hf_cache({"HF_HOME": "/h"}) == Path("/h/hub")
     assert stack.hf_cache({}) == Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def snapshot_of(cache, pin, weights=True):
+    folder = cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "config.json").write_text("{}")
+    if weights:
+        (folder / "model.safetensors").write_text("w")
+    return folder
 
 
 def machine(scenario):
@@ -203,8 +219,7 @@ def test_gather_reads_the_machine_and_plans_nothing_for_a_settled_one(tmp_path, 
     current = state.ensure(tmp_path)
     cache = tmp_path / "hf" / "hub"
     for pin in stack.PINNED.values():
-        (cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision).mkdir(parents=True)
-        (cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision / "config.json").write_text("{}")
+        snapshot_of(cache, pin)
     (current.dir / "state").mkdir()
     (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
     live = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf"), "RAG__CRAWL__CONTACT": "me@example.org"})
@@ -244,9 +259,7 @@ def test_compose_after_down_plans_no_pull_through_the_real_gather_path(tmp_path,
     a = stack.Args(S4B["name"], "compose")
     cache = tmp_path / "hf" / "hub"
     for pin in stack.PINNED.values():
-        snapshot = cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision
-        snapshot.mkdir(parents=True)
-        (snapshot / "config.json").write_text("{}")
+        snapshot_of(cache, pin)
     system = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf")}, default=(0, "refused"))
     system.output = lambda argv: None  # no container, no images, no models
     before = stack.gather(tmp_path, current, S4B, hardware, a, system)
@@ -260,6 +273,31 @@ def test_compose_after_down_plans_no_pull_through_the_real_gather_path(tmp_path,
         {**current.data, "compose_models": ["qwen3:4b-instruct-2507-q4_K_M"]},
     )
     assert pulls(before, pulled) == []
+
+
+def test_a_partly_downloaded_snapshot_is_not_present(tmp_path, scenario):
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    cache = tmp_path / "hf" / "hub"
+    pins = list(stack.PINNED.values())
+    snapshot_of(cache, pins[0])
+    snapshot_of(cache, pins[1], weights=False)  # the config came, the weights did not
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf")}, default=(0, "refused"))
+    system.output = lambda argv: None
+    found = stack.gather(tmp_path, current, S4B, hardware, stack.Args(S4B["name"]), system)
+    assert found.hf == {pins[0].key}
+
+
+def test_gather_names_the_model_servers_without_an_environment(tmp_path, scenario):
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    (tmp_path / "model_servers" / "reranker" / ".venv").mkdir(parents=True)
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path)}, default=(0, "refused"))
+    system.output = lambda argv: None
+    found = stack.gather(tmp_path, current, S4B, hardware, stack.Args(S4B["name"]), system)
+    assert found.no_venv == {"embedding"}
 
 
 def test_a_pid_file_of_another_boot_does_not_count_as_alive(tmp_path, scenario):
@@ -282,9 +320,7 @@ def test_a_settled_hosted_card_plans_nothing_through_gather(tmp_path, scenario):
     a = stack.Args(groq["name"])
     cache = tmp_path / "hf" / "hub"
     for pin in stack.PINNED.values():
-        snapshot = cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision
-        snapshot.mkdir(parents=True)
-        (snapshot / "config.json").write_text("{}")
+        snapshot_of(cache, pin)
     (current.dir / "state").mkdir()
     (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
     for name in ("embedding", "reranker", "backend"):
@@ -495,3 +531,18 @@ def test_the_probes_do_not_get_the_provider_key():
 
     system = stack.System({"PATH": os.environ["PATH"], "GROQ_API_KEY": "gsk-secret"})
     assert "GROQ_API_KEY" not in (system.output(("env",)) or "")
+
+
+def test_up_takes_the_mode_of_the_hardware_unless_told(repo, monkeypatch, scenario):
+    seen = []
+    monkeypatch.setattr(stack, "System", lambda: FakeSystem())
+    monkeypatch.setattr(stack, "gather", settled_facts(repo))
+    monkeypatch.setattr(stack, "plan_up", lambda current, facts, a: seen.append(a.mode) or [])
+    linux = scenario("rtx4090")
+    linux.docker.ok = True
+    monkeypatch.setattr(doctor, "gather", lambda: linux)
+    assert (
+        cli.main(["up", "--card", S4B["name"]]) == 0
+        and cli.main(["up", "--card", S4B["name"], "--mode", "native"]) == 0
+    )
+    assert seen == ["compose", "native"]

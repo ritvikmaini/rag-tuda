@@ -126,6 +126,10 @@ class Facts:
     index_built: bool = False
     compose_images: bool = False
     compose_ollama_models: frozenset[str] = frozenset()
+    compose_ollama_up: bool = False  # the compose Ollama container answers `ollama list`: its list is the truth
+    no_venv: frozenset[str] = (
+        frozenset()
+    )  # model servers whose project has no environment yet: the first start installs it
     crawl_contact: bool = False
     groq_key: bool = False
 
@@ -136,6 +140,8 @@ def has_model(models: frozenset[str], tag: str) -> bool:
 
 def same_parameters(have: Mapping[str, str], want: Mapping[str, object]) -> bool:
     def equal(a: str, b: object) -> bool:
+        if isinstance(b, list):  # a repeated parameter (stop): one quoted line per value
+            return sorted(line.strip().strip('"') for line in a.splitlines()) == sorted(map(str, b))
         try:
             return float(a) == float(b)  # type: ignore[arg-type]
         except (TypeError, ValueError):
@@ -216,6 +222,14 @@ def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
             "(export it in this shell, then run `rag up` again; it is passed to the backend only and never stored)"
         )
     steps: list[Step] = []
+    if args.llm_url:
+        steps.append(
+            Step(
+                "say",
+                text=f"note: {args.llm_url} is a server you run: rag does not set its context window (num_ctx); "
+                f"the card's budget needs {llm.window} tokens, so set it there (Ollama: OLLAMA_CONTEXT_LENGTH)",
+            )
+        )
     if not facts.crawl_contact and args.profile != "example":
         steps.append(
             Step("say", text="note: RAG__CRAWL__CONTACT is not set; the crawler's user agent will not carry a contact")
@@ -223,6 +237,11 @@ def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
     plan = _plan_native if args.mode == "native" else _plan_compose
     steps += plan(state, facts, args, llm)
     return steps + _record(state, args, llm)
+
+
+def _profile_changed(state: State, args: Args) -> bool:
+    """A later `up` names another profile: the index and the images of the first profile are not the new one's."""
+    return bool(state.data.get("first_run_done")) and state.data.get("profile") != args.profile
 
 
 def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> list[Step]:
@@ -251,7 +270,16 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
         ]
     for name, port in SERVICES.items():
         env = {**runtime.PRIVACY, **PINNED[name].env}
-        steps += _service(name, root, rag, port, env, alive=name in facts.alive, ready=name in facts.ready)
+        steps += _service(
+            name,
+            root,
+            rag,
+            port,
+            env,
+            alive=name in facts.alive,
+            ready=name in facts.ready,
+            first_start=name in facts.no_venv,
+        )
     restart = "backend" in facts.alive and _signature(args) != {k: state.data.get(k) for k in _signature(args)}
     backend_up = "backend" in facts.ready and not restart
     if restart:
@@ -271,7 +299,7 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
                 env=runtime.migrate_env(str(state.secrets_dir("migrate"))),
             )
         )
-    if not facts.index_built:
+    if not facts.index_built or _profile_changed(state, args):
         steps += _build_index(state, facts, args)
     created = False
     for body, window in (
@@ -343,6 +371,7 @@ def _service(
     alive: bool,
     ready: bool,
     inherit: tuple[str, ...] = (),
+    first_start: bool = False,
 ) -> list[Step]:
     """Start a native process unless its pid is alive, then wait until it answers; nothing when it already does."""
     if ready:
@@ -368,6 +397,8 @@ def _service(
             )
             cwd = directory
         text = f"{name}: starting on {runtime.LOOPBACK}:{port}"
+        if first_start:  # uv builds the server's environment (torch and more, several GB from PyPI) before it runs
+            text += " (the first start installs its Python environment, which takes minutes and several GB)"
         steps.append(
             Step("spawn", name=name, text=text, argv=argv, cwd=cwd, env=env, path=pid, log=log, inherit=inherit)
         )
@@ -419,9 +450,10 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
     steps += [_download(name, pin, root) for name, pin in PINNED.items() if pin.key not in facts.hf]
     if "backend" in facts.ready and _signature(args) == {k: state.data.get(k) for k in _signature(args)}:
         return [*steps, Step("say", text="the compose stack: already running")]
-    profile_changed = bool(state.data.get("first_run_done")) and state.data.get("profile") != args.profile
-    if not facts.compose_images or profile_changed:  # the images carry the profile
-        steps.append(Step("run", name="build", text="building the images", argv=(*compose, "build"), cwd=root))
+    profile_changed = _profile_changed(state, args)
+    if not facts.compose_images or profile_changed:  # the images carry the profile, the indexer's and the evals' too
+        build = (*compose, "--profile", "build", "--profile", "evals", "build")
+        steps.append(Step("run", name="build", text="building the images", argv=build, cwd=root))
     steps += [
         Step(
             "run",
@@ -452,7 +484,7 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
         )
         # the container is gone after `down`, its volume is not: the models pulled before are recorded in the state file
         recorded = frozenset(state.data.get("compose_models", ()))
-        have = facts.compose_ollama_models | recorded
+        have = facts.compose_ollama_models if facts.compose_ollama_up else facts.compose_ollama_models | recorded
         pulls = [
             _pull(tag, facts.card.get("download_gb") or 0, None, compose)
             for tag in llm.pulls
@@ -463,7 +495,7 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
             models = sorted(recorded | set(llm.pulls))
             text = json.dumps({**state.data, "compose_models": models}, indent=2) + "\n"
             steps.append(Step("write", name="state-models", path=f"{state.dir}/state.json", text=text))
-    if not facts.index_built:
+    if not facts.index_built or profile_changed:
         steps.append(
             Step(
                 "run",
@@ -771,7 +803,19 @@ def parse_parameters(text: str) -> dict[str, str]:
         lines = json.loads(text)["parameters"].splitlines()
     except (ValueError, KeyError, TypeError, AttributeError):
         return {}
-    return {parts[0]: parts[1] for line in lines if len(parts := line.split(None, 1)) == 2}
+    found: dict[str, str] = {}
+    for line in lines:
+        if len(parts := line.split(None, 1)) == 2:
+            found[parts[0]] = f"{found[parts[0]]}\n{parts[1]}" if parts[0] in found else parts[1]
+    return found
+
+
+def _complete(snapshot: Path) -> bool:
+    """A snapshot with its config and a weights file. The hub links a file into `snapshots/` only when its download is
+    finished, and is_file follows the link, so a partial download shows neither."""
+    return (snapshot / "config.json").is_file() and any(
+        p.is_file() for pattern in ("*.safetensors", "pytorch_model*.bin") for p in snapshot.glob(pattern)
+    )
 
 
 def gather(root: Path, state: State, card: dict, hardware, args: Args, system: System | None = None) -> Facts:
@@ -803,8 +847,7 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
     hf = frozenset(
         pin.key
         for pin in PINNED.values()
-        if (snapshot := cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision).is_dir()
-        and any(snapshot.iterdir())
+        if _complete(cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision)
     )
     compose = ("docker", "compose", "-p", PROJECT)
     running = system.output((*compose, "ps", "--status", "running", "-q", "pgvector")) if hardware.docker.ok else None
@@ -833,6 +876,8 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
         compose_ollama_models=frozenset(
             line.split()[0] for line in (ollama_list or "").splitlines()[1:] if line.split()
         ),
+        compose_ollama_up=ollama_list is not None,
+        no_venv=frozenset(name for name in SERVICES if not (root / "model_servers" / name / ".venv").is_dir()),
         crawl_contact=bool(system.environ.get("RAG__CRAWL__CONTACT")),
         groq_key=bool(system.environ.get("GROQ_API_KEY", "").strip()),
     )

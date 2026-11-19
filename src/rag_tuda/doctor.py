@@ -11,6 +11,7 @@ import urllib.request
 from dataclasses import asdict, dataclass
 
 from rag_tuda import cards, classes
+from rag_tuda.stack import KEYS
 from rag_tuda.classes import SizeClass
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/version"
@@ -174,8 +175,9 @@ def assemble(
 
 
 def _run(cmd: list[str], *, merge_stderr: bool = False, need_ok: bool = True) -> str | None:
+    env = {k: v for k, v in os.environ.items() if k not in KEYS}  # a probe is not told the provider key
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=5, env=env)
     except (OSError, subprocess.SubprocessError):
         return None
     if need_ok and p.returncode != 0:
@@ -257,6 +259,11 @@ def gather() -> Facts:
 
 def is_mac_native(f: Facts) -> bool:
     return f.os == "darwin" and f.arch == "arm64"
+
+
+def default_mode(f: Facts) -> str:
+    """The mode `rag up` takes without --mode: native on an Apple-silicon Mac, compose elsewhere."""
+    return "native" if is_mac_native(f) else "compose"
 
 
 def runtime_mode(f: Facts) -> str:

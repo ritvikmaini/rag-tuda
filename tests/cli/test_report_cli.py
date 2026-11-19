@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import subprocess
 import sys
@@ -176,3 +177,15 @@ def test_doctor_without_the_cards_folder_says_so_instead_of_a_traceback(monkeypa
     assert cli.main(["doctor"]) == 1
     captured = capsys.readouterr()
     assert "cannot be read" in captured.err and captured.out == ""
+
+
+def test_default_mode_follows_the_hardware(scenario):
+    assert doctor.default_mode(scenario("m2_16")) == "native"
+    assert doctor.default_mode(scenario("wsl2")) == "compose"
+    assert doctor.default_mode(scenario("rtx4090")) == "compose"
+
+
+def test_the_probes_do_not_get_the_provider_key(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-secret")
+    monkeypatch.setenv("PATH", os.environ["PATH"])
+    assert "GROQ_API_KEY" not in (doctor._run(["env"]) or "")
