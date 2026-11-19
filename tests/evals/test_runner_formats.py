@@ -118,7 +118,8 @@ def test_ask_sends_the_format_parameters_and_reads_the_new_events():
         client, "http://b", "tok", "Frage?", "u", 10, formats="v1", variant="steps", variant_of="tid", meta=meta
     )
     assert seen["formats"] == "v1" and seen["variant"] == "steps" and seen["variant_of"] == "tid"
-    assert meta == {"shape": "steps", "citations": [1, 3], "variant_ok": True} and answer == "1. a"
+    assert meta == {"shape": "steps", "citations": [1, 3], "source_metadata": {}, "variant_ok": True}
+    assert answer == "1. a"
 
 
 # ---- answer language

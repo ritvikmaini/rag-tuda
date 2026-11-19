@@ -59,6 +59,20 @@ def sources_from_event(content):
     return sources
 
 
+def source_metadata(citations, docs):
+    """{n: metadata} of the documents the citations point at: a citation's url is its document's download_url or url, as
+    the docs frame carries them (one entry per number; a citation whose document is not in the frame has none)."""
+    by_url = {}
+    for item in docs or []:
+        meta = (item or {}).get("metadata") or {}
+        by_url.setdefault(meta.get("download_url") or meta.get("url") or "", meta)
+    return {
+        c["n"]: by_url[c["url"]]
+        for c in citations or []
+        if isinstance(c, dict) and isinstance(c.get("n"), int) and c.get("url") in by_url
+    }
+
+
 def build_question(turn):
     """The question text of a turn; `repeat` builds long inputs without storing them."""
     q = turn["q"]
@@ -89,8 +103,9 @@ def ask(
     """One request; returns (answer, docs_content, errors, first_token_s, total_s, event_types). abort_after_s closes the
     connection after that many seconds (a client stop: the backend sees a disconnect); event_types then ends 'aborted'.
     kept (with replace_from): the ids of the questions the page still shows before the replaced one.
-    formats, variant, variant_of, variant_select: response formats; meta (a dict) receives the shape, citations,
-    variant and status-step frames. record: a path stem; the response bytes go to <stem>.raw exactly as received, the
+    formats, variant, variant_of, variant_select: response formats; meta (a dict) receives the shape, citations (their
+    numbers, and as source_metadata each cited document's metadata from the docs frame), variant and status-step frames.
+    record: a path stem; the response bytes go to <stem>.raw exactly as received, the
     HTTP status, the response headers and the query parameters (never the token) to <stem>.json. Recorded or not, the
     bytes pass the same incremental UTF-8 decoder, so a recorded run measures like any other."""
     started = time.monotonic()
@@ -133,6 +148,7 @@ def ask(
                 meta["citations"] = (
                     [c.get("n") for c in content if isinstance(c, dict)] if isinstance(content, list) else []
                 )
+                meta["source_metadata"] = source_metadata(content if isinstance(content, list) else [], docs)
             elif meta is not None and typ == "variant":
                 meta["variant_ok"] = bool((content or {}).get("ok"))
             elif meta is not None and typ == "status":

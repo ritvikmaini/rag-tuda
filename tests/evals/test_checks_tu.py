@@ -2,11 +2,13 @@
 markers and the lines code appends. The expected lines come from the profile's messages through the producer
 (rag_core.domain.notes), so a change of wording moves producer and check together."""
 
+import json
 import pathlib
 
+import httpx
 import pytest
 
-from evals import checks
+from evals import checks, runner
 from evals.checks import (
     answer_language_matches,
     citations_map_to_sources,
@@ -167,3 +169,63 @@ def test_texts_come_from_the_profile_messages():
     assert set(TEXTS) == {"de", "en"}
     assert TEXTS["de"].visa_disclaimer and TEXTS["en"].po_line
     assert checks.load_answer_texts(str(PROFILE)) is checks.load_answer_texts(str(PROFILE))  # read once
+
+
+# ---- through the runner: the docs and citations frames of a stream give the checks their sources
+
+
+def stream(*items):
+    return "".join("data: " + json.dumps({"type": t, "content": c}, ensure_ascii=False) for t, c in items).encode()
+
+
+DOCS = ("docs", [{"page_content": "§ 5", "metadata": {"url": "https://tu.example/po.pdf", **BSC_2023}}])
+CITATIONS = ("citations", [{"n": 1, "url": "https://tu.example/po.pdf"}, {"n": 2, "url": "https://tu.example/x"}])
+
+
+def played(monkeypatch, body, expect):
+    """One turn through run_conversation and ask against a fake stream; the row it records."""
+    monkeypatch.setenv("RAG__EVALS__PROFILE_DIR", str(PROFILE))
+    client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, content=body)))
+    conv = {"id": "T1", "set": "tu", "turns": [{"q": "Wie lange habe ich Zeit?", "expect": expect}]}
+
+    def ask_fn(question, user, opts):
+        return runner.ask(client, "http://b", "tok", question, user, 10, **opts)
+
+    return runner.run_conversation(conv, ask_fn, 0, "t", "s", lambda row: None)[0]
+
+
+LINE_CHECKS = {"citations_map_to_sources": True, "po_line_present": True, "visa_disclaimer_present": True}
+
+
+def test_runner_fails_a_missing_po_line(monkeypatch):
+    row = played(monkeypatch, stream(DOCS, ("chunk", DE), CITATIONS), LINE_CHECKS)
+    assert row["checks"]["failed"] == ["po_line_present"]
+
+
+def test_runner_passes_the_answer_with_its_po_line(monkeypatch):
+    row = played(monkeypatch, stream(DOCS, ("chunk", with_lines(DE, [BSC_2023])), CITATIONS), LINE_CHECKS)
+    assert row["checks"]["failed"] == []
+
+
+def test_runner_fails_a_missing_visa_disclaimer(monkeypatch):
+    visa_doc = ("docs", [{"page_content": "Visum", "metadata": {"download_url": "https://tu.example/v", **VISA}}])
+    cited = ("citations", [{"n": 1, "url": "https://tu.example/v"}])
+    answer = "Die Aufenthaltserlaubnis beantragen Sie bei der Ausländerbehörde [1]."
+    assert played(monkeypatch, stream(visa_doc, ("chunk", answer), cited), LINE_CHECKS)["checks"]["failed"] == [
+        "visa_disclaimer_present"
+    ]
+    full = with_lines(answer, [VISA])
+    assert played(monkeypatch, stream(visa_doc, ("chunk", full), cited), LINE_CHECKS)["checks"]["failed"] == []
+
+
+def test_runner_fails_a_citation_without_a_source(monkeypatch):
+    row = played(monkeypatch, stream(DOCS, ("chunk", DE + " Mehr [3]."), CITATIONS), {"citations_map_to_sources": True})
+    assert row["checks"]["failed"] == ["citations_map_to_sources"]
+
+
+def test_source_metadata_joins_citations_to_documents_by_url():
+    docs = [{"metadata": {"url": "https://a", "po_version": 2023}}, {"metadata": {"download_url": "https://b/x.pdf"}}]
+    found = runner.source_metadata(
+        [{"n": 1, "url": "https://b/x.pdf"}, {"n": 2, "url": "https://a"}, {"n": 3, "url": "https://zz"}, "x"], docs
+    )
+    assert found == {1: {"download_url": "https://b/x.pdf"}, 2: {"url": "https://a", "po_version": 2023}}
