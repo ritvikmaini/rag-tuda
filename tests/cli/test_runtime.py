@@ -140,6 +140,7 @@ def test_the_indexer_gets_the_six_folders_under_rag():
         "RAG__PATHS__STATE_DIR": "/repo/.rag/state",
         "RAG__PATHS__MANIFEST_DIR": "/repo/.rag/state/documents",
         "RAG__PATHS__SKIPPED_PDFS_LOG": "/repo/.rag/state/skipped_pdfs_page_limit.json",
+        "RAG__PATHS__USER_SOURCES": "/repo/.rag/sources.json",
     }
     assert env["RAG_SECRETS_DIR"] == "/repo/.rag/secrets/indexer" and "RAG_OVERLAY" not in env
     with_overlay = runtime.indexer_env(root="/r", rag="/r/.rag", secrets="/s", profile="p", overlay="/o.yaml")

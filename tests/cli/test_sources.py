@@ -18,9 +18,8 @@ def test_fixture_folder_has_two_markdown_files():
 
 def test_folder(tmp_path):
     s = sources.register(tmp_path, SAMPLE)
-    assert (s.name, s.connector, s.target, s.allowed_hosts) == ("sample_docs", "folder", str(SAMPLE.resolve()), ())
-    reg = sources.load(tmp_path)
-    assert reg.sources == [s] and reg.only is False
+    assert (s.name, s.target) == ("sample_docs", str(SAMPLE.resolve()))
+    assert sources.load(tmp_path) == [s]
 
 
 def test_relative_folder_resolves_against_cwd(tmp_path, monkeypatch):
@@ -29,21 +28,7 @@ def test_relative_folder_resolves_against_cwd(tmp_path, monkeypatch):
     assert sources.register(tmp_path, "notes").target == str((tmp_path / "notes").resolve())
 
 
-def test_web_allows_only_the_urls_host(tmp_path):
-    s = sources.register(tmp_path, "https://Docs.Example.org:8443/guide/?a=1#top")
-    assert (s.connector, s.name, s.allowed_hosts) == ("web", "docs.example.org", ("docs.example.org",))
-    assert s.target == "https://docs.example.org:8443/guide/?a=1"
-    assert json.loads(raw(tmp_path))["sources"][0]["allowed_hosts"] == ["docs.example.org"]
-
-
-def test_records(tmp_path):
-    csv = tmp_path / "prices.csv"
-    csv.write_text("a,b\n1,2\n")
-    s = sources.register(tmp_path, csv)
-    assert (s.connector, s.name, s.target) == ("records", "prices", str(csv.resolve()))
-
-
-@pytest.mark.parametrize("target", ["", "ftp://example.org/x", "https://", "https://user:pw@example.org/"])
+@pytest.mark.parametrize("target", ["", "ftp://example.org/x", "https://example.org/", "prices.csv"])
 def test_rejected_targets(tmp_path, target):
     with pytest.raises(ValueError):
         sources.register(tmp_path, target)
@@ -52,7 +37,8 @@ def test_rejected_targets(tmp_path, target):
 
 def test_rejects_missing_and_unsupported_paths(tmp_path):
     (tmp_path / "a.txt").write_text("x")
-    for bad in (tmp_path / "nope", tmp_path / "nope.csv", tmp_path / "a.txt"):
+    (tmp_path / "prices.csv").write_text("a,b\n1,2\n")  # a file is not a folder
+    for bad in (tmp_path / "nope", tmp_path / "a.txt", tmp_path / "prices.csv"):
         with pytest.raises(ValueError):
             sources.register(tmp_path, bad)
 
@@ -66,13 +52,7 @@ def test_readd_is_idempotent_and_keeps_order(tmp_path):
     sources.register(tmp_path, SAMPLE)
     sources.register(tmp_path, str(SAMPLE) + "/")
     assert raw(tmp_path) == before
-    assert [s.name for s in sources.load(tmp_path).sources] == ["sample_docs", "other"]
-
-
-def test_url_spellings_are_one_source(tmp_path):
-    sources.register(tmp_path, "https://example.org")
-    sources.register(tmp_path, "HTTPS://EXAMPLE.ORG/")
-    assert len(sources.load(tmp_path).sources) == 1
+    assert [s.name for s in sources.load(tmp_path)] == ["sample_docs", "other"]
 
 
 def test_default_name_collision_gets_a_suffix(tmp_path):
@@ -90,15 +70,15 @@ def test_explicit_name_collision_with_other_target_fails(tmp_path):
     sources.register(tmp_path, SAMPLE, name="handbook")
     with pytest.raises(ValueError, match="handbook"):
         sources.register(tmp_path, other, name="handbook")
-    assert len(sources.load(tmp_path).sources) == 1
+    assert len(sources.load(tmp_path)) == 1
 
 
 def test_same_target_new_name_renames(tmp_path):
     sources.register(tmp_path, SAMPLE)
     sources.register(tmp_path, SAMPLE, name="house")
-    assert [s.name for s in sources.load(tmp_path).sources] == ["house"]
+    assert [s.name for s in sources.load(tmp_path)] == ["house"]
     sources.register(tmp_path, SAMPLE)  # no name given: keeps the chosen one
-    assert [s.name for s in sources.load(tmp_path).sources] == ["house"]
+    assert [s.name for s in sources.load(tmp_path)] == ["house"]
 
 
 @pytest.mark.parametrize("name", ["", "has space", "a/b", "x" * 65])
@@ -107,19 +87,33 @@ def test_bad_names(tmp_path, name):
         sources.register(tmp_path, SAMPLE, name=name)
 
 
-def test_only_is_stored_and_sticky(tmp_path):
-    sources.register(tmp_path, SAMPLE, only=True)
-    assert sources.load(tmp_path).only is True
-    sources.register(tmp_path, "https://example.org")  # a later add does not clear it
-    assert sources.load(tmp_path).only is True
-
-
 def test_load_without_file_is_empty(tmp_path):
-    reg = sources.load(tmp_path)
-    assert reg.sources == [] and reg.only is False
+    assert sources.load(tmp_path) == []
 
 
 def test_file_is_stable_json(tmp_path):
     sources.register(tmp_path, SAMPLE)
     text = raw(tmp_path)
-    assert text.endswith("\n") and json.loads(text)["version"] == 1
+    assert text.endswith("\n") and json.loads(text) == {
+        "version": 1,
+        "sources": [{"name": "sample_docs", "target": str(SAMPLE.resolve())}],
+    }
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{not json",
+        '{"version": 1}',
+        '{"sources": ["a"]}',
+        '{"sources": [{"name": "a"}]}',
+        '{"sources": [{"name": 1, "target": "/x"}]}',
+    ],
+)
+def test_a_hand_edited_file_is_a_clear_error_not_a_key_error(tmp_path, content):
+    (tmp_path / ".rag").mkdir()
+    (tmp_path / ".rag" / "sources.json").write_text(content)
+    with pytest.raises(ValueError, match=r"sources\.json.*(sources\[\d\]|not a sources file)"):
+        sources.load(tmp_path)
+    with pytest.raises(ValueError, match=r"sources\.json"):
+        sources.register(tmp_path, SAMPLE)  # an add does not overwrite a file it cannot read

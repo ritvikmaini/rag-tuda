@@ -30,11 +30,18 @@ def fixture_frames():
 
 
 def test_add_registers_and_points_to_reindex(project, capsys):
-    assert cli.main(["add", str(FIX / "sample_docs"), "--name", "house", "--only"]) == 0
+    assert cli.main(["add", str(FIX / "sample_docs"), "--name", "house"]) == 0
     out = capsys.readouterr().out
-    assert "house" in out and "folder" in out and "rag reindex" in out
+    assert "house" in out and "rag reindex" in out
     reg = sources.load(project)
-    assert [s.name for s in reg.sources] == ["house"] and reg.only
+    assert [s.name for s in reg] == ["house"]
+
+
+@pytest.mark.parametrize("flags", [["--only"], ["--topic", "x"]])
+def test_add_takes_only_a_folder_and_a_name(project, flags):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["add", str(FIX / "sample_docs"), *flags])
+    assert exc.value.code == 2
 
 
 def test_add_is_idempotent(project, capsys):
@@ -46,7 +53,7 @@ def test_add_is_idempotent(project, capsys):
 
 def test_add_rejects_a_bad_target(project, capsys):
     assert cli.main(["add", "ftp://example.org"]) == 1
-    assert "http" in capsys.readouterr().err
+    assert "not a folder" in capsys.readouterr().err
     assert not (project / ".rag" / "sources.json").exists()
 
 

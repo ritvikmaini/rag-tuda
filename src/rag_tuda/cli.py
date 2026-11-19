@@ -104,9 +104,14 @@ def _index_job(plan) -> int:
         current = state.ensure(root)
         data = current.data
         card = cards.named(data["card"]) if data.get("card") else None
-        if card is None or not data.get("mode"):
+        if card is None or not data.get("mode") or not data.get("profile"):
             raise stack.StackError("nothing was started from this folder yet: run `rag up` first")
         up = stack.Args(card["name"], data["mode"], data["profile"], data.get("model"), data.get("llm_url"))
+        if up.mode == "compose" and sources.load(root):
+            print(
+                "note: the compose indexer does not mount the folders of `rag add`; they are indexed by the native stack",
+                file=sys.stderr,
+            )
         steps = plan(current, stack.gather(root, current, card, doctor.gather(), up), up)
         stack.execute(steps, stack.System())
     except (ValueError, stack.StackError) as exc:
@@ -190,11 +195,11 @@ def _ask(args: argparse.Namespace) -> int:
 
 def _add(args: argparse.Namespace) -> int:
     try:
-        source = sources.register(Path.cwd(), args.target, name=args.name, only=args.only)
+        source = sources.register(Path.cwd(), args.target, name=args.name)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    print(f"registered {source.name} ({source.connector}: {source.target})")
+    print(f"registered {source.name} ({source.target})")
     print("run `rag reindex` to index it")
     return 0
 
@@ -249,10 +254,9 @@ def main(argv: list[str] | None = None) -> int:
     a.add_argument("--lang", choices=("de", "en"), help="the language of the page: it sets the texts before the answer")
     a.add_argument("--url", default=DEFAULT_URL, help="where the assistant listens (default %(default)s)")
     a.set_defaults(run=_ask)
-    s = sub.add_parser("add", help="register a folder, a web site or a CSV file as a source")
-    s.add_argument("target", help="a folder, an http(s) URL or a .csv file")
+    s = sub.add_parser("add", help="register a folder of your own documents (Markdown, text, PDF) as a source")
+    s.add_argument("target", help="the folder")
     s.add_argument("--name", help="the source's name (default: from the target)")
-    s.add_argument("--only", action="store_true", help="index only your sources, not the default corpus")
     s.set_defaults(run=_add)
     args = parser.parse_args(argv)
     if getattr(args, "ablation", False) and not args.retrieval_only:

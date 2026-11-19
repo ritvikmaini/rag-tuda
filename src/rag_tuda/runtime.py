@@ -173,6 +173,7 @@ def indexer_paths(rag: str) -> dict[str, str]:
         "RAG__PATHS__STATE_DIR": str(PurePath(rag, "state")),
         "RAG__PATHS__MANIFEST_DIR": str(PurePath(rag, "state", "documents")),
         "RAG__PATHS__SKIPPED_PDFS_LOG": str(PurePath(rag, "state", "skipped_pdfs_page_limit.json")),
+        "RAG__PATHS__USER_SOURCES": str(PurePath(rag, "sources.json")),  # the folders `rag add` registered
     }
 
 

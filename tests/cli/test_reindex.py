@@ -186,3 +186,21 @@ def test_reindex_without_a_first_up_says_so(repo, capsys):
 
 def test_the_crawl_estimates_are_the_specs():
     assert "300 pages" in classes.CRAWL_SETS["core"] and "2,000 pages" in classes.CRAWL_SETS["full"]
+
+
+def test_registered_folders_are_not_indexed_by_the_compose_indexer_and_it_says_so(repo, monkeypatch, capsys):
+    from rag_tuda import sources
+
+    (repo / "docs").mkdir()
+    sources.register(repo, repo / "docs")
+    settled_state(repo, mode="compose")
+    system = Recorder()
+    monkeypatch.setattr(stack, "System", lambda: system)
+    monkeypatch.setattr(stack, "gather", lambda *a, **k: running(repo, ready=frozenset({"backend"})))
+    assert cli.main(["reindex"]) == 0
+    assert "compose indexer does not mount" in capsys.readouterr().err
+
+
+def test_a_native_reindex_hands_the_indexer_the_sources_file(tmp_path):
+    build = next(s for s in plan(tmp_path) if s.name == "index-build")
+    assert build.env["RAG__PATHS__USER_SOURCES"] == f"{tmp_path}/.rag/sources.json"

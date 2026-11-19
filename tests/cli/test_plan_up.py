@@ -231,7 +231,7 @@ def test_the_plan_does_not_touch_the_machine(tmp_path, current):
     assert sorted(p for p in tmp_path.rglob("*")) == before
 
 
-def test_each_process_gets_its_own_secret_folder_and_the_six_folders(tmp_path, current):
+def test_each_process_gets_its_own_secret_folder_and_the_indexers_folders(tmp_path, current):
     steps = {s.name: s for s in stack.plan_up(current, facts(tmp_path, ollama_up=True), args()) if s.kind != "wait"}
     assert steps["migrate"].env["RAG_SECRETS_DIR"] == str(current.dir / "secrets" / "migrate")
     index = steps["index-build"]
@@ -239,7 +239,15 @@ def test_each_process_gets_its_own_secret_folder_and_the_six_folders(tmp_path, c
     assert index.argv == ("uv", "run", "--frozen", "--package", "indexer", "indexer", "build")
     assert {k for k in index.env if k.startswith("RAG__PATHS__")} == {
         f"RAG__PATHS__{k}"
-        for k in ("CRAWL_DIR", "PDF_DIR", "EXTRACTED_DIR", "STATE_DIR", "MANIFEST_DIR", "SKIPPED_PDFS_LOG")
+        for k in (
+            "CRAWL_DIR",
+            "PDF_DIR",
+            "EXTRACTED_DIR",
+            "STATE_DIR",
+            "MANIFEST_DIR",
+            "SKIPPED_PDFS_LOG",
+            "USER_SOURCES",
+        )
     }
     assert index.env["RAG_OVERLAY"] == str(current.dir / "overlay.yaml")
     assert json.loads(steps["overlay"].text)["connectors"]["gesetze"]["dir"] == f"{tmp_path}/profiles/example/documents"
