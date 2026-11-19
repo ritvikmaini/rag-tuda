@@ -1,3 +1,4 @@
+import { withToken } from "../api/auth.js";
 import { createFrameParser } from "../api/frames.js";
 import { questionUrl } from "../api/urls.js";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
@@ -51,7 +52,9 @@ export async function stream(turn, view) {
     updateSend();
     let ok = false;
     try {
-        const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept), { signal: session.controller.signal, cache: "no-store" });
+        const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept),
+            withToken({ signal: session.controller.signal, cache: "no-store" }));
+        turn.unauthorized = response.status === 401;
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");

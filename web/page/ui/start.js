@@ -1,3 +1,4 @@
+import { takeToken } from "../api/auth.js";
 import { ASSISTANT_NAME, TEXT } from "../config.js";
 import { toggleTick } from "../features/tasks.js";
 import { h } from "../render/dom.js";
@@ -11,6 +12,7 @@ import { newConversation, restore } from "./storage.js";
 // ---- start
 
 export function init() {
+    takeToken(window);
     ui.conversation = document.getElementById("conversation");
     ui.form = document.getElementById("composer");
     ui.question = document.getElementById("question");

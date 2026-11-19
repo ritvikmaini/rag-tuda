@@ -1,3 +1,4 @@
+import { withToken } from "../api/auth.js";
 import { createFrameParser } from "../api/frames.js";
 import { variantUrl } from "../api/urls.js";
 import { SILENCE_LIMIT_MS, TEXT, TOTAL_LIMIT_MS, VARIANT_LABELS } from "../config.js";
@@ -93,7 +94,7 @@ export async function streamVariant(turn, view, version) {
     };
     try {
         const response = await fetch(variantUrl(turn.question, store.id, turn.id, version.name, false),
-            { signal: session.controller.signal, cache: "no-store" });
+            withToken({ signal: session.controller.signal, cache: "no-store" }));
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -123,7 +124,7 @@ export async function selectVersion(turn, view, name) {
     let ok = false;
     view.switching = true;
     try {
-        const response = await fetch(variantUrl(turn.question, store.id, turn.id, name, true), { cache: "no-store" });
+        const response = await fetch(variantUrl(turn.question, store.id, turn.id, name, true), withToken({ cache: "no-store" }));
         const parser = createFrameParser();
         const frames = parser.push(await response.text()).concat(parser.end());
         ok = response.ok && frames.some(frame => frame && frame.type === "variant" && frame.content && frame.content.ok);

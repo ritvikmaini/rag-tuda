@@ -408,6 +408,40 @@ test("the page detects every shape of the shared fixture like the backend and th
     }
 });
 
+function fakeWindow(hash, stored, blocked) {
+    const kept = new Map(stored ? [["assistant-token-v1", stored]] : []);
+    const replaced = [];
+    return {
+        kept, replaced,
+        location: { hash, pathname: "/", search: "?m=nh" },
+        history: { replaceState: (...args) => replaced.push(args) },
+        sessionStorage: {
+            getItem: key => { if (blocked) throw new Error("blocked"); return kept.has(key) ? kept.get(key) : null; },
+            setItem: (key, value) => { if (blocked) throw new Error("blocked"); kept.set(key, value); },
+        },
+    };
+}
+
+test("the #token link: kept in sessionStorage, removed from the address bar, sent as a Bearer header", () => {
+    const win = fakeWindow("#s3cret", "");
+    assert.equal(page.takeToken(win), "s3cret");
+    assert.equal(win.kept.get("assistant-token-v1"), "s3cret");
+    assert.deepEqual(win.replaced, [[null, "", "/?m=nh"]]);   // the path and query stay, the fragment goes
+    assert.deepEqual(plain(page.withToken({ cache: "no-store" })), { cache: "no-store", headers: { Authorization: "Bearer s3cret" } });
+    // a reload of the tab has no fragment: the stored token stays; a new link replaces it
+    assert.equal(page.takeToken(fakeWindow("", "s3cret")), "s3cret");
+    assert.equal(page.takeToken(fakeWindow("#newer", "s3cret")), "newer");
+});
+
+test("without a token or with blocked storage the page still works", () => {
+    const win = fakeWindow("", "");
+    assert.equal(page.takeToken(win), "");
+    assert.deepEqual(plain(page.withToken({ cache: "no-store" })), { cache: "no-store" });
+    assert.deepEqual(win.replaced, []);
+    assert.equal(page.takeToken(fakeWindow("#kept-in-memory", "", true)), "kept-in-memory");
+    assert.equal(page.withToken({}).headers.Authorization, "Bearer kept-in-memory");
+});
+
 test("the error reference: meta's turn id, else the page's own", () => {
     // the first 8 characters of the turn id, as the backend logs them (ref=)
     assert.equal(page.refOf("A1B2C3D4-0000-4000-8000-000000000001"), "a1b2c3d4");

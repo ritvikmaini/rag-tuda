@@ -12,7 +12,7 @@ import { state, store, ui, views } from "./state.js";
 
 export function renderTurnState(view, turn) {
     const s = turn.state;
-    const message = s === "error" ? TEXT.failed : s === "stopped" ? TEXT.stopped : s === "interrupted" ? TEXT.interrupted : "";
+    const message = s === "error" ? (turn.unauthorized ? TEXT.unauthorized : TEXT.failed) : s === "stopped" ? TEXT.stopped : s === "interrupted" ? TEXT.interrupted : "";
     view.notice.hidden = !message;
     view.noticeText.textContent = message;
     view.notice.classList.toggle("is-error", s === "error" || s === "interrupted");

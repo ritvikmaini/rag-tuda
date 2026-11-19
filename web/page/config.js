@@ -3,6 +3,7 @@
 export const ASSISTANT_NAME = "Assistant";
 export const API_PATH = "/api/chat";
 export const STORAGE_KEY = "assistant-chat-v1";
+export const TOKEN_KEY = "assistant-token-v1";
 export const OLD_AFTER_YEARS = 3;
 export const VISIBLE_SOURCES = 3;
 export const RESUME_THRESHOLD_PX = 8;
@@ -53,6 +54,7 @@ export const TEXT = {
     writing: "Antwort wird formuliert …",
     writingDone: "Antwort formuliert",
     failed: "Die Antwort konnte nicht geladen werden. Bitte versuchen Sie es noch einmal.",
+    unauthorized: "Der Zugang wurde nicht akzeptiert. Bitte öffnen Sie den Link aus „rag up“ noch einmal.",
     stopped: "Antwort angehalten.",
     interrupted: "Die Antwort wurde unterbrochen.",
     reference: "Bitte nennen Sie bei Rückfragen die Referenz {ref}.",
