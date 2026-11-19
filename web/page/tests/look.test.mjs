@@ -270,6 +270,8 @@ test("the footer says it is no official service and no legal advice, and names a
     assert.match(html, /data-i18n="headerSub"/);
     assert.match(html, /id="provider-line"/);
     assert.match(html, /rag-<span class="brand-hl">tuda<\/span>/);
+    // the tab icon is inline, so the browser never asks the backend for /favicon.ico
+    assert.match(html, /<link rel="icon" href="data:image\/svg\+xml,/);
 });
 
 // ---- source cards and contact links
