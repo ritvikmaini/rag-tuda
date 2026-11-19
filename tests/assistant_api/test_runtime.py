@@ -42,6 +42,7 @@ def runtime() -> types.SimpleNamespace:
         card=types.SimpleNamespace(
             timeouts=types.SimpleNamespace(deadline_s=0),
             budget=types.SimpleNamespace(final_k=8, pre_rerank_k=20, rerank_queries=1),
+            chars_per_token=3.3,
         ),
     )
     return types.SimpleNamespace(

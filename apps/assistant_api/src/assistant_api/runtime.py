@@ -160,6 +160,7 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
             rt.settings.card.budget.pre_rerank_k,
             rt.settings.card.budget.rerank_queries,
             AllowAll(),
+            chars_per_token=rt.settings.card.chars_per_token,
         ),
     )
 

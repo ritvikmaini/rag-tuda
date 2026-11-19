@@ -45,6 +45,9 @@ class Switches(ProfileModel):
     )
     fusion_cut: bool = True  # each query's legs are fused and the card's pre_rerank_k hits go to the reranker, scored
     # against its rerank_queries first queries; off = every hit of every leg, scored against every query
+    # the parent texts go to the reranker whole (the model server's length setting decides); off = each cut to 512 tokens
+    # (512 * the card's chars_per_token characters), the length of the former reranker server
+    whole_parents: bool = True
 
 
 class Retrieval(ProfileModel):
@@ -54,7 +57,7 @@ class Retrieval(ProfileModel):
     keyword_k: int = Field(gt=0)
     fts_extra_stopwords: tuple[str, ...]
     semantic_max_distance: float | None
-    # w of fused = w * semantic + (1 - w) * lexical, each leg min-max normalised per query; 0.5 until a bake-off tunes it
+    # w of fused = w * semantic + (1 - w) * lexical, each leg min-max normalised per query
     fusion_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     rerank: Rerank
     switches: Switches = Switches()
@@ -147,7 +150,7 @@ class Ranking(ProfileModel):
     in_range_by_year: bool
     question_years: bool
     no_recency_in_range: bool
-    relevance_floor: float
+    relevance_floor: float  # a reranked score below it abstains the answer; the min_docs guarantee keeps none below it
     source_min_score: float
     max_per_document: int = Field(ge=0)  # 0 = no cap
 

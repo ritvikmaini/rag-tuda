@@ -82,10 +82,10 @@ class Reranker:
 
 def make_service(
     vector=None, full_text=None, sections=None, reranker=None, access=None, final_k=8, pre_rerank_k=20, rerank_queries=1,
-    fusion_cut=True,
+    fusion_cut=True, whole_parents=True, relevance_floor=0.0, chars_per_token=3.3,
 ) -> RetrievalService:  # fmt: skip
     profile = load_profile(Profile, PROFILE)
-    switches = profile.retrieval.switches.model_copy(update={"fusion_cut": fusion_cut})
+    switches = profile.retrieval.switches.model_copy(update={"fusion_cut": fusion_cut, "whole_parents": whole_parents})
     retrieval = profile.retrieval.model_copy(update={"switches": switches})
     sections = sections or Sections(
         {f"p{i}": Section(f"p{i}", f"Parent {i}", {"filename": f"f{i}.pdf"}) for i in range(1, 6)}
@@ -97,12 +97,13 @@ def make_service(
         sections,
         reranker or Reranker({}),
         retrieval,
-        profile.ranking,
+        profile.ranking.model_copy(update={"relevance_floor": relevance_floor}),
         TIMEOUTS,
         final_k,
         pre_rerank_k,
         rerank_queries,
         access,
+        chars_per_token=chars_per_token,
     )
 
 
@@ -221,6 +222,7 @@ def retrieve(sections, scores, vector=None, reranker=Reranker, **changes):
         8,
         20,
         1,
+        chars_per_token=3.3,
     )
     return asyncio.run(svc.retrieve(["q"], question="q"))
 
@@ -401,3 +403,54 @@ def test_without_the_fusion_cut_every_child_and_query_reaches_the_reranker() -> 
     asyncio.run(service.retrieve(["q1", "q2"], question="q"))
     queries, texts = reranker.calls[0]
     assert queries == ["q1", "q2"] and len([t for t in texts if t.startswith("child")]) == 10
+
+
+BELOW_THRESHOLD = {"Parent 1": 0.4, "Parent 2": 0.35, "Parent 3": 0.1, "Parent 4": 0.05}  # the threshold is 0.50
+
+
+def test_min_docs_respects_relevance_floor() -> None:
+    def kept(floor: float) -> list[str]:
+        service = make_service(reranker=Reranker(BELOW_THRESHOLD), relevance_floor=floor)
+        return [d.page_content for d in asyncio.run(service.retrieve(["q"], question="q"))]
+
+    assert kept(0.0) == ["Parent 1", "Parent 2", "Parent 3"]  # min_docs 3 keeps three below the threshold
+    assert kept(0.3) == ["Parent 1", "Parent 2"]  # a parent below the floor is not kept to reach min_docs
+
+
+def test_no_docs_prompt_when_none_pass() -> None:
+    service = make_service(reranker=Reranker(BELOW_THRESHOLD), relevance_floor=0.5)
+    # nothing passes the threshold or the floor: no documents, so the answer node runs the no-docs prompt (with the
+    # applied-filter line when a filter was set)
+    assert asyncio.run(service.retrieve(["q"], filter=Filter(programme=("msc-informatik",)), question="q")) == []
+
+
+def test_rerank_texts_not_cut_at_512() -> None:
+    long_parent = "x" * 2000
+    sections = Sections({"p1": Section("p1", long_parent, {"filename": "f1.pdf"})})
+
+    def sent(whole_parents: bool, chars_per_token: float = 3.3) -> list[str]:
+        reranker = RecordingReranker()
+        service = make_service(
+            Vector({"child one": "p1"}),
+            None,
+            sections,
+            reranker,
+            whole_parents=whole_parents,
+            chars_per_token=chars_per_token,
+        )
+        asyncio.run(service.retrieve(["q"], question="q"))
+        return reranker.calls[0][1]
+
+    assert long_parent in sent(True)  # the model server's MAX_LENGTH decides the length, not the client
+    # the switch off: the former 512-token cut, estimated at the card's chars_per_token (here 2.0)
+    assert [len(t) for t in sent(False, 2.0) if t.startswith("x")] == [1024]
+
+
+def test_min_docs_only_tops_up_above_the_floor() -> None:
+    scores = {"Parent 1": 0.9, "Parent 2": 0.55, "Parent 3": 0.4, "Parent 4": 0.2}  # two pass the threshold of 0.50
+    service = make_service(reranker=Reranker(scores), relevance_floor=0.6)  # a floor above the threshold
+    kept = [d.page_content for d in asyncio.run(service.retrieve(["q"], question="q"))]
+    assert kept == ["Parent 1", "Parent 2"]  # the threshold-passers stay; nothing below the floor is added
+    service = make_service(reranker=Reranker(scores), relevance_floor=0.3)
+    kept = [d.page_content for d in asyncio.run(service.retrieve(["q"], question="q"))]
+    assert kept == ["Parent 1", "Parent 2", "Parent 3"]  # topped up to min_docs 3 with the one at or above the floor

@@ -114,6 +114,7 @@ def retrieve(question: str) -> list[Hit]:
         8,
         20,
         1,  # type: ignore[arg-type]
+        chars_per_token=3.3,
     )
     return asyncio.run(service.retrieve([question], question=question))
 

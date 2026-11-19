@@ -1,6 +1,7 @@
 """The retrieval sequence over ports. Per query the semantic and full-text children (each query bounded), fused into one list
 by the profile's weight; the best pre_rerank_k over all queries (switches.fusion_cut off: every child, deduplicated);
-reranked against the first rerank_queries queries (off: all), children with their parent sections' texts; the parents of the
+reranked against the first rerank_queries queries (off: all), children with their parent sections' texts (whole, as the model
+server's length setting decides; switches.whole_parents off: cut to 512 tokens, estimated with the card's chars_per_token); the parents of the
 reranked children; twins collapsed to one language; sorted, ranked (rank()) and cut to final_k. Children and sections are the domain's Hit and Section; the service reads and
 annotates hits by attribute."""
 
@@ -33,6 +34,9 @@ def _metadata(doc: Any) -> dict[str, Any]:
     meta: dict[str, Any] = doc.metadata if doc.metadata else {}
     return meta
 
+
+# the reranker length the parent texts are cut to, in tokens, with switches.whole_parents off (the former server limit)
+CUT_PARENT_TOKENS = 512
 
 # the documents whose German text binds: a twin of one of them is never shown in place of the German section
 BINDING_GERMAN = frozenset({"po", "mhb", "spp", "apb", "eso", "promotion"})
@@ -88,12 +92,15 @@ class RetrievalService:
         pre_rerank_k: int,
         rerank_queries: int,
         access: AccessFilter | None = None,
+        *,
+        chars_per_token: float,
     ) -> None:
         self.embedder, self.vector, self.full_text, self.sections = embedder, vector, full_text, sections
         self.reranker, self.retrieval, self.ranking, self.timeouts = reranker, retrieval, ranking, timeouts
         # the model card's budget
         self.final_k, self.pre_rerank_k, self.rerank_queries = final_k, pre_rerank_k, rerank_queries
         self.access = access or AllowAll()
+        self.chars_per_token = chars_per_token  # the card's: sizes the whole_parents-off cut
 
     async def _search(self, query: str, filter: Filter | None) -> list[Hit]:
         """One query's children: the semantic search (its embedding inside the same time bound) and the keyword search,
@@ -162,6 +169,9 @@ class RetrievalService:
                 parent_text_by_section = parent_texts(
                     {sid: {"text": s.text, "metadata": dict(s.metadata)} for sid, s in found.items()}
                 )
+                if not self.retrieval.switches.whole_parents:
+                    cut = int(CUT_PARENT_TOKENS * self.chars_per_token)
+                    parent_text_by_section = {s: text[:cut] for s, text in parent_text_by_section.items()}
             except Exception as e:
                 logger.error(f"[DocumentRetriever] parent texts for reranking unavailable: {type(e).__name__} {e}")
             logger.info(
@@ -238,7 +248,8 @@ class RetrievalService:
     async def _rerank(
         self, queries: list[str], documents: list[Any], parent_text_by_section: dict[str, str]
     ) -> list[Any]:
-        """Max-score fusion over the queries; the threshold, then at least min_docs documents."""
+        """Max-score fusion over the queries; the threshold, then at least min_docs documents, none of them below the
+        ranking's relevance_floor."""
         if not documents or not queries:
             return []
         doc_map = {doc.page_content: doc for doc in documents}
@@ -270,8 +281,10 @@ class RetrievalService:
         threshold = self.retrieval.rerank.threshold
         reranked_docs = [doc for doc in all_scored_docs if doc.metadata["cross_encoder_score"] >= threshold]
         min_docs = self.retrieval.rerank.min_docs
+        floor = self.ranking.relevance_floor
         if len(reranked_docs) < min_docs and len(all_scored_docs) > len(reranked_docs):
-            reranked_docs = all_scored_docs[:min_docs]
+            topped_up = [d for d in all_scored_docs if floor <= d.metadata["cross_encoder_score"] < threshold]
+            reranked_docs = [*reranked_docs, *topped_up][:min_docs]
             logger.info(
                 f"[DocumentRetriever] Min-doc guarantee: kept {len(reranked_docs)} docs "
                 f"(threshold would have left {sum(1 for d in all_scored_docs if d.metadata['cross_encoder_score'] >= threshold)})"
