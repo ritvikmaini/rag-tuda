@@ -11,12 +11,22 @@ oauth2_scheme = HTTPBearer()
 
 
 def _rate_limit_key(request: Request) -> str:
-    """Per conversation (the page's conversation_id; the client address only as a fallback), so a frontend that relays all
-    users through one address cannot throttle everyone."""
-    return request.query_params.get("conversation_id") or get_remote_address(request)
+    """The client address: a caller cannot win a fresh allowance by inventing conversation ids."""
+    return get_remote_address(request)
 
 
 limiter = Limiter(key_func=_rate_limit_key)
+_chat_rate = "20/minute"
+
+
+def set_chat_rate(rate: str) -> None:
+    """The questions one address may ask per period (settings: server.rate_limit), set by the lifespan once the settings are read."""
+    global _chat_rate
+    _chat_rate = rate
+
+
+def chat_rate() -> str:
+    return _chat_rate
 
 
 def _expected(request: Request) -> str | None:

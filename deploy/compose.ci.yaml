@@ -57,6 +57,7 @@ services:
       - RAG__MODEL_SERVERS__EMBEDDING_URL=http://embedding_service:8001
       - RAG__MODEL_SERVERS__RERANKER_URL=http://reranker_service:8003
       - RAG__COMPUTE__SLOT_WAIT_S=3
+      - RAG__SERVER__RATE_LIMIT=100000/minute   # every test asks from one address
       - RAG__TIMEOUTS__RETRIEVAL_S=10
       - RAG__TIMEOUTS__PARENT_LOOKUP_S=5
       - RAG__TIMEOUTS__RERANKER_S=15

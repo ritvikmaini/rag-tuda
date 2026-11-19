@@ -12,7 +12,7 @@ from rag_core.domain.filters import Chips, check_chips
 from rag_core.domain.history import valid_turn_id
 from rag_core.domain.language import LANGUAGES
 
-from assistant_api.api.deps import limiter, verify_token
+from assistant_api.api.deps import chat_rate, limiter, verify_token
 from assistant_api.chat.guard import guard
 from assistant_api.chat.service import pipeline
 from assistant_api.chat.turns_store import TurnRecord, end_turn
@@ -24,7 +24,7 @@ router = APIRouter()
 
 
 @router.get("/api/chat")
-@limiter.limit("20/minute")  # per conversation id, the client address only as a fallback
+@limiter.limit(chat_rate)  # per client address
 async def main(
     request: Request,
     question: str,

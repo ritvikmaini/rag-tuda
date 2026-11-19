@@ -17,7 +17,7 @@ from rag_core.adapters.pg_index import read_pool
 from rag_core.domain.resilience import dispose_engines
 
 from assistant_api.api import chat, ops
-from assistant_api.api.deps import limiter
+from assistant_api.api.deps import limiter, set_chat_rate
 from assistant_api.api.middleware import security_headers_and_cors
 from assistant_api.chat.turns_store import TurnStore, store_conninfo
 from assistant_api.runtime import build_runtime, heal, reload, stop_retiring
@@ -39,6 +39,7 @@ def create_app(settings: AssistantSettings | None = None) -> FastAPI:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = app.state.settings or load_settings()
+    set_chat_rate(settings.overlay.server.rate_limit)
     langfuse, authenticated = await asyncio.to_thread(init_langfuse, settings.overlay.tracing.url)
     db = settings.overlay.database
     # the turn store's pool: rag_app on pgvector like the index reads, at most 4 connections; each transaction sets

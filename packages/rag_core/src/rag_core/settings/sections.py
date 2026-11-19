@@ -49,3 +49,6 @@ class Tracing(OverlaySection):
 
 class Server(OverlaySection):
     token: SecretStr | None = secret("backend_token")  # the compose secret
+    rate_limit: str = Field(
+        default="20/minute", pattern=r"^[1-9]\d*/(second|minute|hour)$"
+    )  # questions per client address

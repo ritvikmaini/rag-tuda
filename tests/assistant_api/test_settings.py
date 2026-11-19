@@ -209,6 +209,14 @@ def test_the_token_comes_from_the_secret_file(secrets: Path) -> None:
     assert token is not None and token.get_secret_value() == "t0k"
 
 
+def test_the_rate_limit_is_twenty_a_minute_unless_the_environment_says_otherwise(secrets: Path) -> None:
+    assert load_settings(environment(), secrets_dir=secrets).overlay.server.rate_limit == "20/minute"
+    loaded = load_settings(environment(RAG__SERVER__RATE_LIMIT="1000/minute"), secrets_dir=secrets)
+    assert loaded.overlay.server.rate_limit == "1000/minute"
+    with pytest.raises(SettingsError, match="rate_limit"):
+        load_settings(environment(RAG__SERVER__RATE_LIMIT="often"), secrets_dir=secrets)
+
+
 def test_the_messages_are_the_expected_texts(secrets: Path) -> None:
     messages = load_settings(environment(), secrets_dir=secrets).messages
     assert {path: get(messages, path) for path in MESSAGES} == MESSAGES

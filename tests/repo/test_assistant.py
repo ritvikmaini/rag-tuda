@@ -26,7 +26,7 @@ STACK = {  # the stack's values as RAG__ entries
     "RAG__HTTP__CORS_DOMAIN": "example.org",
     "RAG__TRACING__URL": "",
 }
-CI_ONLY = {"RAG__COMPUTE__SLOT_WAIT_S": "3"}
+CI_ONLY = {"RAG__COMPUTE__SLOT_WAIT_S": "3", "RAG__SERVER__RATE_LIMIT": "100000/minute"}
 LINUX = {
     "sys_platform": "linux",
     "platform_system": "Linux",
@@ -137,7 +137,7 @@ def test_the_stack_sets_the_slot_and_timeout_values_the_code_does_not_default() 
     assert {key: env[key] for key in expected} == expected
 
 
-def test_the_ci_environment_differs_only_in_the_card_the_llm_url_and_the_slot_wait() -> None:
+def test_the_ci_environment_differs_only_in_the_card_the_llm_url_the_slot_wait_and_the_rate_limit() -> None:
     env = {k: v for k, v in environment(backend("deploy/compose.ci.yaml")).items() if k.startswith("RAG__")}
     assert env.pop("RAG__CARD_FILE") == "/app/card.toml"  # the harness's card file replaces the named card
     env["RAG__CARD"] = STACK["RAG__CARD"]

@@ -185,7 +185,7 @@ def test_the_done_frame_names_the_records_generation_and_prompts(monkeypatch) ->
         limiter.reset()
 
 
-def test_the_chat_route_answers_429_after_twenty_questions_a_minute_per_conversation(monkeypatch) -> None:
+def test_rate_limit_by_client_address(monkeypatch) -> None:
     client = chat_client(monkeypatch)
     auth = {"Authorization": "Bearer t0k"}
 
@@ -193,12 +193,13 @@ def test_the_chat_route_answers_429_after_twenty_questions_a_minute_per_conversa
         return client.get("/api/chat", params={"question": "Frage", "conversation_id": conversation}, headers=auth)
 
     try:
-        assert [get("rate-5a").status_code for _ in range(20)] == [200] * 20
-        limited = get("rate-5a")
+        # twenty questions a minute from one address, whatever conversation ids the caller invents
+        assert [get(f"rate-5a-{n}").status_code for n in range(20)] == [200] * 20
+        limited = get("rate-5a-new")
         assert limited.status_code == 429
         assert limited.json() == {"error": "Rate limit exceeded: 20 per 1 minute"}
         assert limited.headers["X-Frame-Options"] == "DENY"
-        assert get("rate-5a-other").status_code == 200
+        assert get("rate-5a-0").status_code == 429
     finally:
         limiter.reset()  # the limiter is module-global and in memory
 
@@ -285,7 +286,9 @@ def test_the_lifespan_starts_the_heal_task_after_a_failed_load_and_cancels_it_be
         return 0
 
     settings = types.SimpleNamespace(
-        overlay=types.SimpleNamespace(tracing=types.SimpleNamespace(url="x"), database=None)
+        overlay=types.SimpleNamespace(
+            tracing=types.SimpleNamespace(url="x"), database=None, server=types.SimpleNamespace(rate_limit="20/minute")
+        )
     )
     runtime = types.SimpleNamespace(index=None, retiring={}, chain=None, turns=None)
     monkeypatch.setattr(app_module, "init_langfuse", lambda url: (None, False))
