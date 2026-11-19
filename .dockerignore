@@ -10,6 +10,7 @@
 !web/page/
 web/page/tests
 web/page/node_modules
+web/page/**/.*
 **/__pycache__
 **/*.pyc
 **/.venv

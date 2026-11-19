@@ -45,11 +45,18 @@ def app_with(card: Path = FAKE_CARD, roles: Roles | None = None) -> tuple[TestCl
 
 @pytest.fixture
 def page(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    (tmp_path / "ui").mkdir()
-    (tmp_path / "index.html").write_text("<!DOCTYPE html><title>Assistant</title>", encoding="utf-8")
-    (tmp_path / "ui" / "start.js").write_text("export const x = 1;", encoding="utf-8")
-    monkeypatch.setenv("RAG_PAGE_DIR", str(tmp_path))
-    return tmp_path
+    folder = tmp_path / "page"
+    for name in ("ui", "tests", ".git"):
+        (folder / name).mkdir(parents=True)
+    (folder / "index.html").write_text("<!DOCTYPE html><title>Assistant</title>", encoding="utf-8")
+    (folder / "ui" / "start.js").write_text("export const x = 1;", encoding="utf-8")
+    (folder / "tests" / "page.test.mjs").write_text("test", encoding="utf-8")
+    (folder / ".env").write_text("secret", encoding="utf-8")
+    (folder / ".git" / "config").write_text("secret", encoding="utf-8")
+    (folder / "ui" / ".DS_Store").write_text("junk", encoding="utf-8")
+    (tmp_path / "secret.txt").write_text("outside", encoding="utf-8")
+    monkeypatch.setenv("RAG_PAGE_DIR", str(folder))
+    return folder
 
 
 def test_the_page_is_open_and_the_api_wants_the_token(page: Path) -> None:
@@ -65,6 +72,22 @@ def test_the_page_is_open_and_the_api_wants_the_token(page: Path) -> None:
     assert client.get("/nothing.js").status_code == 404
     assert client.post("/v1/admin/reload", headers=AUTH).status_code == 404
     assert client.get("/").headers["X-Frame-Options"] == "DENY"
+
+
+def test_the_page_serves_no_dotfiles_tests_listings_or_files_outside(page: Path) -> None:
+    client, _ = app_with()
+    assert client.get("/index.html").status_code == 200
+    for path in (
+        "/.env",
+        "/.git/config",
+        "/ui/.DS_Store",
+        "/tests/page.test.mjs",
+        "/ui/",  # a folder without an index.html: no listing
+        "/%2e%2e/secret.txt",
+        "/..%2fsecret.txt",
+        "/ui/%2e%2e/%2e%2e/secret.txt",
+    ):
+        assert client.get(path).status_code == 404, path
 
 
 def test_without_a_page_folder_the_app_serves_the_api_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

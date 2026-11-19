@@ -28,10 +28,18 @@ from assistant_api.settings import AssistantSettings, load_settings
 
 
 class Page(StaticFiles):
-    """The page's files: GET and HEAD only, any other method on a path no route serves is a 404 like everywhere else."""
+    """The page's files: GET and HEAD only, any other method on a path no route serves is a 404 like everywhere else. A checkout's
+    dotfiles, its tests and node_modules are not part of the page: they answer 404 too."""
+
+    NOT_SERVED = frozenset({"tests", "node_modules"})
 
     async def get_response(self, path: str, scope):
-        if scope["method"] not in ("GET", "HEAD"):
+        parts = path.split("/")
+        if (
+            scope["method"] not in ("GET", "HEAD")
+            or parts[0] in self.NOT_SERVED
+            or any(p.startswith(".") and p != "." for p in parts)
+        ):
             raise HTTPException(status_code=404)
         return await super().get_response(path, scope)
 
