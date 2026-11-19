@@ -157,6 +157,8 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
             rt.settings.profile.ranking,
             overlay.timeouts,
             rt.settings.card.budget.final_k,
+            rt.settings.card.budget.pre_rerank_k,
+            rt.settings.card.budget.rerank_queries,
             AllowAll(),
         ),
     )

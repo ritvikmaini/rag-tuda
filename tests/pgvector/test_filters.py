@@ -136,7 +136,7 @@ def test_empty_filtered_result_stays_empty(conninfo):
         async with legs(conninfo) as (vector, full_text, sections):
             service = RetrievalService(
                 embedder, vector, full_text, sections, SimpleNamespace(rerank=reranker_rerank), profile.retrieval,
-                profile.ranking, Timeouts(retrieval_s=10, parent_lookup_s=5, reranker_s=15), 8,
+                profile.ranking, Timeouts(retrieval_s=10, parent_lookup_s=5, reranker_s=15), 8, 20, 1,
             )  # fmt: skip
             return await service.retrieve([QUESTION], filter, question=QUESTION)
 

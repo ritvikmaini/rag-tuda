@@ -1,6 +1,7 @@
-"""The retrieval sequence over ports. Per query the semantic and full-text children (each query bounded); deduplicated;
-reranked, children with their parent sections' texts; the parents of the reranked children; twins collapsed to one language;
-sorted, ranked (rank()) and cut to final_k. Children and sections are the domain's Hit and Section; the service reads and
+"""The retrieval sequence over ports. Per query the semantic and full-text children (each query bounded), fused into one list
+by the profile's weight; the best pre_rerank_k over all queries (switches.fusion_cut off: every child, deduplicated);
+reranked against the first rerank_queries queries (off: all), children with their parent sections' texts; the parents of the
+reranked children; twins collapsed to one language; sorted, ranked (rank()) and cut to final_k. Children and sections are the domain's Hit and Section; the service reads and
 annotates hits by attribute."""
 
 import asyncio
@@ -13,6 +14,7 @@ from typing import Any
 from rag_core.domain.access import ANONYMOUS, AllowAll, Principal, allowed
 from rag_core.domain.doc_scores import mark_unscored, sort_score
 from rag_core.domain.filters import Filter
+from rag_core.domain.fusion import cut_across_queries, fuse
 from rag_core.domain.language import detect
 from rag_core.domain.parent_rerank import parent_texts, rerank_texts, score_children
 from rag_core.domain.ranking import RankingPolicy, rank
@@ -83,16 +85,20 @@ class RetrievalService:
         ranking: Ranking,
         timeouts: Timeouts,
         final_k: int,
+        pre_rerank_k: int,
+        rerank_queries: int,
         access: AccessFilter | None = None,
     ) -> None:
         self.embedder, self.vector, self.full_text, self.sections = embedder, vector, full_text, sections
         self.reranker, self.retrieval, self.ranking, self.timeouts = reranker, retrieval, ranking, timeouts
-        self.final_k = final_k  # the model card's budget
+        # the model card's budget
+        self.final_k, self.pre_rerank_k, self.rerank_queries = final_k, pre_rerank_k, rerank_queries
         self.access = access or AllowAll()
 
     async def _search(self, query: str, filter: Filter | None) -> list[Hit]:
         """One query's children: the semantic search (its embedding inside the same time bound) and the keyword search,
-        each bounded and both under the filter; one failing does not sink the other."""
+        each bounded and both under the filter; one failing does not sink the other. Fused best first; with the fusion cut
+        off, the two legs' hits one after the other."""
         r = self.retrieval
 
         async def semantic() -> list[Hit]:
@@ -107,6 +113,8 @@ class RetrievalService:
             logger.error(f"[HybridRetriever] {kind} search failed: {reason}")
         if len(failures) == 2:
             raise RuntimeError("every search failed")
+        if r.switches.fusion_cut:
+            return fuse(results[0] or [], results[1] or [], r.fusion_weight)
         return [hit for hits in results if hits for hit in hits]
 
     async def retrieve(
@@ -131,9 +139,12 @@ class RetrievalService:
             logger.error(f"[DocumentRetriever] retrieval query {index + 1}/{len(tasks)} failed: {reason}")
         if tasks and len(failures) == len(tasks):
             raise RuntimeError("retrieval unavailable: every query failed")
-        all_docs = [doc for docs in all_docs_nested if docs for doc in docs]
-        unique_docs = deduplicate(all_docs)
-        logger.info(f"[DocumentRetriever] Found {len(unique_docs)} unique docs after retrieval.")
+        fusion_cut = self.retrieval.switches.fusion_cut
+        if fusion_cut:  # after both legs of every query, before the parents are read and the reranker scores
+            unique_docs = cut_across_queries([docs for docs in all_docs_nested if docs], self.pre_rerank_k)
+        else:
+            unique_docs = deduplicate([doc for docs in all_docs_nested if docs for doc in docs])
+        logger.info(f"[DocumentRetriever] Found {len(unique_docs)} unique docs to rerank.")
 
         # the reranker also scores each child's parent text; a child keeps the higher score.
         # When the parent lookup fails, the children are scored alone.
@@ -157,7 +168,9 @@ class RetrievalService:
                 f"[DocumentRetriever] reranking {len(unique_docs)} children with {len(parent_text_by_section)} parent texts"
             )
 
-        reranked_docs = await self._rerank(queries, unique_docs, parent_text_by_section)
+        reranked_docs = await self._rerank(
+            queries[: self.rerank_queries] if fusion_cut else queries, unique_docs, parent_text_by_section
+        )
         logger.info(f"[DocumentRetriever] {len(reranked_docs)} docs after reranking.")
 
         try:  # bounded

@@ -111,7 +111,9 @@ def retrieve(question: str) -> list[Hit]:
         profile.retrieval,
         profile.ranking,
         timeouts,
-        8,  # type: ignore[arg-type]
+        8,
+        20,
+        1,  # type: ignore[arg-type]
     )
     return asyncio.run(service.retrieve([question], question=question))
 

@@ -80,8 +80,13 @@ class Reranker:
         return sorted(((self.scores.get(t, 0.0), t) for t in set(texts)), reverse=True)
 
 
-def make_service(vector=None, full_text=None, sections=None, reranker=None, access=None, final_k=8) -> RetrievalService:
+def make_service(
+    vector=None, full_text=None, sections=None, reranker=None, access=None, final_k=8, pre_rerank_k=20, rerank_queries=1,
+    fusion_cut=True,
+) -> RetrievalService:  # fmt: skip
     profile = load_profile(Profile, PROFILE)
+    switches = profile.retrieval.switches.model_copy(update={"fusion_cut": fusion_cut})
+    retrieval = profile.retrieval.model_copy(update={"switches": switches})
     sections = sections or Sections(
         {f"p{i}": Section(f"p{i}", f"Parent {i}", {"filename": f"f{i}.pdf"}) for i in range(1, 6)}
     )
@@ -91,10 +96,12 @@ def make_service(vector=None, full_text=None, sections=None, reranker=None, acce
         full_text or FullText({}),
         sections,
         reranker or Reranker({}),
-        profile.retrieval,
+        retrieval,
         profile.ranking,
         TIMEOUTS,
         final_k,
+        pre_rerank_k,
+        rerank_queries,
         access,
     )
 
@@ -212,6 +219,8 @@ def retrieve(sections, scores, vector=None, reranker=Reranker, **changes):
         profile.ranking,
         TIMEOUTS,
         8,
+        20,
+        1,
     )
     return asyncio.run(svc.retrieve(["q"], question="q"))
 
@@ -332,3 +341,63 @@ def test_retrieve_passes_today_to_the_ranking(monkeypatch) -> None:
     asyncio.run(service.retrieve(["q"], question="q", today=date(2026, 9, 29)))
     asyncio.run(service.retrieve(["q"], question="q"))
     assert seen == [date(2026, 9, 29), None]
+
+
+class Legs:
+    """Both legs over ten children whose semantic distance grows and whose keyword rank falls with the number."""
+
+    def __init__(self, keyword: bool) -> None:
+        self.keyword = keyword
+
+    async def search(self, *args, **kwargs):
+        key, retriever = ("fts_rank", "fts") if self.keyword else ("child_chunk_semantic_search_score", "semantic")
+        return [
+            Hit(
+                page_content=f"child {i}",
+                metadata={"section_id": f"p{i}", "retriever": retriever, key: (10 - i) if self.keyword else i / 10},
+            )
+            for i in range(1, 11)
+        ]
+
+
+class RecordingReranker:
+    def __init__(self) -> None:
+        self.calls: list[tuple[list[str], list[str]]] = []
+
+    async def rerank(self, queries, texts, timeout_s):
+        self.calls.append((list(queries), list(texts)))
+        return sorted(((0.9, t) for t in set(texts)), reverse=True)
+
+
+TEN_PARENTS = Sections({f"p{i}": Section(f"p{i}", f"Parent {i}", {"filename": f"f{i}.pdf"}) for i in range(1, 11)})
+
+
+def test_rerank_pairs_bounded() -> None:
+    pre_rerank_k, rerank_queries = 4, 2
+    reranker = RecordingReranker()
+    service = make_service(
+        Legs(False), Legs(True), TEN_PARENTS, reranker, pre_rerank_k=pre_rerank_k, rerank_queries=rerank_queries
+    )
+    asyncio.run(service.retrieve(["standalone", "analysis", "other"], question="q"))
+    ((queries, texts),) = reranker.calls
+    assert queries == ["standalone", "analysis"]  # the standalone question, then the first analysis query
+    assert len(texts) == 2 * pre_rerank_k  # the cut children and their parents
+    assert len(texts) * len(queries) <= 2 * pre_rerank_k * rerank_queries
+
+
+def test_the_cut_keeps_the_best_fused_children_over_all_queries() -> None:
+    reranker = RecordingReranker()
+    service = make_service(Legs(False), Legs(True), TEN_PARENTS, reranker, pre_rerank_k=3, rerank_queries=1)
+    asyncio.run(service.retrieve(["q1", "q2"], question="q"))
+    # child 1 is the nearest and the best keyword match; the semantic and keyword order agree, so 1, 2 and 3 stay
+    assert {t for t in reranker.calls[0][1] if t.startswith("child")} == {"child 1", "child 2", "child 3"}
+
+
+def test_without_the_fusion_cut_every_child_and_query_reaches_the_reranker() -> None:
+    reranker = RecordingReranker()
+    service = make_service(
+        Legs(False), Legs(True), TEN_PARENTS, reranker, pre_rerank_k=3, rerank_queries=1, fusion_cut=False
+    )
+    asyncio.run(service.retrieve(["q1", "q2"], question="q"))
+    queries, texts = reranker.calls[0]
+    assert queries == ["q1", "q2"] and len([t for t in texts if t.startswith("child")]) == 10

@@ -43,6 +43,8 @@ class Switches(ProfileModel):
     acronyms: bool = (
         True  # the keyword search widens a named acronym to its group (acronyms.yaml); off = the words as asked
     )
+    fusion_cut: bool = True  # each query's legs are fused and the card's pre_rerank_k hits go to the reranker, scored
+    # against its rerank_queries first queries; off = every hit of every leg, scored against every query
 
 
 class Retrieval(ProfileModel):
@@ -52,6 +54,8 @@ class Retrieval(ProfileModel):
     keyword_k: int = Field(gt=0)
     fts_extra_stopwords: tuple[str, ...]
     semantic_max_distance: float | None
+    # w of fused = w * semantic + (1 - w) * lexical, each leg min-max normalised per query; 0.5 until a bake-off tunes it
+    fusion_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     rerank: Rerank
     switches: Switches = Switches()
 
