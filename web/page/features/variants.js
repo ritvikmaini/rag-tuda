@@ -27,7 +27,7 @@ export function renderTabs(view, turn) {
 }
 
 export async function startVariant(turn, view, name) {
-    if (state.live !== null || view.switching || !turn.id || !Object.prototype.hasOwnProperty.call(VARIANT_LABELS, name) || name === "original") return;
+    if (state.live !== null || view.switching || !turn.id || typeof VARIANT_LABELS[name] !== "string" || name === "original") return;
     if (!Array.isArray(turn.versions) || !turn.versions.length) {
         turn.versions = [{ name: "original", answer: turn.answer, citations: turn.citations, shape: shapeName(turn.shape) }];
     }

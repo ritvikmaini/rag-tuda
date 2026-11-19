@@ -133,6 +133,9 @@ test("the page language: stored choice, else browser, else German; the switch ch
     assert.equal(DEGREE_NAMES.promotion, "Doctorate");
     assert.equal(VARIANT_LABELS.table, "Table");
     assert.equal(VARIANT_LABELS.original, "Original");
+    // a variant is known by its label being a string: the table is a Proxy, so hasOwnProperty finds nothing in it
+    assert.equal(Object.prototype.hasOwnProperty.call(VARIANT_LABELS, "shorter"), false);
+    assert.deepEqual(["shorter", "english", "constructor"].map(name => typeof VARIANT_LABELS[name]), ["string", "string", "function"]);
     assert.deepEqual(menuEntries({ id: "a", answer: "Text [1]", state: "done", citations: [{ n: 1 }], shape: "text" }, true)
         .map(group => group.label), ["Form", "Length", "Language", "Export"]);
     // anything but de/en is German
