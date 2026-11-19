@@ -38,6 +38,7 @@ from rag_core.domain.status_groups import (
     source_group,
 )
 
+from assistant_api.graph.filter_line import no_match_line
 from assistant_api.graph.history import as_messages, insert_history, to_messages
 from assistant_api.graph.state import AgentState, GraphDeps
 
@@ -174,6 +175,7 @@ def make_generate(deps: GraphDeps):
             "shape_reminder": shape_reminder(state),
         }
         sources: list[Any] = []
+        no_match = ""  # the closing line of an answer to an empty search under a filter
         groups = profile.status_groups
         table = groups.groups
         status_on = bool(table) and (
@@ -238,6 +240,14 @@ def make_generate(deps: GraphDeps):
                     logger.warning(f"[StatusGroups] reminder_failed={type(exc).__name__}")
             prompt = await asyncio.to_thread(answer_prompt, "rag-generation", fitted["history"], variables, position)
         else:
+            # the search found nothing: the answer will say under which filter
+            english = answer_language(state) == "Englisch"
+            no_match = no_match_line(
+                state.get("filter"),
+                deps.roles,
+                (deps.messages_en if english and deps.messages_en else deps.messages).answer,
+                english,
+            )
             prompt = await asyncio.to_thread(answer_prompt, "no-docs-found", history, variables, position)
         try:
             llm = deps.answer_llm
@@ -251,7 +261,9 @@ def make_generate(deps: GraphDeps):
                 max_wait_s=deps.card.timeouts.idle_s,
             )
             usage = usage_of(response)
-            if holds_answer(state):
+            if no_match:
+                response = AIMessage(content=str(response.content) + "\n\n" + no_match)
+            elif holds_answer(state):
                 try:
                     reply = past_event_reply(
                         str(response.content), variables["context"], datetime.now().date(), deps.messages.answer

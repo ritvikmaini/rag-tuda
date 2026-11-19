@@ -69,6 +69,16 @@ class AnswerMessages(_Texts):
     scope_differ: str = ""
     scope_note_one: str = ""
     scope_note_other: str = ""
+    # the line that closes an answer to a search that found nothing under a hard filter: no_match names the filter's one part
+    # ({filter}), no_match_more its first part and the others ({first}, {rest}); the parts are the programmes ({labels}) or the
+    # degree, and the PO years ({years}). Empty: the answer is left as the model wrote it.
+    no_match: str = ""
+    no_match_more: str = ""
+    filter_programmes: str = ""
+    filter_bachelor: str = ""
+    filter_master: str = ""
+    filter_promotion: str = ""
+    filter_po: str = ""
 
 
 class DocsMessages(_Texts):
@@ -106,6 +116,7 @@ class AssistantSettings:
     prompts: dict[str, PromptText]
     profile_dir: Path
     roles: Roles | None = None  # roles.yaml beside the profile, when it has one
+    messages_en: Messages | None = None  # messages.en.yaml beside the profile, when it has one
 
     @property
     def guard(self) -> Guard:
@@ -154,6 +165,12 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Pa
     prompts = load_profile_prompts(profile_file.parent / "prompts")
     roles_file = profile_file.parent / "roles.yaml"
     roles = load_profile(Roles, roles_file) if roles_file.exists() else None
+    english_file = profile_file.parent / "messages.en.yaml"
+    english = (
+        Messages.model_validate(yaml.safe_load(english_file.read_text(encoding="utf-8")))
+        if english_file.exists()
+        else None
+    )
     return AssistantSettings(
-        profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent, roles
+        profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent, roles, english
     )

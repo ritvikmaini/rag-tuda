@@ -142,6 +142,7 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
         roles=rt.settings.roles.model_dump() if rt.settings.roles else None,
         card=rt.settings.card,
         messages=rt.settings.messages,
+        messages_en=rt.settings.messages_en,
         prompts=rt.prompts,
         analysis=rt.analysis,
         answer_llm=rt.answer_llm,

@@ -10,6 +10,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 from langchain_core.documents import Document
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage
@@ -868,3 +869,54 @@ def test_the_analysis_step_resolves_the_filter_from_the_question_the_chips_and_t
 def test_without_the_switch_or_roles_there_is_no_filter_at_all() -> None:
     assert filtered_state("Was gilt in der PO 2015?", switch=False)["filter"] is None
     assert filtered_state("Was gilt in der PO 2015?", roles=False)["filter"] is None
+
+
+def no_docs_text(question: str, chips=None, roles=True, previous=None) -> str:
+    """The reply of a run over the TU profile's roles and messages (German and English) whose search finds nothing."""
+    from rag_core.settings.profile import Roles
+
+    tu = Path(__file__).resolve().parents[2] / "profiles" / "tu-informatik"
+    load = lambda name: Messages.model_validate(yaml.safe_load((tu / name).read_text(encoding="utf-8")))  # noqa: E731
+    base = deps("lookup")
+    graph = build_graph(
+        dataclasses.replace(
+            base,
+            messages=load("messages.de.yaml"),
+            messages_en=load("messages.en.yaml"),
+            roles=load_profile(Roles, tu / "roles.yaml").model_dump() if roles else None,
+            retrieval=Titled(),
+            answer_llm=GenericFakeChatModel(messages=iter([AIMessage(content="Dazu steht nichts in den Dokumenten.")])),
+        )
+    )
+    inputs = {
+        "messages": [question_message(question, None, datetime.now(timezone.utc))],
+        "variant": None,
+        "formats": "",
+        "filter": previous,
+    }
+    final = asyncio.run(graph.ainvoke(inputs, config={"configurable": {"thread_id": "t", "chips": chips}}))
+    return str(final["generation"])
+
+
+def test_an_empty_result_names_the_applied_filter_in_the_questions_language() -> None:
+    from rag_core.domain.filters import Chips
+
+    master = Chips("master", "msc-informatik", 2015)
+    assert no_docs_text("Wann ist die Anmeldung?", master) == (
+        "Dazu steht nichts in den Dokumenten.\n\nFür den M.Sc. Informatik, PO 2015, habe ich nichts gefunden."
+    )
+    assert no_docs_text(ENGLISH_QUESTION, master).endswith("\n\nI found nothing for the M.Sc. Informatik, PO 2015.")
+    # what the filter names, whatever way it was set: the degree alone, the PO alone, the previous turn's filter
+    assert no_docs_text("Wann?", Chips(degree="master")).endswith("\n\nFür den Master habe ich nichts gefunden.")
+    assert no_docs_text("Wann?", Chips(po=2015)).endswith("\n\nFür PO 2015 habe ich nichts gefunden.")
+    carried = Filter(programme=("msc-informatik", "msc-computer-science"), po_version=(2015, 2023))
+    assert no_docs_text("Und wann?", previous=carried).endswith(
+        "\n\nFür den M.Sc. Informatik / M.Sc. Computer Science, PO 2015/2023, habe ich nichts gefunden."
+    )
+
+
+def test_an_empty_result_without_a_named_filter_gets_no_line() -> None:
+    from rag_core.domain.filters import Chips
+
+    for text in (no_docs_text("Wann?", Chips()), no_docs_text("Wann?", roles=False)):
+        assert text == "Dazu steht nichts in den Dokumenten."

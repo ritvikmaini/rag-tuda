@@ -36,6 +36,7 @@ def runtime() -> types.SimpleNamespace:
             model_servers=types.SimpleNamespace(reranker_url="http://reranker_service:8003"),
         ),
         messages=None,
+        messages_en=None,
         roles=None,
         card=types.SimpleNamespace(
             timeouts=types.SimpleNamespace(deadline_s=0), budget=types.SimpleNamespace(final_k=8)

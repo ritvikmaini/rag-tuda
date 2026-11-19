@@ -15,6 +15,14 @@ answer:
   past_event: The date named in the documents, {dates}, has already passed
   past_events: The dates named in the documents, {dates}, have already passed
   no_newer_event: "; the documents name no later date"
+  # closes an answer to a search that found nothing under a filter; {filter}, {first}, {rest}: what the filter names
+  no_match: "I found nothing for {filter}."
+  no_match_more: "I found nothing for {first}, {rest}."
+  filter_programmes: "the {labels}"
+  filter_bachelor: the Bachelor
+  filter_master: the Master
+  filter_promotion: the doctorate
+  filter_po: "PO {years}"
 docs:
   none: "Note: No sources were used for this answer!"
 labels:

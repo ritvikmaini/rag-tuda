@@ -72,3 +72,6 @@ class GraphDeps:
     roles: Optional[dict[str, Any]] = (
         None  # the dump of roles.yaml (plain data for the filter readers); None without the file
     )
+    messages_en: Optional[Messages] = (
+        None  # the profile's English texts, for the lines code appends to an English answer
+    )
