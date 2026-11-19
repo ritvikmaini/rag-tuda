@@ -60,11 +60,24 @@ def lines(
     compare=True,
     differ=True,
     version_table=False,
-    conj="sowie",
+    plain=True,
+    degrees=(),
+    english=False,
 ):
     shown = top if shown is None else shown
     return scope_lines(
-        GROUPS, scope_, asked, top, shown, TEXTS, compare=compare, differ=differ, version_table=version_table, conj=conj
+        GROUPS,
+        scope_,
+        asked,
+        top,
+        shown,
+        TEXTS,
+        compare=compare,
+        differ=differ,
+        version_table=version_table,
+        plain=plain,
+        degrees=degrees,
+        english=english,
     )
 
 
@@ -72,6 +85,11 @@ def test_master_question_reads_master_group():
     # the group word inside a compound, a generic "student" beside it, and the source side's typed degree agree
     assert scope("Ich bin Masterstudent, wie viele Credits brauche ich?") == Scope(SELF, frozenset({"master"}), False)
     assert scope("Als Masterstudierende: bis wann muss ich mich zurückmelden?").groups == {"master"}
+    # the generic group the asker names yields to the subgroup the text names
+    assert scope("Ich bin Student im Master, wie viele Credits brauche ich?") == Scope(
+        SELF, frozenset({"master"}), False
+    )
+    assert scope("Ich bin Student, wie viele Credits brauche ich?").groups == {"studierende"}
     assert scope("Wie viele Credits hat die Master-Thesis?").kind == SUBJECT
     assert scope("Wann ist die Rückmeldefrist?") == Scope(GENERAL, frozenset(), False)
     assert source_group(MASTER, GROUPS) == "master"
@@ -144,9 +162,32 @@ def test_two_sides_in_one_question_compare():
 
 def test_compare_labels_name_the_asked_groups_only():
     assert compare_labels(GROUPS, {"bachelor", "master"}) == "Bachelor-Studierende sowie Master-Studierende"
-    assert compare_labels(GROUPS, {"master", "promotion"}, "and") == "Master-Studierende and Promovierende"
-    # one asked group is contrasted with the top group of the other question-side (not a programme)
+    assert compare_labels(GROUPS, {"master", "promotion"}, english=True) == "Master students and Doctoral candidates"
+    # one asked subgroup is contrasted with its sibling, a top group with the top group of the other question-side
+    # (never a programme)
+    assert compare_labels(GROUPS, {"master"}) == "Master-Studierende sowie Bachelor-Studierende"
+    assert compare_labels(GROUPS, {"bachelor"}) == "Bachelor-Studierende sowie Master-Studierende"
     assert compare_labels(GROUPS, {"promotion"}) == "Promovierende sowie Studierende"
+    assert compare_labels(GROUPS, {"bachelor"}, english=True) == "Bachelor students and Master students"
+    assert compare_labels(GROUPS, set()) == ""
+
+
+def test_compare_labels_never_name_a_group_the_filter_excluded():
+    # "Does this also apply to master students?" is filtered to the master: nothing else is compared
+    assert compare_labels(GROUPS, {"master"}, ["master"]) == ""
+    assert compare_labels(GROUPS, {"bachelor"}, ["bachelor"]) == ""
+    # a comparison of the two degrees under a one-degree filter leaves one group, whose contrast is excluded as well
+    assert compare_labels(GROUPS, {"bachelor", "master"}, ["master"]) == ""
+    assert compare_labels(GROUPS, {"bachelor", "master"}, ["bachelor", "master"]) == (
+        "Bachelor-Studierende sowie Master-Studierende"
+    )
+    # the filter's degrees may include the parent's other side
+    assert (
+        compare_labels(GROUPS, {"master", "promotion"}, ["master", "promotion"])
+        == "Master-Studierende sowie Promovierende"
+    )
+    assert compare_labels(GROUPS, {"promotion"}, ["promotion", "master"]) == "Promovierende sowie Studierende"
+    assert compare_labels(GROUPS, {"promotion"}, ["promotion"]) == ""
     assert label_of_side(GROUPS, "studium") == "Studierende"
     assert label_of_side(GROUPS, "nowhere") == "nowhere"
     assert join_labels(["a", "b", "c"], "and") == "a, b and c"
@@ -169,16 +210,17 @@ def test_compare_line_for_two_versions():
     assert lines(asked=(2015, 2023)) == ["versions: PO 2023 sowie PO 2015"]
     assert lines(asked=(2015, 2023), compare=False) == []
     assert lines(asked=(2023,)) == []
-    # a comparison of groups gets its labels; naming two versions as well does not add a second line
+    # a comparison of groups gets its labels, and the versions line beside it
     both = lines(Scope(COMPARE, frozenset({"bachelor", "master"}), False), asked=(2015, 2023))
-    assert both == ["compare: Bachelor-Studierende sowie Master-Studierende"]
+    assert both == ["compare: Bachelor-Studierende sowie Master-Studierende", "versions: PO 2023 sowie PO 2015"]
     assert lines(Scope(COMPARE, frozenset(), False)) == []
     # a question naming no version whose best sources carry two names each version
     assert lines(top=[BACHELOR, BACHELOR_OLD]) == ["versions: PO 2023 sowie PO 2015"]
     assert lines(Scope(SELF, frozenset({"bachelor"}), False), top=[BACHELOR, BACHELOR_OLD]) == [
         "versions: PO 2023 sowie PO 2015"
     ]
-    assert lines(top=[BACHELOR, BACHELOR_OLD], differ=False) == []
+    assert lines(top=[BACHELOR, BACHELOR_OLD], compare=False, differ=False) == []  # both switches off: no line
+    assert lines(top=[BACHELOR, BACHELOR_OLD], differ=False) == ["versions: PO 2023 sowie PO 2015"]
     # sources of two degrees: the groups line, once; both axes: both lines
     assert lines(top=[BACHELOR, MASTER]) == ["differ"]
     assert lines(top=[BACHELOR_OLD, MASTER]) == ["differ", "versions: PO 2023 sowie PO 2015"]
@@ -188,7 +230,27 @@ def test_compare_line_for_two_versions():
     assert lines(top=[BACHELOR, BACHELOR]) == []
     # the groups line is for general questions; a question about the asker's own group is not told to separate groups
     assert lines(Scope(SELF, frozenset({"master"}), False), top=[BACHELOR, MASTER]) == []
-    assert lines(asked=(2015, 2023), conj="and") == ["versions: PO 2023 and PO 2015"]
+    assert lines(asked=(2015, 2023), english=True) == ["versions: PO 2023 and PO 2015"]
+
+
+def test_versions_line_runs_beside_a_group_comparison_and_for_every_shape():
+    comparison = Scope(COMPARE, frozenset({"bachelor", "master"}), False)
+    old_and_new = [BACHELOR, BACHELOR_OLD]
+    assert lines(comparison, top=old_and_new) == [
+        "compare: Bachelor-Studierende sowie Master-Studierende",
+        "versions: PO 2023 sowie PO 2015",
+    ]
+    # a shaped answer (steps, ...) names its versions; the group line for general questions and the table are plain only
+    assert lines(top=[BACHELOR_OLD, MASTER], plain=False) == ["versions: PO 2023 sowie PO 2015"]
+    assert lines(top=old_and_new, version_table=True, plain=False) == ["versions: PO 2023 sowie PO 2015"]
+    # a contact question still names the versions of its sources
+    assert lines(Scope(GENERAL, frozenset(), True), top=old_and_new) == ["versions: PO 2023 sowie PO 2015"]
+    # the compare line follows the filter: a lone master under a master filter gets none, the versions line stays
+    lone = Scope(COMPARE, frozenset({"master"}), False)
+    assert lines(lone, top=old_and_new, degrees=["master"]) == ["versions: PO 2023 sowie PO 2015"]
+    assert lines(lone, degrees=["master"]) == []
+    assert lines(lone) == ["compare: Master-Studierende sowie Bachelor-Studierende"]
+    assert lines(lone, english=True) == ["compare: Master students and Bachelor students"]
 
 
 def test_version_table_only_when_gated():

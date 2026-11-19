@@ -42,13 +42,13 @@ programmes:
 # groups are read from the documents' typed metadata, not from question words.
 groups:
   studierende:
-    {label: Studierende, side: studium, ask: [student, studierend]}
+    {label: Studierende, label_en: Students, side: studium, ask: [student, studierend]}
   bachelor:
-    {label: Bachelor-Studierende, side: studium, part_of: studierende, ask: [bachelor, bsc, bachelorstudent, bachelorstudierend]}
+    {label: Bachelor-Studierende, label_en: Bachelor students, side: studium, part_of: studierende, ask: [bachelor, bsc, bachelorstudent, bachelorstudierend]}
   master:
-    {label: Master-Studierende, side: studium, part_of: studierende, ask: [master, msc, masterstudent, masterstudierend]}
+    {label: Master-Studierende, label_en: Master students, side: studium, part_of: studierende, ask: [master, msc, masterstudent, masterstudierend]}
   promotion:
-    {label: Promovierende, side: promotion, ask: [promovierend, promovend, doktorand, doctoral, phd]}
+    {label: Promovierende, label_en: Doctoral candidates, side: promotion, ask: [promovierend, promovend, doktorand, doctoral, phd]}
   bsc-informatik:
     {label: B.Sc. Informatik, side: programm}
   msc-informatik:

@@ -17,6 +17,8 @@ class Group(Protocol):
     @property
     def label(self) -> str: ...  # the group's name in the answer texts
     @property
+    def label_en(self) -> str | None: ...  # its name in English answer texts; None = the label
+    @property
     def side(self) -> str: ...  # the groups of one side are contrasted with those of the other sides
     @property
     def part_of(self) -> str | None: ...  # the parent group of a subgroup
@@ -178,7 +180,9 @@ def _read(text: str, groups: Groups) -> _Read:
         for word in pattern.findall(low):
             after_for |= _token_groups(word, groups, True)
     keyword = any(w in low for w in COMPARE_WORDS) or SOWOHL_ALS_AUCH.search(low) is not None
-    mentioned, own, named = _specific(heard, groups), _specific(self_named, groups), _specific(after_for, groups)
+    mentioned, named = _specific(heard, groups), _specific(after_for, groups)
+    # "Ich bin Student im Master": the generic group the asker names yields to the subgroup the text names
+    own = _specific(self_named | {m for m in mentioned if groups[m].part_of in self_named}, groups)
     everything = _specific(mentioned | own | named, groups)
     contact = any(w in low for w in CONTACT_WORDS)
     if named or (keyword and everything) or len(_sides(groups, everything)) > 1:
@@ -280,14 +284,32 @@ def join_labels(labels: Sequence[str], conj: str = "sowie") -> str:
     return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + f" {conj} " + labels[-1]
 
 
-def compare_labels(groups: Groups, asked: Iterable[str], conj: str = "sowie") -> str:
-    """The labels of the asked groups, plus the top group of every other side when a single group is asked."""
-    keys = [k for k in groups if k in set(asked)]
-    covered = _sides(groups, keys)
-    labels = [groups[k].label for k in keys]
-    if len(keys) < 2 and len(covered) < 2:
-        labels += [label_of_side(groups, s) for s in _asked_sides(groups) if s not in covered]
-    return join_labels(labels, conj)
+def compare_labels(groups: Groups, asked: Iterable[str], degrees: Iterable[str] = (), english: bool = False) -> str:
+    """The labels of the groups an answer compares, "" when fewer than two remain. A group the question's hard filter
+    (`degrees`, the filter's degree groups; empty = none) excluded is never named: retrieval holds nothing for it. A single
+    asked group is contrasted with its siblings (the other subgroups of its parent) or, for a top group, with the top group
+    of every other side a question can name; a contrast the filter excluded is dropped."""
+    kept = set(degrees)
+
+    def allowed(key: str) -> bool:
+        return not kept or key in kept or any(groups[d].part_of == key for d in kept if d in groups)
+
+    keys = [k for k in groups if k in set(asked) and allowed(k)]
+    if len(keys) == 1:
+        group = groups[keys[0]]
+        if group.part_of:
+            contrast = [k for k, g in groups.items() if g.part_of == group.part_of and k != keys[0]]
+        else:
+            tops: dict[str, str] = {}
+            for k, g in groups.items():
+                if not g.part_of and g.side in _asked_sides(groups):
+                    tops.setdefault(g.side, k)  # the first top group of the side
+            contrast = [k for side, k in tops.items() if side != group.side]
+        keys += [k for k in contrast if allowed(k)]
+    if len(keys) < 2:
+        return ""
+    names = [(groups[k].label_en if english else None) or groups[k].label for k in keys]
+    return join_labels(names, "and" if english else "sowie")
 
 
 @dataclass(frozen=True)
@@ -354,32 +376,31 @@ def scope_lines(
     compare: bool,
     differ: bool,
     version_table: bool,
-    conj: str = "sowie",
+    plain: bool = True,
+    degrees: Iterable[str] = (),
+    english: bool = False,
 ) -> list[str]:
-    """The prompt lines for a question and the metadata of its sources:
-    - compare: a comparison of groups names their labels; else a question naming two PO versions names the versions;
-    - differ: a general question (no contact) whose best sources (`top`) are for different groups or programmes asks to
-      tell the groups apart, and best sources of more than one PO version ask to name each version (for any question
-      that compares nothing);
-    - version_table: sources in the context (`shown`) of more than one PO version ask for the versions side by side, one row each.
-    Each switch is the caller's decision; a text the profile leaves empty drops its line."""
-    asked = sorted(set(asked_versions), reverse=True)
+    """The prompt lines for a question and the metadata of its sources, in this order:
+    - compare (switch `compare`): a comparison of groups names the groups still in the question's filter (`degrees`);
+    - differ (switch `differ`, plain-text answers): a general question (no contact) whose best sources (`top`) are for
+      different groups or programmes asks to tell the groups apart;
+    - versions (either switch, any answer shape): PO versions the question names (two or more) or, else, the best sources
+      carry (more than one) ask to name each version, beside any group line;
+    - version table (switch `version_table`, plain-text answers): sources in the context (`shown`) of more than one PO
+      version ask for the versions side by side, one row each.
+    The switches are the caller's decision; a text the profile leaves empty drops its line."""
     lines: list[str] = []
-
-    def versions_line(years: Sequence[int]) -> None:
-        if texts.scope_versions:
-            lines.append(texts.scope_versions.format(versions=join_labels([f"PO {y}" for y in years], conj)))
-
-    if compare and scope.kind == COMPARE and scope.groups:
-        if texts.scope_compare:
-            lines.append(texts.scope_compare.format(groups=compare_labels(groups, scope.groups, conj)))
-    elif compare and len(asked) > 1:
-        versions_line(asked)
-    elif differ and not scope.contact:
-        if scope.kind == GENERAL and sources_differ(top, groups) and texts.scope_differ:
+    if compare and scope.kind == COMPARE and texts.scope_compare:
+        if labels := compare_labels(groups, scope.groups, degrees, english):
+            lines.append(texts.scope_compare.format(groups=labels))
+    if differ and plain and not scope.contact and scope.kind == GENERAL and texts.scope_differ:
+        if sources_differ(top, groups):
             lines.append(texts.scope_differ)
-        if len(years := versions_of(top)) > 1:
-            versions_line(years)
-    if version_table and len(versions_of(shown)) > 1 and texts.version_table:
+    asked = sorted(set(asked_versions), reverse=True)
+    years = asked if compare and len(asked) > 1 else versions_of(top)
+    if (compare or differ) and len(years) > 1 and texts.scope_versions:
+        names = join_labels([f"PO {y}" for y in years], "and" if english else "sowie")
+        lines.append(texts.scope_versions.format(versions=names))
+    if version_table and plain and len(versions_of(shown)) > 1 and texts.version_table:
         lines.append(texts.version_table)
     return lines

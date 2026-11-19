@@ -193,6 +193,7 @@ class StatusGroup(ProfileModel):
     """One status group (a row of roles.yaml's group table); the words are lowercase."""
 
     label: str  # the group's name in the answer texts
+    label_en: str | None = None  # its name in English answer texts; null = the label
     side: str  # the groups of one side are contrasted with those of the other sides, never a subgroup with its parent
     part_of: str | None = None  # the parent group of a subgroup (a key of the table)
     ask: tuple[str, ...] = ()  # question words: at a word start or the end of a compound ("Verwaltungsbeamtin")

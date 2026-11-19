@@ -167,6 +167,7 @@ def make_generate(deps: GraphDeps):
             "language_reminder": language_reminder(state),
             "shape_reminder": shape_reminder(state),
         }
+        english = answer_language(state) == "Englisch"
         sources: list[Any] = []
         no_match = ""  # the closing line of an answer to an empty search under a filter
         groups = profile.status_groups
@@ -204,9 +205,16 @@ def make_generate(deps: GraphDeps):
                         (d for d in candidates if (d.metadata or {}).get("section_id") in ids), key=rank_score
                     )
                     top = [d.metadata for d in best[::-1][: groups.reminder_sources]]
-                    english = answer_language(state) == "Englisch"
                     applied = state.get("filter")
-                    plain = shape_of(state.get("answer_shape")) == "text"
+                    programmes = (deps.roles or {}).get("programmes") or {}
+                    degrees = (
+                        {
+                            *(applied.degree or ()),
+                            *(programmes[p]["degree"] for p in (applied.programme or ()) if p in programmes),
+                        }
+                        if applied
+                        else set()
+                    )
                     lines = scope_lines(
                         table,
                         scope,
@@ -215,9 +223,11 @@ def make_generate(deps: GraphDeps):
                         shown,
                         (deps.messages_en if english and deps.messages_en else deps.messages).answer,
                         compare=groups.compare,
-                        differ=groups.reminder == "differ" and plain,
-                        version_table=deps.card.gated.version_table and plain,
-                        conj="and" if english else "sowie",
+                        differ=groups.reminder == "differ",
+                        version_table=deps.card.gated.version_table,
+                        plain=shape_of(state.get("answer_shape")) == "text",
+                        degrees=degrees,
+                        english=english,
                     )
                     if lines:
                         variables["scope_reminder"] = "\n".join(lines)
@@ -226,7 +236,6 @@ def make_generate(deps: GraphDeps):
             prompt = await asyncio.to_thread(answer_prompt, "rag-generation", fitted["history"], variables, position)
         else:
             # the search found nothing: the answer will say under which filter
-            english = answer_language(state) == "Englisch"
             no_match = no_match_line(
                 state.get("filter"),
                 deps.roles,

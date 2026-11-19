@@ -39,7 +39,7 @@ def doc(section_id: str, **columns) -> Document:
 
 
 def sent_user_message(
-    docs, *, gated: bool, question: str = QUESTION, applied: Filter | None = None, shape="text"
+    docs, *, gated: bool, question: str = QUESTION, applied: Filter | None = None, shape="text", english=False
 ) -> str:
     """The user message the node sends to the model for sources with the given typed columns."""
     seen = []
@@ -56,7 +56,9 @@ def sent_user_message(
         ),
         card=card.model_copy(update={"gated": Gated(iterative_retrieval=False, version_table=gated)}),
         messages=Messages.model_validate(yaml.safe_load((TU / "messages.de.yaml").read_text(encoding="utf-8"))),
-        messages_en=None,
+        messages_en=Messages.model_validate(yaml.safe_load((TU / "messages.en.yaml").read_text(encoding="utf-8")))
+        if english
+        else None,
         prompts=PromptService(load_profile_prompts(EXAMPLE / "prompts")),
         answer_llm=Model(),
         counter=Counter(),
@@ -71,6 +73,7 @@ def sent_user_message(
         "standalone_question": question,
         "answer_shape": shape,
         "filter": applied,
+        "language": "Englisch" if english else "Deutsch",
     }
     asyncio.run(make_generate(deps)(state, {}))  # pyright: ignore[reportArgumentType]  # stand-ins for GraphDeps and AgentState
     return seen[0][-1].content
@@ -99,3 +102,36 @@ def test_the_differ_and_compare_lines_run_whatever_the_gate():
     assert "PO 2023 sowie PO 2015" in named
     compare = sent_user_message(degrees, gated=False, question="Was ist der Unterschied zwischen Bachelor und Master?")
     assert "Bachelor-Studierende sowie Master-Studierende" in compare
+
+
+def test_the_compare_line_agrees_with_the_applied_filter():
+    docs = [doc("a", degree=["master"], po_version=[2023])]
+    question = "Gilt das auch für Master-Studierende?"
+    # the question reads as a comparison of the master alone; the filter holds nothing else, so nothing else is compared
+    assert "vergleicht" not in sent_user_message(
+        docs, gated=False, question=question, applied=Filter(degree=("master",))
+    )
+    # a programme filter carries its degree
+    msc = Filter(programme=("msc-informatik",))
+    assert "vergleicht" not in sent_user_message(docs, gated=False, question=question, applied=msc)
+    # no filter: the master is contrasted with the bachelor
+    assert "vergleicht Master-Studierende sowie Bachelor-Studierende" in sent_user_message(
+        docs, gated=False, question=question
+    )
+
+
+def test_every_shape_names_the_versions_of_its_sources():
+    versions = [doc("a", po_version=[2023]), doc("b", po_version=[2015])]
+    message = sent_user_message(versions, gated=True, shape="steps")
+    assert "PO 2023 sowie PO 2015" in message
+    assert "Zeile je Version" not in message
+
+
+def test_an_english_answer_gets_the_english_lines_and_labels():
+    degrees = [doc("a", degree=["bachelor"], po_version=[2023]), doc("b", degree=["master"], po_version=[2015])]
+    message = sent_user_message(
+        degrees, gated=True, question="What is the difference between bachelor and master?", english=True
+    )
+    assert "The question compares Bachelor students and Master students." in message
+    assert "PO 2023 and PO 2015" in message
+    assert "one row per version" in message
