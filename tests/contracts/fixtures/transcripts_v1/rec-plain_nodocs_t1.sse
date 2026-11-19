@@ -1,4 +1,4 @@
-data: {"type": "meta", "content": {"format": 1, "turn_id": "fe26458b-2add-4d1b-a55e-d5fe85a5daa3", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+data: {"type": "meta", "content": {"format": 1, "turn_id": "1ce3122d-0580-4f3c-a71e-53b365d5fe67", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
 
 data: {"type": "status", "content": {"step": "analysing"}}
 

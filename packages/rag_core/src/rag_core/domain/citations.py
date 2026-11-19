@@ -14,6 +14,7 @@ from rag_core.domain.source_meta import strip_source_text
 
 QUOTE_CHARS = 200
 WHITESPACE = re.compile(r"\s+")
+HEADING_MARKER = re.compile(r"^[ \t]*#+[ \t]+", re.MULTILINE)  # a Markdown heading's '## ' at the start of a line
 
 
 def _metadata(doc):
@@ -44,7 +45,7 @@ def _quotes(docs):
         if len(metas) != 1:
             continue  # the degraded path (parent lookup failed) can repeat IDs
         text = child_body(metas[0], str(metas[0].get("matched_child_text") or ""))  # no '<title>: ' or context header
-        text = WHITESPACE.sub(" ", strip_source_text(text)).strip()
+        text = WHITESPACE.sub(" ", HEADING_MARKER.sub("", strip_source_text(text))).strip()
         if text:
             quotes[section_id] = _cut(text)
     return quotes

@@ -137,3 +137,9 @@ def test_frames_are_ascii_json_like_the_other_frames():
     assert frame is not None and fr.encode(frame).isascii()
     assert content(frame)[0]["title"] == "Gebührenübersicht"
     assert content(frame)[0]["quote"] == "Größe … Maß"
+
+
+def test_quotes_drop_the_markdown_heading_markers_of_the_chunk():
+    chunk = "## § 2 Geltungsbereich\nDiese Ordnung gilt für Studierende.\n### (1) Absatz\nText # kein Marker."
+    [entry] = ct.entries([source(1, "a")], [doc("a", chunk)])
+    assert entry["quote"] == "§ 2 Geltungsbereich Diese Ordnung gilt für Studierende. (1) Absatz Text # kein Marker."

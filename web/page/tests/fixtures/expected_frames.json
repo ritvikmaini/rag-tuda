@@ -294,7 +294,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "632a4f4d-cb8e-4a55-a6f2-f0628e96a13b",
+    "turn_id": "4f736c34-b8c8-41fb-98d4-49a633ac84b2",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -376,7 +376,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:38:03",
       "part_index": 0,
       "po_version": [
        2015
@@ -422,7 +422,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:38:03",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -509,7 +509,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -572,7 +572,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "cd931d2b-d24e-4fe4-a13e-b0925347ce63",
+    "turn_id": "1b496455-5453-4332-9a9c-930de42cf62f",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -654,7 +654,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -700,7 +700,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -819,7 +819,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -853,7 +853,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "e81556c1-5b49-4271-a07f-241db6dd5f21",
+    "turn_id": "91a9efe3-9f1b-469b-a9d4-cd265e95604f",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -883,7 +883,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "853208e0-e064-4ad0-9fc2-3fb692f351bf",
+    "turn_id": "9b168423-89f7-4de9-a251-75ade4f58cb8",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -963,7 +963,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -1002,7 +1002,7 @@
       "doc_year": null,
       "filename": "Studienbüro – Kontakt und Sprechzeiten",
       "twin_key": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studienbuero/index#kontakt",
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "regulation": "info",
       "section_id": "4a47a3d48aa57297f76226a7754435d0",
@@ -1044,7 +1044,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "regulation": "info",
       "section_id": "e1e3352fa21974d3eea15f59f35570c6",
@@ -1225,7 +1225,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 3,
@@ -1259,7 +1259,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "b8866f1e-dbf8-40ea-ac6c-bc904d70a455",
+    "turn_id": "51e68e91-be03-4c9b-8754-21f6f5ed2d15",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -1341,7 +1341,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -1387,7 +1387,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -1494,7 +1494,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -1528,7 +1528,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "b8866f1e-dbf8-40ea-ac6c-bc904d70a455",
+    "turn_id": "51e68e91-be03-4c9b-8754-21f6f5ed2d15",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -1560,7 +1560,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "2fc31e07-cfe9-44d0-88da-19ab71400a3c",
+    "turn_id": "1f1c8886-2427-4598-a46b-a6c039a05b08",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -1634,7 +1634,7 @@
       "doc_year": null,
       "filename": "Prüfungen – Prüfungsanmeldung",
       "twin_key": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studienbuero/pruefungen/index#pruefungsanmeldung",
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "regulation": "info",
       "section_id": "41280beffa819ea55b12ca585c5d7d8b",
@@ -1677,7 +1677,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -1808,7 +1808,7 @@
      "type": "Information",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "",
-     "quote": "### Prüfungsanmeldung Zu jeder Prüfung melden Sie sich im Prüfungszeitraum online an. Eine Abmeldung ist bis eine Woche vor dem Termin möglich. Die Druckansicht dieser Seite ist…"
+     "quote": "Prüfungsanmeldung Zu jeder Prüfung melden Sie sich im Prüfungszeitraum online an. Eine Abmeldung ist bis eine Woche vor dem Termin möglich. Die Druckansicht dieser Seite ist…"
     },
     {
      "n": 2,
@@ -1842,7 +1842,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "619b75f0-f4ac-485c-905a-26c2ea452a68",
+    "turn_id": "4e1c18de-06cf-4a75-a733-7614f7281fea",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -1924,7 +1924,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -1970,7 +1970,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -2149,7 +2149,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -2183,7 +2183,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1",
+    "turn_id": "5b424aa4-8640-4b47-8e8b-aaadb9e0d766",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2265,7 +2265,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -2311,7 +2311,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -2418,7 +2418,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -2452,7 +2452,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1",
+    "turn_id": "5b424aa4-8640-4b47-8e8b-aaadb9e0d766",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2497,7 +2497,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -2530,7 +2530,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1",
+    "turn_id": "5b424aa4-8640-4b47-8e8b-aaadb9e0d766",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2587,7 +2587,7 @@
      "type": "Prüfungsordnung",
      "origin": "Department of Computer Science, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -2620,7 +2620,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1",
+    "turn_id": "5b424aa4-8640-4b47-8e8b-aaadb9e0d766",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2741,7 +2741,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -2774,7 +2774,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1",
+    "turn_id": "5b424aa4-8640-4b47-8e8b-aaadb9e0d766",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2801,7 +2801,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1",
+    "turn_id": "5b424aa4-8640-4b47-8e8b-aaadb9e0d766",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2829,7 +2829,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3f9cd056-8f20-49ce-9224-ab1687efbab6",
+    "turn_id": "0efa30ec-c2c4-4480-96bc-ac6c3e36f4e4",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -2913,7 +2913,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -2958,7 +2958,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "regulation": "info",
       "section_id": "e1e3352fa21974d3eea15f59f35570c6",
@@ -2995,7 +2995,7 @@
       "filename": "Allgemeine Prüfungsbestimmungen (Original)",
       "page_url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp",
       "file_hash": "e0342ddfbb8274b63dd713668ecafd6bd6c999899fffde24fbad07e490c28714",
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -3102,7 +3102,7 @@
      "type": "Information",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "",
-     "quote": "### Allgemeine Prüfungsbestimmungen Die Allgemeinen Prüfungsbestimmungen gelten für alle Studiengänge. Die Kopie auf dieser Seite stimmt mit dem Original der Universitätsverwaltung überein."
+     "quote": "Allgemeine Prüfungsbestimmungen Die Allgemeinen Prüfungsbestimmungen gelten für alle Studiengänge. Die Kopie auf dieser Seite stimmt mit dem Original der Universitätsverwaltung überein."
     },
     {
      "n": 3,
@@ -3112,7 +3112,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     }
    ]
   },
@@ -3136,7 +3136,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "ea9df73c-fd6b-4130-bc9b-f433915b213e",
+    "turn_id": "9f756eaa-cc4d-4cd4-a081-e5c161199fe2",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -3220,7 +3220,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -3265,7 +3265,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "regulation": "info",
       "section_id": "e1e3352fa21974d3eea15f59f35570c6",
@@ -3302,7 +3302,7 @@
       "filename": "Allgemeine Prüfungsbestimmungen (Original)",
       "page_url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp",
       "file_hash": "e0342ddfbb8274b63dd713668ecafd6bd6c999899fffde24fbad07e490c28714",
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -3409,7 +3409,7 @@
      "type": "Information",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "",
-     "quote": "### Allgemeine Prüfungsbestimmungen Die Allgemeinen Prüfungsbestimmungen gelten für alle Studiengänge. Die Kopie auf dieser Seite stimmt mit dem Original der Universitätsverwaltung überein."
+     "quote": "Allgemeine Prüfungsbestimmungen Die Allgemeinen Prüfungsbestimmungen gelten für alle Studiengänge. Die Kopie auf dieser Seite stimmt mit dem Original der Universitätsverwaltung überein."
     },
     {
      "n": 3,
@@ -3419,7 +3419,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     }
    ]
   },
@@ -3443,7 +3443,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "0bc50b71-955c-4cc4-bb79-376a4d9e7030",
+    "turn_id": "56462423-34db-4534-853c-e9e28c6681d6",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -3532,7 +3532,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -3577,7 +3577,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "regulation": "info",
       "section_id": "e1e3352fa21974d3eea15f59f35570c6",
@@ -3668,7 +3668,7 @@
      "type": "Information",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "",
-     "quote": "### Allgemeine Prüfungsbestimmungen Die Allgemeinen Prüfungsbestimmungen gelten für alle Studiengänge. Die Kopie auf dieser Seite stimmt mit dem Original der Universitätsverwaltung überein."
+     "quote": "Allgemeine Prüfungsbestimmungen Die Allgemeinen Prüfungsbestimmungen gelten für alle Studiengänge. Die Kopie auf dieser Seite stimmt mit dem Original der Universitätsverwaltung überein."
     },
     {
      "n": 2,
@@ -3678,7 +3678,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     }
    ]
   },
@@ -3702,7 +3702,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "a2eeceaf-fd9d-4c63-8ff7-8351b29a9fa6",
+    "turn_id": "51f97150-c7e0-461b-9f83-a65ee54aaf5e",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -3792,7 +3792,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "294b81ee-aea4-488d-95d8-648a53769aab",
+    "turn_id": "9df9a262-6ce3-4b69-b363-e31c26690a10",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -3869,7 +3869,7 @@
       "filename": "Allgemeine Prüfungsbestimmungen (Original)",
       "page_url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp",
       "file_hash": "e0342ddfbb8274b63dd713668ecafd6bd6c999899fffde24fbad07e490c28714",
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -3922,7 +3922,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -4039,7 +4039,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "c4f817ba-8631-407e-b917-8a0280c170ff",
+    "turn_id": "83c3eb24-6cc6-489e-a87f-725743c18469",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -4131,7 +4131,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -4189,7 +4189,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -4283,7 +4283,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -4317,7 +4317,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "fe26458b-2add-4d1b-a55e-d5fe85a5daa3",
+    "turn_id": "1ce3122d-0580-4f3c-a71e-53b365d5fe67",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -4430,7 +4430,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "9e72f06a-948a-4ac6-a914-d53a25ea5e03",
+    "turn_id": "a13b6780-de1e-42d6-9029-981a6546ba84",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -4512,7 +4512,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "part_index": 0,
       "po_version": [
        2015
@@ -4558,7 +4558,7 @@
       "programme": [
        "bsc-informatik"
       ],
-      "scrapedAt": "2026-11-19 13:52:52",
+      "scrapedAt": "2026-11-19 17:32:45",
       "paragraphs": [
        "§ 1",
        "§ 2",
@@ -4665,7 +4665,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,
@@ -4699,7 +4699,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "bc290061-7236-465a-a8ff-0f88957e63b3",
+    "turn_id": "4b9076a3-21d6-418b-a620-10ae50ccb199",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -4781,7 +4781,7 @@
    "type": "meta",
    "content": {
     "format": 1,
-    "turn_id": "3822975b-5f5a-4410-8e94-d435635e1b22",
+    "turn_id": "ca2514c7-3c75-4a8e-a920-4e35c18585cb",
     "trace_id": null,
     "deadline_s": 90.0,
     "idle_s": 5.0,
@@ -4846,7 +4846,7 @@
      "type": "Prüfungsordnung",
      "origin": "Fachbereich Informatik, TU Darmstadt",
      "date": "2015",
-     "quote": "### Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier…"
+     "quote": "Prüfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit beträgt sechs Semester, die Bachelor-Thesis wird in vier Monaten…"
     },
     {
      "n": 2,

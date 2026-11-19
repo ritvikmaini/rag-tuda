@@ -1,4 +1,4 @@
-data: {"type": "meta", "content": {"format": 1, "turn_id": "e81556c1-5b49-4271-a07f-241db6dd5f21", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+data: {"type": "meta", "content": {"format": 1, "turn_id": "91a9efe3-9f1b-469b-a9d4-cd265e95604f", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
 
 data: {"type": "error", "content": "Gerade sind sehr viele Anfragen gleichzeitig eingegangen. Bitte versuchen Sie es in einem Moment noch einmal.", "code": "busy"}
 
