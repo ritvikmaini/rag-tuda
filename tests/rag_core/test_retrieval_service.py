@@ -58,6 +58,9 @@ class Sections:
         self.filters.append(filter)
         return {i: self.sections[i] for i in section_ids if i in self.sections}
 
+    async def sections_by_ref(self, regulation, paragraph, programme, po_version, filter=None):
+        return []
+
     async def ping(self) -> None:
         return None
 

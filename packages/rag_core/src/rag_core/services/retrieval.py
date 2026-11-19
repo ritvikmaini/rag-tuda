@@ -2,13 +2,15 @@
 by the profile's weight; the best pre_rerank_k over all queries (switches.fusion_cut off: every child, deduplicated);
 reranked against the first rerank_queries queries (off: all), children with their parent sections' texts (whole, as the model
 server's length setting decides; switches.whole_parents off: cut to 512 tokens, estimated with the card's chars_per_token); the parents of the
-reranked children; twins collapsed to one language; sorted, ranked (rank()) and cut to final_k. Children and sections are the domain's Hit and Section; the service reads and
+reranked children; the sections those parents name by reference ("§ 22 APB"), scored against the standalone question and kept above the
+threshold, at most MAX_HOP_SECTIONS (switches.reference_hop off: none); twins collapsed to one language; sorted, ranked (rank()) and cut to final_k. Children and sections are the domain's Hit and Section; the service reads and
 annotates hits by attribute."""
 
 import asyncio
 import logging
 import time
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
@@ -19,6 +21,7 @@ from rag_core.domain.fusion import cut_across_queries, fuse
 from rag_core.domain.language import detect
 from rag_core.domain.parent_rerank import parent_texts, rerank_texts, score_children
 from rag_core.domain.ranking import RankingPolicy, rank
+from rag_core.domain.references import find_references
 from rag_core.domain.resilience import gather_bounded
 from rag_core.domain.retrieval import Hit, Section, deduplicate, parents_of
 from rag_core.ports.access import AccessFilter
@@ -37,6 +40,10 @@ def _metadata(doc: Any) -> dict[str, Any]:
 
 # the reranker length the parent texts are cut to, in tokens, with switches.whole_parents off (the former server limit)
 CUT_PARENT_TOKENS = 512
+
+# the sections the reference hop adds at most, and the references it looks up at most, per question
+MAX_HOP_SECTIONS = 3
+MAX_HOP_REFERENCES = 10
 
 # the documents whose German text binds: a twin of one of them is never shown in place of the German section
 BINDING_GERMAN = frozenset({"po", "mhb", "spp", "apb", "eso", "promotion"})
@@ -205,6 +212,10 @@ class RetrievalService:
             logger.warning("[DocumentRetriever] no parents for the matched chunks; answering from the chunks")
             parent_docs = reranked_docs
 
+        standalone = question or (queries[0] if queries else "")
+        if self.retrieval.switches.reference_hop and standalone:
+            parent_docs = [*parent_docs, *await self._hop(parent_docs, standalone, filter, principal)]
+
         final_docs = collapse_twins(deduplicate(parent_docs), detect(question or " ".join(queries)))
         # Always sort by score before the cut: otherwise the list is in database order and the cut could drop the best.
         final_docs.sort(key=lambda d: sort_score(d.metadata), reverse=True)
@@ -244,6 +255,57 @@ class RetrievalService:
                 f"file={filename}, url={url}"
             )
         return result_docs
+
+    async def _hop(self, parents: list[Hit], question: str, filter: Filter | None, principal: Principal) -> list[Hit]:
+        """The sections the kept parents name by reference, as parents of their own: looked up under the question's filter without its
+        regulation, scored against the standalone question alone, kept above the rerank threshold and at most MAX_HOP_SECTIONS of the
+        best. A section already among the parents or denied to the principal is not added. Failing lookups or reranker add
+        nothing (a section no one scored is never added)."""
+        references = list(dict.fromkeys(r for p in parents for r in find_references(p.page_content, p.metadata)))[
+            :MAX_HOP_REFERENCES
+        ]
+        if not references:
+            return []
+        # the reference names its own regulation: the question's regulation filter must not turn it away
+        cited_filter = replace(filter, regulation=None) if filter else None
+        lookups = [
+            self.sections.sections_by_ref(r.regulation, r.paragraph, r.programme, r.po_version, cited_filter)
+            for r in references
+        ]
+        results, failures = await gather_bounded(lookups, self.timeouts.parent_lookup_s)
+        for _, reason in failures:
+            logger.error(f"[ReferenceHop] reference lookup failed: {reason}")
+        kept = {i for p in parents if (i := _metadata(p).get("section_id"))}
+        candidates = {s.section_id: s for found in results if found for s in found if s.section_id not in kept}
+        candidates = allowed(candidates, principal, self.access)
+        texts = parent_texts({i: {"text": s.text, "metadata": dict(s.metadata)} for i, s in candidates.items()})
+        if not texts:
+            return []
+        try:
+            scored = await self.reranker.rerank([question], list(texts.values()), self.timeouts.reranker_s)
+        except RerankError as e:
+            logger.error(f"[ReferenceHop] reference rerank failed: {e}")
+            return []
+        score_of = {text: score for score, text in scored}
+        threshold = self.retrieval.rerank.threshold
+        hits = [
+            Hit(
+                page_content=candidates[i].text,
+                metadata={
+                    **candidates[i].metadata,
+                    "section_id": i,
+                    "cross_encoder_score": score_of[text],
+                    "retriever_type": "reference",
+                },
+            )
+            for i, text in texts.items()
+            if score_of.get(text, 0.0) >= threshold
+        ]
+        hits.sort(key=lambda h: h.metadata["cross_encoder_score"], reverse=True)
+        logger.info(
+            f"[ReferenceHop] {len(references)} references, {len(candidates)} sections, {len(hits)} above threshold"
+        )
+        return hits[:MAX_HOP_SECTIONS]
 
     async def _rerank(
         self, queries: list[str], documents: list[Any], parent_text_by_section: dict[str, str]

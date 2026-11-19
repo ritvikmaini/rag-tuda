@@ -31,6 +31,19 @@ class SectionStore(Protocol):
         """The sections found among the rows the filter keeps ({} when the lookup fails: the answer goes on without them)."""
         ...
 
+    async def sections_by_ref(
+        self,
+        regulation: str,
+        paragraph: str,
+        programme: Sequence[str] | None,
+        po_version: Sequence[int] | None,
+        filter: Filter | None = None,
+    ) -> list[Section]:
+        """The sections of `regulation` that hold the paragraph ("§ 22": recorded in the parent's `paragraphs` or heading its
+        section path), among the rows the filter keeps; a programme or PO version given narrows them (a row without one
+        passes). Raises when the lookup fails."""
+        ...
+
     async def ping(self) -> None:
         """Raises unless the section view answers (readiness)."""
         ...

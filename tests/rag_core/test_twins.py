@@ -91,6 +91,9 @@ class Index:
         }
         return {i: sections[i] for i in section_ids}
 
+    async def sections_by_ref(self, regulation, paragraph, programme, po_version, filter=None):
+        return []
+
     async def ping(self) -> None:
         return None
 

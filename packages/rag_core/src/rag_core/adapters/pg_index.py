@@ -10,6 +10,7 @@ rows). A named acronym group is one OR group inside the AND tsquery, built from 
 reaches a tsquery only as lexemes the server itself produced."""
 
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, LiteralString, cast
@@ -55,6 +56,17 @@ COUNT_TERM: LiteralString = "SELECT COUNT(*) FROM {} WHERE {column} @@ %(term)s:
 SECTIONS: LiteralString = (
     "SELECT section_id, content as text, metadata FROM {} WHERE section_id = ANY(%(section_ids)s){where}"
 )
+# the sections that hold a paragraph: it is in the parent's recorded `paragraphs` (a merged parent keeps only the prefix of
+# its sections' paths) or it heads the section path (a long section's later parts carry no record). {narrow} are the
+# programme and PO version conditions; a NULL row passes them like every filter condition
+REF_SECTIONS: LiteralString = (
+    "SELECT section_id, content as text, metadata FROM {} WHERE regulation = %(ref_regulation)s "
+    "AND ((metadata -> 'paragraphs') @> jsonb_build_array(%(ref_paragraph)s::text) "
+    "OR (metadata ->> 'section_path') ~ %(ref_path)s){narrow}{where} ORDER BY url, part_index, section_id LIMIT %(ref_limit)s"
+)
+REF_PROGRAMME: LiteralString = " AND (programme && %(ref_programme)s::text[] OR programme IS NULL)"
+REF_PO_VERSION: LiteralString = " AND (po_version && %(ref_po_version)s::int[] OR po_version IS NULL)"
+REF_LIMIT = 10  # the sections one reference may bring
 PING: LiteralString = "SELECT 1 FROM {} LIMIT 1"
 CHILD_PROBE: LiteralString = 'SELECT "content", "section_id", "embedding" FROM {} LIMIT 0'
 FREQUENT_SHARE = 0.05  # a term in more than 5 % of the children is left out of the OR fallback
@@ -303,6 +315,37 @@ class PgSections:
             section_id: Section(section_id=section_id, text=text, metadata=_meta(meta))
             for section_id, text, meta in rows
         }
+
+    async def sections_by_ref(
+        self,
+        regulation: str,
+        paragraph: str,
+        programme: Sequence[str] | None,
+        po_version: Sequence[int] | None,
+        filter: Filter | None = None,
+    ) -> list[Section]:
+        """The sections of the regulation that hold the paragraph ("§ 22"), under the question's filter; a programme or PO
+        version given narrows them. A failed lookup raises: the caller decides what an unresolved reference costs."""
+        number = re.escape(paragraph.removeprefix("§").strip())
+        where, bound = where_of(filter)
+        params = {
+            "ref_regulation": regulation,
+            "ref_paragraph": paragraph,
+            # the number is a whole word: "§ 22" is not "§ 220" or "§ 22a"
+            "ref_path": rf"(^| > )§[[:space:]]*{number}([^[:alnum:]]|$)",
+            "ref_limit": REF_LIMIT,
+            **bound,
+        }
+        narrow: LiteralString = ""
+        if programme:
+            params["ref_programme"] = list(programme)
+            narrow += REF_PROGRAMME
+        if po_version:
+            params["ref_po_version"] = list(po_version)
+            narrow += REF_PO_VERSION
+        async with self.pool.connection() as conn:
+            rows = await (await conn.execute(_on(REF_SECTIONS, self.view, where, narrow=narrow), params)).fetchall()
+        return [Section(section_id=section_id, text=text, metadata=_meta(meta)) for section_id, text, meta in rows]
 
     async def ping(self) -> None:
         """Readiness: the section view answers."""
