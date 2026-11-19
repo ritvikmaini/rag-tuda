@@ -105,7 +105,7 @@ async def score(deps: GraphDeps, profile_dir: Path, names: Sequence[str] | None,
 async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir: str | Path | None) -> int:
     settings = load_settings(environ, secrets_dir=secrets_dir)
     rt = build_runtime(settings, None, False)  # no Langfuse client: nothing is traced
-    index = await open_index(rt.collection, settings.profile, settings.overlay.database)
+    index = await open_index(rt.collection, settings.profile, settings.overlay.database, settings.acronyms)
     try:
         return await score(graph_deps(rt, index), settings.profile_dir, args.sets, args.limit, sys.stdout)
     finally:

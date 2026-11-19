@@ -22,7 +22,7 @@ from rag_core.settings.card import (
     with_local_model,
     with_local_url,
 )
-from rag_core.settings.profile import Guard, Profile, Roles
+from rag_core.settings.profile import Acronyms, Guard, Profile, Roles
 from rag_core.settings.sections import Compute, DatabaseSection, Http, ModelServersSection, Server, Timeouts, Tracing
 
 
@@ -117,6 +117,7 @@ class AssistantSettings:
     profile_dir: Path
     roles: Roles | None = None  # roles.yaml beside the profile, when it has one
     messages_en: Messages | None = None  # messages.en.yaml beside the profile, when it has one
+    acronyms: Acronyms | None = None  # acronyms.yaml beside the profile, when it has one
 
     @property
     def guard(self) -> Guard:
@@ -165,6 +166,8 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Pa
     prompts = load_profile_prompts(profile_file.parent / "prompts")
     roles_file = profile_file.parent / "roles.yaml"
     roles = load_profile(Roles, roles_file) if roles_file.exists() else None
+    acronyms_file = profile_file.parent / "acronyms.yaml"
+    acronyms = load_profile(Acronyms, acronyms_file) if acronyms_file.exists() else None
     english_file = profile_file.parent / "messages.en.yaml"
     english = (
         Messages.model_validate(yaml.safe_load(english_file.read_text(encoding="utf-8")))
@@ -172,5 +175,5 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Pa
         else None
     )
     return AssistantSettings(
-        profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent, roles, english
+        profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent, roles, english, acronyms
     )

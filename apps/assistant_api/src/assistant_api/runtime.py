@@ -168,7 +168,7 @@ async def reload(rt: Runtime) -> None:
     old = rt.index
     old_generation = rt.generation
     logging.info(f"Using collection: {rt.collection} (views {rt.collection}_chunks, {rt.collection}_sections)")
-    index = await open_index(rt.collection, rt.settings.profile, rt.settings.overlay.database)
+    index = await open_index(rt.collection, rt.settings.profile, rt.settings.overlay.database, rt.settings.acronyms)
     logging.info(f"Successfully loaded retriever with FTS for collection: {rt.collection}")
     logging.info(f"Successfully loaded PostgreSQL parent lookup for collection: {rt.collection}")
     rt.index = index

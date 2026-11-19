@@ -3,12 +3,16 @@ views `<collection>_chunks` and `<collection>_sections` (SQL contract: tests/pgv
 sent as a `str([float(x) ...])` literal with an explicit ::vector. Everything runs through one pool; nothing is
 prepared. A child keeps section_id, its retriever and its score; chunk_index,
 total_chunks and unique_id are not carried (they show only in the docs frame of the no-parents fallback, which no consumer
-reads). The pool (read_pool) lives here, not in adapters.db: the indexer imports db and installs no psycopg-pool."""
+reads). The pool (read_pool) lives here, not in adapters.db: the indexer imports db and installs no psycopg-pool.
+
+The keyword search reads fts_de for every question and fts_en besides for an English one (the English column is NULL for German
+rows). A named acronym group is one OR group inside the AND tsquery, built from `plainto_tsquery` per term: the question's text
+reaches a tsquery only as lexemes the server itself produced."""
 
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, LiteralString, cast
+from typing import Any, Literal, LiteralString, cast
 
 from psycopg import AsyncConnection, sql
 from psycopg.conninfo import make_conninfo
@@ -16,10 +20,12 @@ from psycopg.rows import TupleRow
 from psycopg_pool import AsyncConnectionPool
 
 from rag_core.adapters.db import credentials
+from rag_core.domain.acronyms import expand
 from rag_core.domain.filters import Filter
+from rag_core.domain.language import detect
 from rag_core.domain.resilience import check_or_sweep
 from rag_core.domain.retrieval import Hit, Section
-from rag_core.settings.profile import Profile
+from rag_core.settings.profile import Acronyms, Profile
 from rag_core.settings.sections import DatabaseSection
 
 logger = logging.getLogger(__name__)
@@ -28,18 +34,24 @@ VECTOR: LiteralString = (
     'SELECT "content", "section_id", cosine_distance("embedding", %(vector)s::vector) as distance '
     'FROM "public".{}{where} ORDER BY "embedding" <=> %(vector)s::vector LIMIT %(k)s'
 )
+# {rank} and {match} are built per search from the legs read: one ts_rank (GREATEST of them) and one `column @@ query` each.
+# fts_en is NULL for a German row, so its `@@` is NULL there: {seen} is tested with IS NOT TRUE, never negated with NOT.
 FTS_AND: LiteralString = (
-    "SELECT content, section_id, ts_rank(fts_de, plainto_tsquery(%(lang)s, %(query)s)) as rank "
-    "FROM {} WHERE fts_de @@ plainto_tsquery(%(lang)s, %(query)s){where} ORDER BY rank DESC LIMIT %(k)s"
+    "SELECT content, section_id, GREATEST({rank}) as rank FROM {} WHERE ({match}){where} ORDER BY rank DESC LIMIT %(k)s"
 )
 FTS_OR: LiteralString = (
-    "SELECT content, section_id, ts_rank(fts_de, to_tsquery(%(lang)s, %(or_terms)s)) as rank "
-    "FROM {} WHERE fts_de @@ to_tsquery(%(lang)s, %(or_terms)s) AND NOT fts_de @@ plainto_tsquery(%(lang)s, "
-    "%(query)s){where} ORDER BY rank DESC LIMIT %(remaining)s"
+    "SELECT content, section_id, GREATEST({rank}) as rank FROM {} WHERE ({match}) AND ({seen}) IS NOT TRUE{where} "
+    "ORDER BY rank DESC LIMIT %(remaining)s"
 )
 TSQUERY: LiteralString = "SELECT plainto_tsquery(%(lang)s, %(query)s)::text as tsq"
-COUNT_ALL: LiteralString = "SELECT COUNT(*) FROM {}"
-COUNT_TERM: LiteralString = "SELECT COUNT(*) FROM {} WHERE fts_de @@ to_tsquery(%(lang)s, %(term)s)"
+# one row per acronym group (terms[i] belongs to owners[i]): its terms as an OR of tsqueries; a term of stopwords only is left out
+GROUP_QUERIES: LiteralString = (
+    "SELECT string_agg(plainto_tsquery(%(lang)s, term)::text, ' | ') as tsq "
+    "FROM unnest(%(terms)s::text[], %(owners)s::int[]) AS t(term, owner) "
+    "WHERE plainto_tsquery(%(lang)s, term)::text <> '' GROUP BY owner ORDER BY owner"
+)
+COUNT_ALL: LiteralString = "SELECT COUNT({column}) FROM {}"
+COUNT_TERM: LiteralString = "SELECT COUNT(*) FROM {} WHERE {column} @@ %(term)s::tsquery"
 SECTIONS: LiteralString = (
     "SELECT section_id, content as text, metadata FROM {} WHERE section_id = ANY(%(section_ids)s){where}"
 )
@@ -83,8 +95,10 @@ def where_of(filter: Filter | None, lead: LiteralString = " AND") -> tuple[Liter
     return lead + " " + " AND ".join(conditions), params
 
 
-def _on(template: LiteralString, view: str, where: LiteralString = "") -> sql.Composed:
-    return sql.SQL(template).format(sql.Identifier(view), where=sql.SQL(where))
+def _on(template: LiteralString, view: str, where: LiteralString = "", **parts: LiteralString) -> sql.Composed:
+    return sql.SQL(template).format(
+        sql.Identifier(view), where=sql.SQL(where), **{k: sql.SQL(v) for k, v in parts.items()}
+    )
 
 
 def _meta(value: Any) -> dict[str, Any]:
@@ -134,59 +148,129 @@ class PgVectorStore:
         ]
 
 
+def _quoted(lexeme: str) -> str:
+    """A lexeme the server produced, as a quoted tsquery operand."""
+    return "'" + lexeme.replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+@dataclass(frozen=True)
+class Leg:
+    """One full-text column searched for a question: the tsquery texts (server output) of the question's words and of each
+    acronym group it names, under the column's text search configuration."""
+
+    column: Literal["fts_de", "fts_en"]
+    config: str
+    words: str
+    groups: tuple[str, ...]
+
+    @property
+    def and_text(self) -> str:
+        """The words and the groups, all required; a group is satisfied by any of its terms."""
+        return " & ".join([*([self.words] if self.words else []), *(f"({g})" for g in self.groups)])
+
+
+def _rank(legs: Sequence[Leg], key: Literal["and", "or"]) -> LiteralString:
+    return ", ".join(f"ts_rank({leg.column}, %({leg.column}_{key})s::tsquery)" for leg in legs)
+
+
+def _match(legs: Sequence[Leg], key: Literal["and", "or"]) -> LiteralString:
+    return " OR ".join(f"{leg.column} @@ %({leg.column}_{key})s::tsquery" for leg in legs)
+
+
 class PgFullText:
-    def __init__(self, pool: ReadPool, view: str, language: str, extra_stopwords: Sequence[str] = ()) -> None:
+    def __init__(
+        self,
+        pool: ReadPool,
+        view: str,
+        language: str,
+        extra_stopwords: Sequence[str] = (),
+        acronyms: Sequence[Sequence[str]] = (),
+    ) -> None:
+        """`language` is the text search configuration of fts_de (the profile's); `acronyms` are the groups of terms that
+        widen a named term to the whole group, none by default."""
         self.pool, self.view, self.language = pool, view, language
         self.extra_stopwords = tuple(extra_stopwords or ())
-        # per instance: a reload after a publish or a rollback starts with fresh term statistics
-        self.term_is_frequent: dict[str, bool] = {}
-        self.total_rows: int | None = None
+        self.acronyms = tuple(tuple(group) for group in acronyms)
+        # per instance: a reload after a publish or a rollback starts with fresh term statistics, per column
+        self.term_is_frequent: dict[tuple[str, str], bool] = {}
+        self.total_rows: dict[str, int] = {}
 
-    async def _frequent(self, conn: AsyncConnection[TupleRow], term: str) -> bool:
-        if term not in self.term_is_frequent:
-            if self.total_rows is None:
-                row = await (await conn.execute(_on(COUNT_ALL, self.view))).fetchone()
-                self.total_rows = int(row[0]) if row else 0
+    async def _frequent(self, conn: AsyncConnection[TupleRow], leg: Leg, term: str) -> bool:
+        key = (leg.column, term)
+        if key not in self.term_is_frequent:
+            if leg.column not in self.total_rows:
+                row = await (await conn.execute(_on(COUNT_ALL, self.view, column=leg.column))).fetchone()
+                self.total_rows[leg.column] = int(row[0]) if row else 0
             row = await (
-                await conn.execute(_on(COUNT_TERM, self.view), {"lang": self.language, "term": term})
+                await conn.execute(_on(COUNT_TERM, self.view, column=leg.column), {"term": _quoted(term)})
             ).fetchone()
             df = int(row[0]) if row else 0
-            self.term_is_frequent[term] = df > self.total_rows * FREQUENT_SHARE
-        return self.term_is_frequent[term]
+            self.term_is_frequent[key] = df > self.total_rows[leg.column] * FREQUENT_SHARE
+        return self.term_is_frequent[key]
 
-    async def _or_terms(self, conn: AsyncConnection[TupleRow], query: str) -> str | None:
-        row = await (await conn.execute(sql.SQL(TSQUERY), {"lang": self.language, "query": query})).fetchone()
-        terms = keyword_terms(row[0], self.extra_stopwords) if row and row[0] else []
-        if not terms:
-            return None
-        kept = [t for t in terms if not await self._frequent(conn, t)] or terms
+    async def _legs(
+        self, conn: AsyncConnection[TupleRow], words: str, named: Sequence[Sequence[str]], english: bool
+    ) -> list[Leg]:
+        """The columns this question searches, with their tsqueries; a column whose query is empty (only stopwords) is left out."""
+        configs: list[tuple[Literal["fts_de", "fts_en"], str]] = [("fts_de", self.language)]
+        if english:
+            configs.append(("fts_en", "english"))
+        terms = [term for group in named for term in group]
+        owners = [i for i, group in enumerate(named) for _ in group]
+        legs: list[Leg] = []
+        for column, config in configs:
+            row = await (await conn.execute(sql.SQL(TSQUERY), {"lang": config, "query": words})).fetchone()
+            groups: list[str] = []
+            if named:
+                params = {"lang": config, "terms": terms, "owners": owners}
+                groups = [r[0] for r in await (await conn.execute(sql.SQL(GROUP_QUERIES), params)).fetchall()]
+            leg = Leg(column, config, (row[0] if row else None) or "", tuple(groups))
+            if leg.and_text:
+                legs.append(leg)
+        return legs
+
+    async def _or_text(self, conn: AsyncConnection[TupleRow], leg: Leg) -> str | None:
+        """The OR fallback's tsquery for one column: the question's words without the frequent ones (all of them when every
+        one is frequent), and every acronym group whole, whatever its terms' share."""
+        terms = keyword_terms(leg.words, self.extra_stopwords) if leg.words else []
+        kept = [t for t in terms if not await self._frequent(conn, leg, t)] or terms
         if len(kept) < len(terms):  # a count, never the words: a word of the question is question text
             logger.info("[FTS] Filtered %d high-freq terms", len(terms) - len(kept))
-        return " | ".join("'" + t.replace("'", "''") + "'" for t in kept)
+        return " | ".join([*(_quoted(t) for t in kept), *(f"({g})" for g in leg.groups)]) or None
 
     async def search(self, query: str, k: int, filter: Filter | None = None) -> list[Hit]:
         where, bound = where_of(
             filter
         )  # both statements carry it: the OR fallback never brings back a filtered-out row
+        words, named = expand(query, self.acronyms)
         try:
             async with self.pool.connection() as conn:  # one transaction for all statements
-                params = {"lang": self.language, "query": query, "k": k, **bound}
+                legs = await self._legs(conn, words, named, english=detect(query) == "en")
+                if not legs:
+                    return []
+                params = {"k": k, **bound, **{f"{leg.column}_and": leg.and_text for leg in legs}}
+                statement = _on(FTS_AND, self.view, where, rank=_rank(legs, "and"), match=_match(legs, "and"))
                 # binary rows: ts_rank is real; the text format would round fts_rank
-                rows = list(await (await conn.execute(_on(FTS_AND, self.view, where), params, binary=True)).fetchall())
+                rows = list(await (await conn.execute(statement, params, binary=True)).fetchall())
                 if len(rows) < k:
                     seen = {r[0] for r in rows}
-                    or_terms = await self._or_terms(conn, query)
-                    if or_terms:
+                    alternatives = [(leg, await self._or_text(conn, leg)) for leg in legs]
+                    or_legs = [leg for leg, text in alternatives if text]
+                    if or_legs:
                         more_params = {
-                            "lang": self.language,
-                            "query": query,
-                            "or_terms": or_terms,
+                            **params,
                             "remaining": k - len(rows),
-                            **bound,
+                            **{f"{leg.column}_or": text for leg, text in alternatives if text},
                         }
-                        more = await (
-                            await conn.execute(_on(FTS_OR, self.view, where), more_params, binary=True)
-                        ).fetchall()
+                        more_statement = _on(
+                            FTS_OR,
+                            self.view,
+                            where,
+                            rank=_rank(or_legs, "or"),
+                            match=_match(or_legs, "or"),
+                            seen=_match(legs, "and"),
+                        )
+                        more = await (await conn.execute(more_statement, more_params, binary=True)).fetchall()
                         rows += [r for r in more if r[0] not in seen]
         except Exception as exc:
             logger.error("[PostgresFTSRetriever] Error during search: %s", type(exc).__name__)
@@ -258,15 +342,19 @@ def read_pool(conninfo: str, *, max_size: int = READ_POOL_MAX, name: str = "inde
     return pool
 
 
-async def open_index(collection: str, profile: Profile, database: DatabaseSection) -> IndexHandles:
+async def open_index(
+    collection: str, profile: Profile, database: DatabaseSection, acronyms: Acronyms | None = None
+) -> IndexHandles:
     """The three reads over the collection's typed views <collection>_chunks and <collection>_sections, on one new pool.
     It fails when the index is missing or the database is down (a probe of both views): a start without an index is degraded, /readyz says "missing", a question
     gets the not_ready frame, and a failed reload leaves the old graph serving. The pool is closed before the error goes on;
-    later outages are the pool's own reconnecting."""
+    later outages are the pool's own reconnecting. The keyword search widens the groups of `acronyms` unless the profile's
+    acronyms switch is off."""
     retrieval = profile.retrieval
     user, password, name = credentials(database)
     host, port = database.host, database.port
     logger.info(f"PostgreSQL Connection: {user}@{host}:{port}/{name}")
+    groups = tuple(g.terms for g in acronyms.groups) if acronyms and retrieval.switches.acronyms else ()
     pool = read_pool(make_conninfo(host=host, port=port, dbname=name, user=user, password=password))
     await pool.open(wait=False)
     chunks, sections_view = f"{collection}_chunks", f"{collection}_sections"
@@ -282,7 +370,7 @@ async def open_index(collection: str, profile: Profile, database: DatabaseSectio
     logger.info(f"Created PostgresParentLookup for table: {sections_view}")
     return IndexHandles(
         PgVectorStore(pool, chunks),
-        PgFullText(pool, chunks, retrieval.fts_language, tuple(retrieval.fts_extra_stopwords)),
+        PgFullText(pool, chunks, retrieval.fts_language, tuple(retrieval.fts_extra_stopwords), groups),
         sections,
         (pool,),
     )

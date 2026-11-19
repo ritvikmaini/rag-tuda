@@ -38,6 +38,7 @@ def runtime() -> types.SimpleNamespace:
         messages=None,
         messages_en=None,
         roles=None,
+        acronyms=None,
         card=types.SimpleNamespace(
             timeouts=types.SimpleNamespace(deadline_s=0), budget=types.SimpleNamespace(final_k=8)
         ),
@@ -66,8 +67,8 @@ def test_reload_swaps_then_disposes_the_old_engines(monkeypatch) -> None:
     order = []
     old = types.SimpleNamespace(engines=(Engine(), Engine()))
 
-    async def open_index(collection, profile, database):
-        order.append(("open", collection))
+    async def open_index(collection, profile, database, acronyms):
+        order.append(("open", collection, acronyms))
         return types.SimpleNamespace(vector=None, full_text=None, sections=None, engines=(Engine(), Engine()))
 
     def build_graph(deps):
@@ -79,13 +80,17 @@ def test_reload_swaps_then_disposes_the_old_engines(monkeypatch) -> None:
     monkeypatch.setattr(rt_module, "RetrievalService", lambda *a, **k: None)
     rt = runtime()
     rt.index = old
+    rt.settings.acronyms = "the acronym groups"
 
     async def scenario() -> None:
         await rt_module.reload(rt)
         await asyncio.gather(*rt.retiring)
 
     asyncio.run(scenario())
-    assert order == [("open", "example"), ("graph", True)]
+    assert order == [
+        ("open", "example", "the acronym groups"),
+        ("graph", True),
+    ]  # the index opens with the profile's groups
     assert rt.chain == "chain" and all(e.closed for e in old.engines)
 
 
@@ -109,7 +114,7 @@ def test_a_reload_closes_the_old_pool_after_the_request_deadline(monkeypatch) ->
     assert "pgvector_store" not in source and "index.search" not in source
     old = types.SimpleNamespace(engines=(Engine(),))
 
-    async def open_index(collection, profile, database):
+    async def open_index(collection, profile, database, acronyms):
         return types.SimpleNamespace(vector=None, full_text=None, sections=None, engines=(Engine(),))
 
     monkeypatch.setattr(rt_module, "open_index", open_index)
@@ -154,7 +159,7 @@ def test_a_reload_reads_the_live_generation(monkeypatch) -> None:
         async def live_generation(self, collection):
             return 11 if collection == "example" else None
 
-    async def open_index(collection, profile, database):
+    async def open_index(collection, profile, database, acronyms):
         return types.SimpleNamespace(vector=None, full_text=None, sections=None, engines=())
 
     monkeypatch.setattr(rt_module, "open_index", open_index)
@@ -172,7 +177,7 @@ def test_a_failing_graph_build_keeps_the_old_index_and_closes_the_new_pool(monke
     old = types.SimpleNamespace(engines=(Engine(),)) if had_index else None
     new = types.SimpleNamespace(vector=None, full_text=None, sections=None, engines=(Engine(),))
 
-    async def open_index(collection, profile, database):
+    async def open_index(collection, profile, database, acronyms):
         return new
 
     def build_graph(deps):

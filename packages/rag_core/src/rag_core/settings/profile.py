@@ -40,6 +40,9 @@ class Switches(ProfileModel):
     """The retrieval stages that can be turned off one by one (an ablation); all on by default."""
 
     filters: bool = True  # the hard filter of a question (degree, programme, PO version, regulation, date); off = none
+    acronyms: bool = (
+        True  # the keyword search widens a named acronym to its group (acronyms.yaml); off = the words as asked
+    )
 
 
 class Retrieval(ProfileModel):
