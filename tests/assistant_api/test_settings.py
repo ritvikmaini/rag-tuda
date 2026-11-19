@@ -334,3 +334,14 @@ def test_roles_and_acronyms_come_from_the_files_beside_the_profile(secrets: Path
     assert settings.roles is not None and "msc-informatik" in settings.roles.programmes
     assert settings.profile.retrieval.switches.filters is True
     assert settings.acronyms is not None and settings.profile.retrieval.switches.acronyms is True
+
+
+def test_the_prompts_follow_the_cards_overlay(secrets: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[str] = []
+    monkeypatch.setattr(
+        "assistant_api.settings.load_profile_prompts", lambda folder, overlay: asked.append(overlay) or {}
+    )
+    for card in ("s-qwen3.5-4b", "m-qwen3.8-27b"):
+        env = environment(RAG__CARD_FILE="<unset>", RAG__CARD=card, RAG_CARDS_DIR=str(ROOT / "models" / "cards"))
+        load_settings(env, secrets_dir=secrets)
+    assert asked == ["small", "large"]

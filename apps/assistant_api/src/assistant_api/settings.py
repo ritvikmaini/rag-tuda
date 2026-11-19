@@ -219,7 +219,7 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Pa
     messages = _messages(profile_file.parent, "de")
     if messages is None:
         raise SettingsError(f"messages.de.yaml: missing beside {profile_file} (the German texts every profile has)")
-    prompts = load_profile_prompts(profile_file.parent / "prompts")
+    prompts = load_profile_prompts(profile_file.parent / "prompts", card.prompt_overlay)
     roles_file = profile_file.parent / "roles.yaml"
     roles = load_profile(Roles, roles_file) if roles_file.exists() else None
     acronyms_file = profile_file.parent / "acronyms.yaml"
