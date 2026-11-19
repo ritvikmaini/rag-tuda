@@ -33,22 +33,32 @@ export function textNodes(root) {
     return out;
 }
 
+// The link of an e-mail address (mailto:) or of a 06151 / +49 6151 telephone number (tel:, in international form).
+export function contactHref(contact) {
+    if (contact.includes("@")) return "mailto:" + contact;
+    return "tel:+49" + contact.replace(/\D/g, "").replace(/^(?:49)?0?/, "");
+}
+
+// A text cut into plain parts ({ text }) and contact links ({ text, href }).
+export function contactParts(text) {
+    const parts = [];
+    let last = 0;
+    let match;
+    CONTACT_PATTERN.lastIndex = 0;
+    while ((match = CONTACT_PATTERN.exec(text)) !== null) {
+        if (match.index > last) parts.push({ text: text.slice(last, match.index) });
+        parts.push({ text: match[0], href: contactHref(match[0]) });
+        last = match.index + match[0].length;
+    }
+    if (last < text.length || !parts.length) parts.push({ text: text.slice(last) });
+    return parts;
+}
+
 export function linkifyContacts(root) {
     textNodes(root).forEach(node => {
-        const text = node.nodeValue;
-        CONTACT_PATTERN.lastIndex = 0;
-        if (!CONTACT_PATTERN.test(text)) return;
-        CONTACT_PATTERN.lastIndex = 0;
-        const fragment = document.createDocumentFragment();
-        let last = 0;
-        let match;
-        while ((match = CONTACT_PATTERN.exec(text)) !== null) {
-            if (match.index > last) fragment.append(text.slice(last, match.index));
-            fragment.append(h("a", { href: "mailto:" + match[0], text: match[0] }));
-            last = match.index + match[0].length;
-        }
-        fragment.append(text.slice(last));
-        node.replaceWith(fragment);
+        const parts = contactParts(node.nodeValue);
+        if (parts.length === 1 && !parts[0].href) return;
+        node.replaceWith(...parts.map(part => (part.href ? h("a", { href: part.href, text: part.text }) : part.text)));
     });
 }
 

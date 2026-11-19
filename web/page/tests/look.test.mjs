@@ -3,17 +3,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { questionUrl } from "../api/urls.js";
+import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detectLang, getLang, providerLine, setLang }
     from "../i18n.js";
-import { menuEntries } from "../model/formats.js";
-import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from "../model/thinking.js";
-import { chipChoices } from "../ui/chips.js";
-import { readFileSync } from "node:fs";
-import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
-import { recordStatus } from "../model/turns.js";
+import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from "../model/thinking.js";
 import { sourceCards } from "../model/sources.js";
+import { recordStatus } from "../model/turns.js";
+import { chipChoices } from "../ui/chips.js";
+import { contactParts } from "../render/markdown.js";
 import { sourceElement } from "../render/sources.js";
+import { menuEntries } from "../model/formats.js";
+import { readFileSync } from "node:fs";
 
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -228,4 +229,18 @@ test("a PO source card shows the PO version and links the official publication (
     const quiet = sourceElement(Object.assign({ ns: [], pages: [], linkPage: null }, other));
     assert.ok(!texts(quiet).includes("PO 2023"));
     assert.ok(!links(quiet).some(a => a.attrs.href === ISSUE || /^javascript/.test(a.attrs.href || "")));
+});
+
+test("06151 numbers and e-mail addresses become links, other numbers do not (test_contact_linkifier)", () => {
+    const parts = text => plain(contactParts(text));
+    assert.deepEqual(parts("Rufen Sie 06151 16-23456 an."), [
+        { text: "Rufen Sie " }, { text: "06151 16-23456", href: "tel:+4961511623456" }, { text: " an." }]);
+    assert.deepEqual(parts("Tel. +49 6151 16 12345, Mail: studienbuero@example.org."), [
+        { text: "Tel. " }, { text: "+49 6151 16 12345", href: "tel:+4961511612345" }, { text: ", Mail: " },
+        { text: "studienbuero@example.org", href: "mailto:studienbuero@example.org" }, { text: "." }]);
+    assert.deepEqual(parts("06151/1623456"), [{ text: "06151/1623456", href: "tel:+4961511623456" }]);
+    // another area code, a bare 06151, a year or a PO number stay text
+    assert.deepEqual(parts("Frankfurt 069 12345678, Postfach 06151, PO 2023, 12 Credits"), [
+        { text: "Frankfurt 069 12345678, Postfach 06151, PO 2023, 12 Credits" }]);
+    assert.deepEqual(parts("Keine Kontaktdaten."), [{ text: "Keine Kontaktdaten." }]);
 });

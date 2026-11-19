@@ -23,7 +23,9 @@ export const FRAME_MARK = "data: ";
 export const FORM_TYPE = "Formular";
 export const YEAR_PATTERN = /(?<!\d)(19[5-9]\d|20[0-4]\d)(?!\d)/g;
 export const CITATION_PATTERN = /\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]/g;
-export const CONTACT_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+// An e-mail address, or a Darmstadt telephone number (area code 06151, or +49 6151, then up to four groups of digits).
+export const CONTACT_PATTERN = new RegExp(
+    "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|(?<![\\d+])(?:\\+49[ \\u00a0]?6151|06151)(?:[ \\u00a0/-]?\\d+){1,4}", "g");
 
 // Response formats v1: the page tells the backend it renders them; the shape names match the backend's.
 export const FORMATS_VERSION = "v1";
