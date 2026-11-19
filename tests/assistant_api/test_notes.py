@@ -83,7 +83,7 @@ def answered(
         "standalone_question": question,
         "answer_shape": "text",
         "filter": applied,
-        "language": "Englisch" if english else "Deutsch",
+        "language": "en" if english else "de",
     }
     result = asyncio.run(make_generate(deps)(state, {}))  # pyright: ignore[reportArgumentType]  # stand-ins for GraphDeps and AgentState
     return result["generation"]

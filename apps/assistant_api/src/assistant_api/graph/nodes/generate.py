@@ -27,6 +27,7 @@ from rag_core.domain.answer_shapes import (
 from rag_core.domain.context_budget import ContextBudget, fit_context, rank_score
 from rag_core.domain.dates import asks_for_event, format_date, shown_as_coming, written_dates
 from rag_core.domain.history import context_turns, conversation_state, select_turns
+from rag_core.domain.language import PROMPT_NAMES
 from rag_core.domain.notes import appended_lines
 from rag_core.domain.query_analysis import RETRIEVAL_INTENTS
 from rag_core.domain.status_groups import GENERAL, Scope, note_for, question_scope, scope_lines, source_group
@@ -67,12 +68,12 @@ def with_instruction(messages, instruction):
 
 def holds_answer(state: Any) -> bool:
     """True when generate takes its documents branch for a question (the user's or the standalone one) about the next or a
-    coming event and answers in German (the past words are German; an English variant streams): such an answer is not
+    coming event and answers in German (the date grammar and the past words are German; an English answer streams): such an answer is not
     streamed but checked and sent whole."""
     current = str(state["messages"][-1].content)
     documents = (state.get("intent") or "lookup") in RETRIEVAL_INTENTS or state.get("scope_fallback")
     asked = asks_for_event(state.get("standalone_question") or current) or asks_for_event(current)
-    return bool(documents and state.get("raw_docs") and asked and answer_language(state) == "Deutsch")
+    return bool(documents and state.get("raw_docs") and asked and answer_language(state) == "de")
 
 
 def past_event_reply(answer: str, context: str, today: date, texts: Any) -> str | None:
@@ -168,7 +169,7 @@ def make_generate(deps: GraphDeps):
         variables = {
             "question": state.get("standalone_question") or current.content,
             "context": state.get("formatted_docs", ""),
-            "language": answer_language(state),
+            "language": PROMPT_NAMES[answer_language(state)],
             "current_date": format_date(datetime.now(), profile.identity.date_format, profile.identity.day_names),
             "bot_name": profile.identity.bot_name,
             "intent": intent,
@@ -176,7 +177,7 @@ def make_generate(deps: GraphDeps):
             "language_reminder": language_reminder(state),
             "shape_reminder": shape_reminder(state),
         }
-        english = answer_language(state) == "Englisch"
+        english = answer_language(state) == "en"
         sources: list[Any] = []
         shown: list[Any] = []  # the metadata of each source in the context
         no_match = ""  # the closing line of an answer to an empty search under a filter
@@ -259,7 +260,7 @@ def make_generate(deps: GraphDeps):
             prompt = await asyncio.to_thread(answer_prompt, "no-docs-found", history, variables, position)
         try:
             llm = deps.answer_llm
-            if answer_language(state) == "Deutsch":
+            if answer_language(state) == "de":
                 llm = with_decoding_limits(llm, deps.card.quirks, deps.card.answer.provider)
             response = await ainvoke_waiting(
                 llm,
@@ -288,7 +289,7 @@ def make_generate(deps: GraphDeps):
                 and table
                 and state.get("raw_docs")
                 and sources
-                and answer_language(state) == "Deutsch"
+                and answer_language(state) == "de"
                 and shape_of(state.get("answer_shape")) == "text"
             ):
                 try:

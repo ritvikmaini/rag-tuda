@@ -68,7 +68,7 @@ def result(answer, candidates=(), sources=(), shape="text", scope_fallback=False
         requested_shape=shape,
         candidates=list(candidates),
         sources=list(sources),
-        analysis={"standalone_question": "Frage?", "intent": "lookup", "language": "Deutsch", "filter": applied},
+        analysis={"standalone_question": "Frage?", "intent": "lookup", "language": "de", "filter": applied},
         first_chunk=None,
     )
 
@@ -197,7 +197,7 @@ def test_a_variant_keeps_both_versions_and_the_history_reads_the_active_one():
         "mindmap",
         "Frage?",
         "lookup",
-        "Deutsch",
+        "de",
     )
     assert taken.candidates[0]["metadata"]["cross_encoder_score"] is None  # NaN stored as null
     assert taken.candidates[0]["section"].startswith("https://docs.example.org/x.pdf|2|")

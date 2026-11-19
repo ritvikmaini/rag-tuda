@@ -285,7 +285,7 @@ def test_run_stream_records_the_turns_results():
                     "answer_shape": "steps",
                     "intent": "lookup",
                     "standalone_question": "S?",
-                    "language": "Deutsch",
+                    "language": "de",
                 }
             },
         },

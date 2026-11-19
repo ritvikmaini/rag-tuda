@@ -3,6 +3,11 @@ scripts a card's quirk drops from an answer."""
 
 import re
 
+# The languages an answer is written in, and their names as the profile's prompts (German texts) write them: the `{{language}}`
+# of a prompt reads "Antworte in: Deutsch"
+LANGUAGES = ("de", "en")
+PROMPT_NAMES = {"de": "Deutsch", "en": "Englisch"}
+
 # CJK ideographs, kana, Hangul and CJK/fullwidth punctuation: dropped from a streamed answer
 FOREIGN = re.compile("[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af\u3000-\u303f\uff00-\uffef]")
 

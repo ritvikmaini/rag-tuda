@@ -84,7 +84,7 @@ def reply(rule: Rule, kind: str, messages: Sequence[Message]) -> str:
             "standalone_question": question(messages, kind),
             "intent": "lookup",
             "search_queries": [],
-            "language": "Deutsch",
+            "language": "de",
             "date_from": None,
             "date_to": None,
             "answer_shape": "text",

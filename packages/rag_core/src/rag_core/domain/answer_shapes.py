@@ -11,7 +11,7 @@ Standard library only: the frames, the message helpers and the store block of th
 import re
 from typing import Any
 
-from rag_core.domain.language import looks_english_question
+from rag_core.domain.language import LANGUAGES, detect, looks_english_question
 
 FORMATS_VERSION = "v1"
 SHAPES = ("text", "table", "checklist", "steps", "mindmap")
@@ -107,19 +107,21 @@ def shape_reminder(state) -> str:
 
 def language_reminder(state) -> str:
     """The English reminder for the user message of an English answer (see answer_language); empty otherwise."""
-    return ENGLISH_REMINDER if answer_language(state) == "Englisch" else ""
+    return ENGLISH_REMINDER if answer_language(state) == "en" else ""
 
 
 def answer_language(state) -> str:
-    """The {{language}} of a generation: English for the English variant, for a question the analysis calls English and
-    for one that looks English; else the question's language."""
+    """The language of a generation, "de" or "en": English for the English variant, for a question the analysis calls English
+    and for one that looks English although the analysis said German. Where the analysis named none (it failed, or said
+    something else) the detector reads the question: a tie, or a question without a stopword, is German."""
     if formats_on(state) and state.get("variant") == "english":
-        return "Englisch"
-    language = state.get("language") or "Deutsch"
+        return "en"
     messages = state.get("messages")
-    if language == "Deutsch" and messages and looks_english_question(str(getattr(messages[-1], "content", ""))):
-        return "Englisch"
-    return language
+    question = str(getattr(messages[-1], "content", "")) if messages else ""
+    language = state.get("language")
+    if language not in LANGUAGES:
+        return detect(question)
+    return "en" if language == "de" and looks_english_question(question) else language
 
 
 # ---- what an answer contains

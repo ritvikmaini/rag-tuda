@@ -42,7 +42,7 @@ class Store:
             ({"page_content": "Q", "metadata": {"section_id": "p"}},),
             "S",
             "lookup",
-            "Deutsch",
+            "de",
             "steps",
         )
 

@@ -6,7 +6,7 @@ import json
 
 def test_json_answer():
     a = qa.parse_query_analysis(
-        '{"standalone_question": "Hat das Bürgerbüro am Samstag geöffnet?", "intent": "lookup", "search_queries": ["Bürgerbüro Öffnungszeiten Samstag"], "language": "Deutsch", "date_from": null, "date_to": null}',
+        '{"standalone_question": "Hat das Bürgerbüro am Samstag geöffnet?", "intent": "lookup", "search_queries": ["Bürgerbüro Öffnungszeiten Samstag"], "language": "de", "date_from": null, "date_to": null}',
         "Und am Samstag?",
     )
     assert a.parsed == "json" and a.standalone_question.startswith("Hat das Bürgerbüro")
@@ -121,7 +121,7 @@ def test_the_schema_fields_are_read():
         ["po", "mhb"],
     )
     assert (a.enrolment_term, a.date_from, a.date_to) == ("WiSe 2019/20", "2026-11-19", "2026-11-23")
-    assert a.answer_shape == "steps" and a.needs_more is True and a.language == "Deutsch"
+    assert a.answer_shape == "steps" and a.needs_more is True and a.language == "de"
     empty = qa.parse_query_analysis(full(), "x")
     assert empty.degree is None and empty.po_version is None and empty.enrolment_term is None and not empty.needs_more
     assert qa.parse_query_analysis(full(degree=[], po_version="2015", needs_more="yes"), "x").degree is None
@@ -132,20 +132,23 @@ def test_the_schema_fields_are_read():
     assert qa.parse_query_analysis(full(date_range="heute"), "x").date_from is None
 
 
-def test_language_codes_and_names():
-    assert qa.parse_query_analysis(full(language="en"), "x").language == "Englisch"
-    assert qa.parse_query_analysis(full(language="de"), "x").language == "Deutsch"
-    assert qa.parse_query_analysis(full(language="Englisch"), "x").language == "Englisch"
-    assert qa.parse_query_analysis(full(language="klingonisch?"), "x").language == "Deutsch"
+def test_language_values_are_de_en():
+    assert qa.parse_query_analysis(full(language="en"), "x").language == "en"
+    assert qa.parse_query_analysis(full(language=" DE "), "x").language == "de"
+    # a value that is neither code (a name, a language the page does not offer) is no answer: the detector decides later
+    for value in ("Englisch", "English", "klingonisch?", "", None, 7):
+        assert qa.parse_query_analysis(full(language=value), "x").language == "", value
+    assert qa.parse_query_analysis("kein JSON", "x").language == ""
+    assert qa.analysis_schema(None)["properties"]["language"]["enum"] == ["de", "en"]
 
 
 def test_the_base_shape_still_reads():
     a = qa.parse_query_analysis(
-        '{"standalone_question": "x", "intent": "lookup", "search_queries": ["a"], "language": "Englisch", '
+        '{"standalone_question": "x", "intent": "lookup", "search_queries": ["a"], "language": "en", '
         '"date_from": "2026-11-19", "date_to": null, "answer_shape": "table"}',
         "x",
     )
-    assert (a.search_queries, a.language, a.date_from, a.answer_shape) == (["a"], "Englisch", "2026-11-19", "table")
+    assert (a.search_queries, a.language, a.date_from, a.answer_shape) == (["a"], "en", "2026-11-19", "table")
     assert a.queries_en == [] and a.degree is None and a.needs_more is False
 
 

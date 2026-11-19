@@ -73,7 +73,7 @@ def sent_user_message(
         "standalone_question": question,
         "answer_shape": shape,
         "filter": applied,
-        "language": "Englisch" if english else "Deutsch",
+        "language": "en" if english else "de",
     }
     asyncio.run(make_generate(deps)(state, {}))  # pyright: ignore[reportArgumentType]  # stand-ins for GraphDeps and AgentState
     return seen[0][-1].content

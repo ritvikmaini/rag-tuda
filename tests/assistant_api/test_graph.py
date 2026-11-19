@@ -393,7 +393,7 @@ def test_a_variant_of_a_fallback_answer_refits_from_its_stored_sources() -> None
         candidates=candidates,
         standalone_question="Frage?",
         intent="out_of_scope",
-        language="Deutsch",
+        language="de",
         shape="text",
         scope_fallback=True,
     )
@@ -452,7 +452,7 @@ def test_variant_inputs_hold_what_generate_read_from_the_checkpoint() -> None:
         candidates=candidates,
         standalone_question="Wie meldet man sich krank?",
         intent="lookup",
-        language="Deutsch",
+        language="de",
         shape="steps",
     )
     inputs = variant_inputs(v, "shorter", "v1")
@@ -486,7 +486,7 @@ def test_variant_inputs_hold_what_generate_read_from_the_checkpoint() -> None:
         inputs["standalone_question"],
         inputs["intent"],
         inputs["language"],
-    ) == ("shorter", "steps", "v1", "Wie meldet man sich krank?", "lookup", "Deutsch")
+    ) == ("shorter", "steps", "v1", "Wie meldet man sich krank?", "lookup", "de")
     assert documents(candidates)[0].metadata == {"section_id": "b"}
 
 
@@ -701,7 +701,7 @@ def state(question: str = "Frage?", standalone: str = "Frage?", **extra) -> dict
         ({}, False),
         ({"question": "Wann ist die nächste Sitzung?", "intent": "conversation"}, False),
         ({"question": "Wann ist die nächste Sitzung?", "raw_docs": []}, False),
-        ({"question": "Wann ist die nächste Sitzung?", "language": "Englisch"}, False),
+        ({"question": "Wann ist die nächste Sitzung?", "language": "en"}, False),
         ({"question": "Wann ist die nächste Sitzung?", "formats": "v1", "variant": "english"}, False),
     ],
 )

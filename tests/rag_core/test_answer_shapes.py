@@ -54,10 +54,26 @@ def test_shape_then_variant_in_one_instruction():
 
 
 def test_language_follows_the_english_variant_only():
-    assert af.answer_language({"formats": "v1", "variant": "english", "language": "Deutsch"}) == "Englisch"
-    assert af.answer_language({"variant": "english", "language": "Deutsch"}) == "Deutsch"
-    assert af.answer_language({"formats": "v1", "variant": "simple"}) == "Deutsch"
-    assert af.answer_language({"language": "Englisch"}) == "Englisch"
+    assert af.answer_language({"formats": "v1", "variant": "english", "language": "de"}) == "en"
+    assert af.answer_language({"variant": "english", "language": "de"}) == "de"
+    assert af.answer_language({"formats": "v1", "variant": "simple"}) == "de"
+    assert af.answer_language({"language": "en"}) == "en"
+
+
+def test_detector_ties_to_german():
+    asked = lambda text: [SimpleNamespace(content=text)]  # noqa: E731
+    # no language from the analysis (it failed, or named none of de and en): the detector reads the question
+    assert af.answer_language({"messages": asked("How do I apply for leave?")}) == "en"
+    assert af.answer_language({"messages": asked("Wie beantrage ich Urlaub?"), "language": ""}) == "de"
+    # a tie, a question without a stopword and no question at all are German
+    for text in ("Was ist the Mietspiegel?", "Master thesis", "", "12345"):
+        assert af.answer_language({"messages": asked(text)}) == "de", text
+    assert af.answer_language({}) == "de"
+    # a stored language of the old spelling is no language
+    assert af.answer_language({"language": "Englisch", "messages": asked("Wie beantrage ich Urlaub?")}) == "de"
+    # the analysis wins over the detector except where the question reads as English although it said German
+    assert af.answer_language({"language": "de", "messages": asked("Wie beantrage ich Urlaub?")}) == "de"
+    assert af.answer_language({"language": "en", "messages": asked("Wie beantrage ich Urlaub?")}) == "en"
 
 
 def test_entry_route():
@@ -263,12 +279,12 @@ def test_english_is_asked_for_in_so_many_words():
     assert af.language_reminder({"formats": "v1", "variant": "simple"}) == ""
     assert af.language_reminder({"formats": "v1"}) == ""
     # an English answer needs no formats: the analysis' language or an English-looking question is enough
-    assert af.language_reminder({"language": "Englisch"}) == af.ENGLISH_REMINDER
+    assert af.language_reminder({"language": "en"}) == af.ENGLISH_REMINDER
     english = {"messages": [SimpleNamespace(content="How do I apply for leave?")]}
-    assert af.language_reminder(english) == af.ENGLISH_REMINDER and af.answer_language(english) == "Englisch"
+    assert af.language_reminder(english) == af.ENGLISH_REMINDER and af.answer_language(english) == "en"
     german = {"messages": [SimpleNamespace(content="Wie beantrage ich Urlaub?")]}
-    assert af.language_reminder(german) == "" and af.answer_language(german) == "Deutsch"
-    assert af.answer_language({**english, "language": "Französisch"}) == "Französisch"
+    assert af.language_reminder(german) == "" and af.answer_language(german) == "de"
+    assert af.answer_language({**english, "language": "Französisch"}) == "en"
 
 
 def test_with_reminder_ends_the_last_user_message():

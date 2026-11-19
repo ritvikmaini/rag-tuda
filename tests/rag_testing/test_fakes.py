@@ -59,7 +59,7 @@ def test_the_first_fitting_rule_answers_and_the_analysis_keeps_its_defaults():
         "standalone_question": "Wo ist die Garage?",
         "intent": "conversation",
         "search_queries": [],
-        "language": "Deutsch",
+        "language": "de",
         "date_from": None,
         "date_to": None,
         "answer_shape": "text",

@@ -9,7 +9,7 @@ The rewriter prompt ("question-rewriting") of a profile with roles asks for the 
    "regulation": [str] | null, "enrolment_term": str | null, "date_range": {"from": ..., "to": ...} | null,
    "shape": "text" | "table" | "steps", "needs_more": bool}
 A profile without roles asks for the base shape, which the parser reads as well:
-  {"standalone_question": str, "intent": str, "search_queries": [str], "language": str,
+  {"standalone_question": str, "intent": str, "search_queries": [str], "language": "de" | "en",
    "date_from": "YYYY-MM-DD" | null, "date_to": ..., "answer_shape": "text" | "table" | "steps"}
 """
 
@@ -23,6 +23,7 @@ from itertools import zip_longest
 from typing import Any, List, Optional, TypeVar
 
 from rag_core.domain.filters import REGULATIONS, degrees
+from rag_core.domain.language import LANGUAGES
 
 INTENTS = ("lookup", "situation", "find_document", "conversation", "about_bot", "urgent", "out_of_scope")
 RETRIEVAL_INTENTS = ("lookup", "situation", "find_document")
@@ -30,7 +31,6 @@ MAX_QUERIES = {"situation": 4}
 DEFAULT_MAX_QUERIES = 3
 MAX_ENGLISH_QUERIES = 2
 ANSWER_SHAPES = ("text", "table", "steps")
-LANGUAGES = {"de": "Deutsch", "en": "Englisch"}
 
 
 def _nullable_array(items: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +50,7 @@ def analysis_schema(roles: Mapping[str, Any] | None) -> dict[str, Any]:
             "standalone_question": string,
             "intent": {"type": "string", "enum": list(INTENTS)},
             "search_queries": {"type": "array", "items": string},
-            "language": string,
+            "language": {"type": "string", "enum": list(LANGUAGES)},
             "date_from": date_or_null,
             "date_to": date_or_null,
             "answer_shape": {"type": "string", "enum": list(ANSWER_SHAPES)},
@@ -91,7 +91,6 @@ def analysis_schema(roles: Mapping[str, Any] | None) -> dict[str, Any]:
 THINK_BLOCK = re.compile(r"<think>.*?</think>", re.S)
 YEAR_TEXT = re.compile(r"[0-9]{4}")  # ASCII digits only: int() takes others ("²" raises, "２０２３" is 2023)
 ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-LANGUAGE_NAME = re.compile(r"[A-Za-zÄÖÜäöüß]{2,20}")
 VAR_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 _T = TypeVar("_T")
 
@@ -101,7 +100,7 @@ class QueryAnalysis:
     standalone_question: str
     intent: str = "lookup"
     search_queries: List[str] = field(default_factory=list)
-    language: str = "Deutsch"
+    language: str = ""  # de | en; "" = the analysis named none (the answer's language then comes from the detector)
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     parsed: str = "json"  # json | fallback
@@ -143,11 +142,9 @@ def _iso_date(value):
 
 
 def _language(value):
-    """The language as a plain name: "de" and "en" become "Deutsch" and "Englisch", a name stays, anything else is "Deutsch"."""
-    value = str(value or "").strip()
-    if value.lower() in LANGUAGES:
-        return LANGUAGES[value.lower()]
-    return value if LANGUAGE_NAME.fullmatch(value) else "Deutsch"
+    """The code de or en (trimmed, in lower case); anything else is "": the analysis named no language."""
+    value = str(value or "").strip().lower()
+    return value if value in LANGUAGES else ""
 
 
 def _values(value, number=False):
@@ -240,7 +237,7 @@ def retrieval_queries(analysis: QueryAnalysis, original_question: str, first_tur
     """Queries for search and reranking: the standalone question first, then the model's German search queries, and for an
     English question its English ones between them (one after each German one, so a short budget keeps both languages).
     The raw user text is added only on the first turn of a conversation (where it cannot contain unresolved references)."""
-    english = analysis.queries_en if analysis.language == "Englisch" else []
+    english = analysis.queries_en if analysis.language == "en" else []
     searches = [q for pair in zip_longest(analysis.search_queries, english) for q in pair if q]
     queries = [analysis.standalone_question] + searches
     if first_turn:

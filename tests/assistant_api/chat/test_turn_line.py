@@ -80,7 +80,7 @@ def test_a_fallback_turn_context_says_so_and_no_other_does():
     from assistant_api.chat.turns_store import turn_context
 
     doc = SimpleNamespace(page_content="Q", metadata={"section_id": "p1"})
-    analysis = {"standalone_question": "F?", "intent": "out_of_scope", "language": "Deutsch"}
+    analysis = {"standalone_question": "F?", "intent": "out_of_scope", "language": "de"}
     assert turn_context([doc], analysis, [], scope_fallback=True)["scope_fallback"] is True
     assert "scope_fallback" not in turn_context([doc], analysis, [])
     assert "scope_fallback" not in turn_context([doc], analysis, [], scope_fallback=False)
