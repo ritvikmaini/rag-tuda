@@ -94,10 +94,13 @@ def _ask(args: argparse.Namespace) -> int:
     if not token_file.is_file():
         print("no .rag/token here: run `rag up` in this folder first", file=sys.stderr)
         return 1
+    filters = {k: v for k in ("degree", "programme", "po", "lang") if (v := getattr(args, k)) is not None}
     seen: list[ask.Frame] = []
 
     def frames():
-        for frame in ask.stream(args.url, token_file.read_text().strip(), args.question, f"cli-{secrets.token_hex(4)}"):
+        for frame in ask.stream(
+            args.url, token_file.read_text().strip(), args.question, f"cli-{secrets.token_hex(4)}", filters=filters
+        ):
             seen.append(frame)
             yield frame
 
@@ -149,6 +152,10 @@ def main(argv: list[str] | None = None) -> int:
     a = sub.add_parser("ask", help="ask one question and stream the cited answer")
     a.add_argument("question")
     a.add_argument("--json", action="store_true", help="print the stream's frames, one JSON object per line")
+    a.add_argument("--degree", choices=("bachelor", "master", "promotion"), help="answer for this degree")
+    a.add_argument("--programme", help="answer for this programme (a name of roles.yaml)")
+    a.add_argument("--po", type=int, help="answer for this version of the examination regulations, e.g. 2023 or 2015")
+    a.add_argument("--lang", choices=("de", "en"), help="the language of the page: it sets the texts before the answer")
     a.add_argument("--url", default=DEFAULT_URL, help="where the assistant listens (default %(default)s)")
     a.set_defaults(run=_ask)
     s = sub.add_parser("add", help="register a folder, a web site or a CSV file as a source")

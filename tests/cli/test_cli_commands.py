@@ -15,9 +15,11 @@ def project(tmp_path, monkeypatch):
 
 
 def fake_stream(frames, seen=None):
-    def stream(base_url, token, question, conversation_id, formats=None):
+    def stream(base_url, token, question, conversation_id, formats=None, filters=None):
         if seen is not None:
-            seen.update(base_url=base_url, token=token, question=question, conversation_id=conversation_id)
+            seen.update(
+                base_url=base_url, token=token, question=question, conversation_id=conversation_id, filters=filters
+            )
         yield from frames
 
     return stream
@@ -57,6 +59,25 @@ def test_ask_prints_the_rendered_answer(project, monkeypatch, capsys):
     assert capsys.readouterr().out == ask.render(fixture_frames())
     assert seen["token"] == "tok" and seen["question"] == "Welche Frist gilt?"
     assert seen["base_url"] == "http://127.0.0.1:8700" and seen["conversation_id"].startswith("cli-")
+
+
+def test_ask_flags_map_to_params(project, monkeypatch, capsys):
+    (project / ".rag").mkdir()
+    (project / ".rag" / "token").write_text("tok")
+    seen = {}
+    monkeypatch.setattr(ask, "stream", fake_stream(fixture_frames(), seen))
+    assert cli.main(["ask", "q", "--degree", "master", "--programme", "inf-m", "--po", "2015", "--lang", "en"]) == 0
+    assert seen["filters"] == {"degree": "master", "programme": "inf-m", "po": 2015, "lang": "en"}
+    assert cli.main(["ask", "q"]) == 0
+    assert not seen["filters"]  # no flag, no parameter: the backend's defaults apply
+
+
+@pytest.mark.parametrize("flags", [["--lang", "fr"], ["--degree", "diploma"], ["--po", "x"]])
+def test_ask_refuses_a_value_the_flag_does_not_take(project, monkeypatch, capsys, flags):
+    monkeypatch.setattr(ask, "stream", fake_stream(fixture_frames()))
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["ask", "q", *flags])
+    assert exc.value.code == 2
 
 
 def test_ask_json_prints_one_frame_per_line(project, monkeypatch, capsys):

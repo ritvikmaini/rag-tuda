@@ -182,6 +182,27 @@ def test_build_request_without_formats():
     assert "formats" not in urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)
 
 
+def test_build_request_carries_the_filters_the_page_sends():
+    filters = {"degree": "bachelor", "programme": "inf-b", "po": 2023, "lang": "de"}
+    req = ask.build_request("http://127.0.0.1:8700", "t", "q", "c", filters=filters)
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(req.full_url).query)
+    assert query["degree"] == ["bachelor"] and query["programme"] == ["inf-b"]
+    assert query["po"] == ["2023"] and query["lang"] == ["de"]
+
+
+def test_a_refused_filter_shows_the_backends_reason(monkeypatch):
+    import io
+    import urllib.error
+
+    def refused(req, timeout=None):
+        body = b'{"detail": "unknown filter: programme inf-x"}'
+        raise urllib.error.HTTPError(req.full_url, 422, "Unprocessable", {}, io.BytesIO(body))
+
+    monkeypatch.setattr(ask.urllib.request, "urlopen", refused)
+    with pytest.raises(ask.AskError, match="unknown filter: programme inf-x"):
+        list(ask.stream("http://127.0.0.1:8700", "t", "q", "c", filters={"programme": "inf-x"}))
+
+
 def test_stream_reads_lines_from_opener(monkeypatch):
     body = FIXTURE.read_bytes()
     seen = {}

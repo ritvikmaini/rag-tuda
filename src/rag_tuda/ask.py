@@ -9,7 +9,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from typing import Any
 
 Frame = dict[str, Any]
@@ -118,9 +118,15 @@ def failed(frames: Iterable[Frame]) -> bool:
 
 
 def build_request(
-    base_url: str, token: str, question: str, conversation_id: str, formats: str | None = None
+    base_url: str,
+    token: str,
+    question: str,
+    conversation_id: str,
+    formats: str | None = None,
+    filters: Mapping[str, str | int] | None = None,
 ) -> urllib.request.Request:
-    query = {"question": question, "conversation_id": conversation_id}
+    """The GET request of the page's stream. `filters` are the page's selectors: degree, programme, po and lang."""
+    query: dict[str, str | int] = {"question": question, "conversation_id": conversation_id, **(filters or {})}
     if formats:
         query["formats"] = formats
     return urllib.request.Request(
@@ -129,10 +135,22 @@ def build_request(
     )
 
 
+def _detail(exc: urllib.error.HTTPError) -> str:
+    try:
+        return str(json.loads(exc.read(4096))["detail"])
+    except (ValueError, KeyError, TypeError):
+        return "HTTP 422"
+
+
 def stream(
-    base_url: str, token: str, question: str, conversation_id: str, formats: str | None = None
+    base_url: str,
+    token: str,
+    question: str,
+    conversation_id: str,
+    formats: str | None = None,
+    filters: Mapping[str, str | int] | None = None,
 ) -> Iterator[Frame]:
-    req = build_request(base_url, token, question, conversation_id, formats)
+    req = build_request(base_url, token, question, conversation_id, formats, filters)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
             yield from parse(line.decode("utf-8") for line in resp)
@@ -141,6 +159,8 @@ def stream(
             raise AskError(
                 "the token was refused: use the token in .rag/token (open the link `rag up` printed)"
             ) from exc
+        if exc.code == 422:  # a filter the profile's roles do not know: the reason names it
+            raise AskError(f"the assistant refused the question: {_detail(exc)}") from exc
         raise AskError(f"the assistant answered HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise AskError(f"cannot reach {base_url}: is the stack running? Start it with `rag up`") from exc
