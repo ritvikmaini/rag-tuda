@@ -40,7 +40,9 @@ class Timeouts(OverlaySection):
 
 
 class Http(OverlaySection):
-    cors_domain: str  # origins on this domain (and its subdomains), localhost and 127.0.0.1 get CORS headers
+    cors_domain: str = (
+        ""  # origins on this domain (and its subdomains) get CORS headers; empty: CORS off (the page is same-origin)
+    )
 
 
 class Tracing(OverlaySection):

@@ -96,16 +96,22 @@ def test_the_chat_route_keeps_its_parameters() -> None:
 
 
 def test_security_headers_and_cors_follow_the_settings() -> None:
-    client, _ = app_with()
+    client, rt = app_with()
     plain = client.get("/healthz")
     assert plain.headers["X-Frame-Options"] == "DENY" and "Access-Control-Allow-Origin" not in plain.headers
     for origin, allowed in (
         ("https://www.example.org", True),  # the overlay's cors_domain and its subdomains
-        ("http://localhost:3000", True),
+        ("http://localhost:3000", False),  # the page is same-origin: no origin gets headers unless the settings name it
+        ("http://127.0.0.1:8700", False),
         ("https://evil.example", False),
     ):
         reply = client.get("/healthz", headers={"Origin": origin})
         assert (reply.headers.get("Access-Control-Allow-Origin") == origin) is allowed, origin
+    rt.settings.overlay.http.cors_domain = ""  # the default: CORS off
+    reply = client.get("/healthz", headers={"Origin": "https://www.example.org"})
+    assert (
+        "Access-Control-Allow-Origin" not in reply.headers and "Access-Control-Allow-Credentials" not in reply.headers
+    )
 
 
 def test_the_chat_route_makes_a_turn_record_for_a_question_and_ends_it_through_the_guard(monkeypatch) -> None:
