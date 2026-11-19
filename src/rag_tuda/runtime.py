@@ -22,7 +22,7 @@ BACKEND_SECTIONS = {
     "RAG__TIMEOUTS__RETRIEVAL_S": "10",
     "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
     "RAG__TIMEOUTS__RERANKER_S": "15",
-    "RAG__HTTP__CORS_DOMAIN": "localhost",
+    "RAG__HTTP__CORS_DOMAIN": "",  # empty: CORS off, the backend serves the page itself
     "RAG__TRACING__URL": "",  # empty: tracing is off
 }
 
