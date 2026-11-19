@@ -18,6 +18,9 @@ if workers > MAX_WORKERS:
 worker_class = os.environ.get("GUNICORN_WORKER_CLASS", "uvicorn.workers.UvicornWorker")
 
 # Server mechanics
+# No peer is trusted to name the client: gunicorn's default trusts 127.0.0.1, where every native request comes from, so an
+# X-Forwarded-For header would rewrite the client address the rate limit keys on.
+forwarded_allow_ips = ""
 keepalive = int(os.environ.get("GUNICORN_KEEPALIVE", "5"))
 # Increased timeout to handle long RAG pipelines (retrieval + reranking + LLM generation)
 timeout = int(os.environ.get("GUNICORN_TIMEOUT", "600"))
