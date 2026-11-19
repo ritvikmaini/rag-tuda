@@ -105,3 +105,10 @@ export function validTurn(turn) {
         typeof turn.thinking.startedAt === "number" &&
         ["streaming", "done", "error", "stopped", "interrupted"].indexOf(turn.state) >= 0;
 }
+
+// What the backend's HTTP answer says about a turn: 401 = the token was not accepted, 422 = it does not know the chip
+// selection. Status 0 (the start of an attempt, before any answer) clears both, so a retry never keeps an earlier refusal.
+export function recordStatus(turn, status) {
+    turn.unauthorized = status === 401;
+    turn.refused = status === 422;
+}

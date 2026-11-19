@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
+import { recordStatus } from "../model/turns.js";
 
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -25,4 +26,14 @@ test("the watchdog waits as long as the backend's meta frame says (test_watchdog
     assert.equal(watchdogExpired(Object.assign({}, session, { lastData: 240000 }), 250001), true);
     assert.equal(watchdogExpired(Object.assign({}, session, { lastData: 100000 }), 200000), true);
     assert.equal(watchdogExpired(Object.assign({}, session, { lastData: 100000 }), 190000), false);
+});
+
+test("a retry after a network failure forgets the earlier refusal (test_retry_clears_stale_failure_flags)", () => {
+    const turn = {};
+    recordStatus(turn, 422);
+    assert.deepEqual([turn.unauthorized, turn.refused], [false, true]);
+    recordStatus(turn, 401);
+    assert.deepEqual([turn.unauthorized, turn.refused], [true, false]);
+    recordStatus(turn, 0);   // the start of the next attempt, before any answer of the backend
+    assert.deepEqual([turn.unauthorized, turn.refused], [false, false]);
 });

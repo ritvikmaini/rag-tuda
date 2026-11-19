@@ -7,7 +7,7 @@ import { shapeName } from "../model/formats.js";
 import { sourceCards } from "../model/sources.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { applyDocs, applyStatus, finishThinking, haltThinking, newThinking } from "../model/thinking.js";
-import { newTurnId, refOf, replacePlan } from "../model/turns.js";
+import { newTurnId, recordStatus, refOf, replacePlan } from "../model/turns.js";
 import { pump, renderAnswer } from "../render/answer.js";
 import { prefersReducedMotion } from "../render/dom.js";
 import { renderSources } from "../render/sources.js";
@@ -42,6 +42,7 @@ export async function stream(turn, view) {
     const session = Object.assign({ turn, view, controller: new AbortController(), stopped: false, timedOut: false, timer: 0,
         startedAt: Date.now(), lastData: Date.now() }, watchdogLimits());
     state.live = session;
+    recordStatus(turn, 0);  // a retry starts clean: no earlier refusal or rejected token stays
     session.timer = window.setInterval(() => {
         tickTimer(view, turn.thinking);
         if (watchdogExpired(session, Date.now())) {
@@ -54,8 +55,7 @@ export async function stream(turn, view) {
     try {
         const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept, currentChips()),
             withToken({ signal: session.controller.signal, cache: "no-store" }));
-        turn.unauthorized = response.status === 401;
-        turn.refused = response.status === 422;  // the backend does not know the chip selection
+        recordStatus(turn, response.status);
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
