@@ -5,9 +5,10 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 
 const SRC = new URL("../", import.meta.url);
-// Windows lists vendor\x.js: normalise, or the vendored libraries would be imported as page modules
+// Windows lists vendor\x.js: normalise, or the vendored libraries would be imported as page modules. The tests folder holds the
+// browser suite's Python environment (tests/e2e/.venv) with JavaScript of its own.
 const files = readdirSync(SRC, { recursive: true }).map(f => f.replaceAll("\\", "/"))
-    .filter(f => f.endsWith(".js") && f !== "app.js" && !f.startsWith("vendor/")).sort();
+    .filter(f => f.endsWith(".js") && f !== "app.js" && !f.startsWith("vendor/") && !f.startsWith("tests/")).sort();
 const page = Object.assign({}, ...await Promise.all(files.map(f => import(new URL(f, SRC)))));
 // kept from the vm loader (values once came from another context): compare as plain JSON
 const plain = value => JSON.parse(JSON.stringify(value));

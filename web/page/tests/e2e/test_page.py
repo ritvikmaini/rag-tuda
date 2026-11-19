@@ -45,11 +45,15 @@ def test_the_ai_disclosure_is_shown(browser: Browser, e2e: ModuleType) -> None:
             "async () => { const c = await import('./config.js'); return [c.ASSISTANT_NAME, c.TEXT.sourcesNote]; }"
         )
         expect(s.page.locator(".a-card .md").first).to_contain_text("ein KI-Assistent")
-        expect(s.page.locator(".disclaimer")).to_contain_text(
-            "Alle Antworten werden KI generiert und sind ohne Gewähr."
+        expect(s.page.locator(".disclaimer").first).to_contain_text(
+            "Studierendenprojekt, kein offizieller Dienst der TU Darmstadt."
+        )
+        expect(s.page.locator(".disclaimer").first).to_contain_text(
+            "Alle Antworten werden KI-generiert und sind ohne Gewähr."
         )
         expect(s.page).to_have_title(name)
-        assert set(s.page.locator("[data-name]").all_text_contents()) == {name}
+        expect(s.page.locator(".brand-name")).to_have_text(name)
+        expect(s.page.locator(".brand-sub")).to_contain_text("TU Darmstadt")
         s.act({"ask": e2e.SOURCES_Q, "reply": e2e.lookup(e2e.SOURCES_Q, "text", e2e.TEXT_ANSWER)})
         expect(s.page.locator("section.turn .sources-note")).to_have_text(note)
         assert "KI-generiert" in note
@@ -92,7 +96,7 @@ AXE_STATES = {
     "first load": [],
     "lookup with sources": ["sources"],
     "open menu": ["sources", {"click": "section.turn .act-more"}],
-    "version tabs": ["fv01", {"menu": "Kürzer", "reply": "formats_tr-FV01_t2"}],
+    "version tabs": ["fv01", {"menu": "Kürzer", "reply": "formats_variants_t2"}],
     "mind map": ["mindmap"],
 }
 

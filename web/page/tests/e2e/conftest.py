@@ -28,11 +28,14 @@ from playwright.sync_api import Browser, Page, sync_playwright
 HERE = Path(__file__).resolve().parent  # web/page/tests/e2e/
 REPO = HERE.parents[1]
 PAGE = REPO
-TRANSCRIPTS = REPO / "tests" / "fixtures" / "transcripts"
+FIXTURES = REPO / "tests" / "fixtures"  # what the page's own tests read: the profile, the backend's codes
+# the recorded streams, shared with the backend's contract tests (tests/contracts/)
+TRANSCRIPTS = REPO.parents[1] / "tests" / "contracts" / "fixtures" / "transcripts"
 VENDOR = json.loads((REPO / "vendor.json").read_text(encoding="utf-8"))["libraries"]
 PAGE_DIR = os.environ.get("PAGE_DIR", str(PAGE))
 # the backend's codes, as the evals runner reads them (the stream contract's fixture)
-_CONTRACT = json.loads((REPO / "tests" / "fixtures" / "contract_constants.json").read_text(encoding="utf-8"))
+_CONTRACT = json.loads((FIXTURES / "contract_constants.json").read_text(encoding="utf-8"))
+PROFILE = (FIXTURES / "profile.json").read_bytes()  # GET /api/profile: the chips and the footer read it
 ERROR_CODES, OUTCOMES, VARIANT_CODES = _CONTRACT["ERROR_CODES"], _CONTRACT["OUTCOMES"], _CONTRACT["VARIANT_CODES"]
 TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -48,14 +51,16 @@ BERLIN = ZoneInfo("Europe/Berlin")
 PROXY_ERROR = 'event: error\ndata: {"message":"Proxy-Fehler"}\n\n'  # what the proxy writes
 DOC = "https://docs.example.org/handbook/agreements/working-hours/?layout=file"
 TEXT_ANSWER = "Die Kernarbeitszeit endet um 15:00 Uhr [1]. Mobile Arbeit regelt die Dienstvereinbarung [2]."
+# the backend's last paragraph, appended in code after the answer whatever its shape (a table, a mind map, a list)
+PO_LINE = "Grundlage: Prüfungsordnung 2023 des B.Sc. Informatik"
 NUMBER_ANSWER = (
     "Die Einwohnerzahl ist gestiegen [1].\n\n| Jahr | Einwohner |\n| --- | --- |\n| 2019 | 81.352 [1] |\n"
-    "| 2020 | 82.019 [1] |\n| 2021 | 82.746 [2] |\n| 2022 | 83.590 [2] |"
+    "| 2020 | 82.019 [1] |\n| 2021 | 82.746 [2] |\n| 2022 | 83.590 [2] |\n\n" + PO_LINE
 )
-# the recorded mind map variant (transcript FV01 t4) came back as prose: the drawn map needs a hand-made answer
+# the mind maps of the recordings are masked text: the drawn map is checked on a hand-made answer
 MINDMAP_ANSWER = (
     "Die Regelungen im Überblick [1].\n\n```mindmap\n# Mobile Arbeit\n## Umfang\n- bis zu zwei Tage pro Woche [1]\n"
-    "## Antrag\n- über die Führungskraft [2]\n- Vereinbarung für ein Jahr [2]\n```"
+    "## Antrag\n- über die Führungskraft [2]\n- Vereinbarung für ein Jahr [2]\n```\n\n" + PO_LINE
 )
 
 Reply = dict[str, Any]
@@ -169,7 +174,15 @@ def terminated(reply: Reply) -> Reply:
         if item["type"] == "variant" and not (item["content"] or {}).get("ok"):
             item["code"] = VARIANT_CODES.get(reply["path"], "failed")
         frames.append("data: " + json.dumps(item, ensure_ascii=False) + "\n\n")
-    meta = {"format": 1, "turn_id": "00000000-0000-4000-8000-00000000abcd", "trace_id": "e2e"}
+    meta = {
+        "format": 1,
+        "turn_id": "00000000-0000-4000-8000-00000000abcd",
+        "trace_id": "e2e",
+        "deadline_s": 90.0,
+        "idle_s": 5.0,
+        "model": "Qwen/Qwen3-14B-AWQ",
+        "provider": "vllm",
+    }
     is_open = "hold" in reply or "cut" in reply or reply["path"] == "client_stop"
     outcome = OUTCOMES.get(reply["path"], "failed" if failed else "completed")
     done = [] if is_open else [frame("done", {"outcome": outcome}) + "\n\n"]
@@ -208,6 +221,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         url = urllib.parse.urlsplit(self.path)
+        if url.path == "/api/profile":
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(PROFILE)))
+            self.end_headers()
+            self.wfile.write(PROFILE)
+            return
         if url.path != "/api/chat":
             file = (self.server.root / urllib.parse.unquote(url.path).lstrip("/")).resolve()
             if not file.is_relative_to(self.server.root) or not file.is_file():
@@ -443,6 +463,9 @@ class Session:
             page.reload()
         elif "click" in step:
             page.locator(step["click"]).first.click()
+        elif "choose" in step:  # the chips, in the order the selectors narrow each other: degree, programme, PO year
+            for position, value in enumerate(step["choose"]):
+                page.locator(".chip-select").nth(position).select_option(value)
         elif "type" in step:
             page.fill("#question", step["type"])
         return self.snap(step.get("label", ""))
@@ -471,31 +494,22 @@ def run(
 # ------------------------------------------------------------------ the scenarios (together they serve every transcript)
 
 T = transcript
-FIRST = [
-    "plain_tr-A18_t1",
-    "plain_tr-G24-1_t1",
-    "plain_tr-G24-2_t1",
-    "plain_tr-H1_t1",
-    "plain_tr-H2_t1",
-    "plain_tr-H2_t2",
-    "plain_tr-H2_t4",
-    "plain_tr-H4-t4_t1",
-    "plain_tr-S01_t1",
-    "plain_tr-T3_t1",
-    "plain_tr-T3_t2",
-    "plain_tr-T3_t3",
-    "plain_tr-X13_t1",
-    "plain_tr-X16_t1",
-    "busy_tr-busy-1_t1",
-    "busy_tr-busy-2_t1",
-    "formats_tr-FS01_t1",
-    "formats_tr-FT01_t1",
-    "formats_tr-FV01_t1",
-    "formats_tr-FV02_t1",
-    "formats_tr-G01_t1",
-    "formats_tr-refused_t1",
-]
-S01, FV01, FV02 = "plain_tr-S01_t1", "formats_tr-FV01_t1", "formats_tr-FV02_t1"
+
+
+def asked_alone(name: str) -> bool:
+    """A transcript the page can ask as a first question: no variant or version switch, and a question the composer accepts."""
+    params = json.loads((TRANSCRIPTS / (name + ".json")).read_text(encoding="utf-8"))["params"]
+    return (
+        not {"variant", "variant_select"} & params.keys() and len(params["question"]) <= 2000 and "toolong" not in name
+    )
+
+
+FIRST = [name for name in sorted(p.stem for p in TRANSCRIPTS.glob("*.json")) if asked_alone(name)]
+THESIS_T, CARRY_1, CARRY_2 = "plain_thesis_t1", "plain_carry_t1", "plain_carry_t2"
+CHIPS_T, ENGLISH_T, DIRECT_T = "plain_chips_t1", "plain_english_t1", "plain_direct_t1"
+TOO_LONG_T, CHECKLIST_T, REFUSED_T = "plain_toolong_t1", "formats_checklist_t1", "formats_refused_t1"
+BUSY_T, ANSWERED_T = "busy_busy-2_t1", "busy_busy-1_t1"
+S01, FV01 = THESIS_T, "formats_variants_t1"
 SHORT = "Bitte lies diesen Absatz genau."
 NUMBERS_Q, SOURCES_Q = "Wie hat sich die Einwohnerzahl entwickelt?", "Wann endet die Kernarbeitszeit?"
 MINDMAP_Q = "Wie ist die mobile Arbeit geregelt?"
@@ -520,57 +534,51 @@ SCENARIOS: list[dict[str, Any]] = [
     # the page never sends a question over its limit: the too-long reply is served to a short question to pin its rendering
     {
         "id": "too-long",
-        "steps": [{"label": "too long", "ask": SHORT, "reply": T("plain_tr-H5-t2_t1", expect={"question": SHORT})}],
+        "steps": [{"label": "too long", "ask": SHORT, "reply": T(TOO_LONG_T, expect={"question": SHORT})}],
     },
     {
         "id": "variants",
         "steps": [
             ask(FV01),
-            {"label": "shorter", "menu": "Kürzer", "reply": T("formats_tr-FV01_t2")},
-            {"label": "english", "menu": "Auf Englisch", "reply": T("formats_tr-FV01_t3")},
-            {"label": "mindmap", "menu": "Als Mindmap", "reply": T("formats_tr-FV01_t4")},
-            {"label": "switch to the original", "tab": "Original", "reply": T("formats_tr-FV01_t5")},
+            {"label": "shorter", "menu": "Kürzer", "reply": T("formats_variants_t2")},
+            {"label": "english", "menu": "Auf Englisch", "reply": T("formats_variants_t3")},
+            {"label": "switch to the original", "tab": "Original", "reply": T("formats_variants_t5")},
             # the backend lost a version the page still shows: the switch fails and the notice appears
             {
                 "label": "switch to a lost version",
                 "tab": "Kürzer",
-                "reply": T("formats_tr-FV01_t6", expect={"variant_select": "shorter"}),
+                "reply": T("formats_variants_t6", expect={"variant_select": "shorter"}),
             },
+            # last: the drawn map watches its container, and leaving the version hides the container
+            {"label": "mindmap", "menu": "Als Mindmap", "reply": T("formats_variants_t4")},
         ],
     },
     # a direct reply and a lookup without formats offer no variant (menuEntries needs citations and a shape): the refused
     # variant is asked of a formats lookup
     {
         "id": "refused",
-        "steps": [
-            ask(FV02),
-            {"label": "refused", "menu": "Kürzer", "reply": T("formats_tr-refused_t2", expect={"question": q(FV02)})},
-        ],
+        "steps": [ask(REFUSED_T), {"label": "refused", "menu": "Kürzer", "reply": T("formats_refused_t2")}],
     },
     {
         "id": "edit-retry",
         "steps": [
-            ask("plain_tr-H2_t1"),
-            ask("plain_tr-H2_t2"),
-            {"label": "edit the first question", "edit": 0, "ask": q("plain_tr-H2_t3"), "reply": T("plain_tr-H2_t3")},
-            ask("plain_tr-H2_t4"),
-            ask("busy_tr-busy-2_t1"),
-            {"label": "retry", "retry": True, "reply": T("busy_tr-busy-1_t1")},
+            ask(CARRY_1),
+            ask(CARRY_2),
+            {"label": "edit the first question", "edit": 0, "ask": q(DIRECT_T), "reply": T(DIRECT_T)},
+            ask(ENGLISH_T),
+            ask(BUSY_T),
+            {"label": "retry", "retry": True, "reply": T(ANSWERED_T, expect={"question": q(BUSY_T)})},
         ],
     },
     {
         "id": "stop",
         "steps": [
-            ask("plain_tr-H1_t1"),
-            {
-                "label": "streaming",
-                "ask": q("plain_tr-H1_t2"),
-                "reply": T("plain_tr-H1_t2", hold=len(T("plain_tr-H1_t2")["frames"])),
-            },
+            ask(CARRY_1),
+            {"label": "streaming", "ask": q(CARRY_2), "reply": T(CARRY_2, hold=len(T(CARRY_2)["frames"]))},
             {"label": "stopped", "stop": True},
         ],
     },
-    {"id": "reload-done", "steps": [ask(FV02), {"label": "reloaded", "reload": True}]},
+    {"id": "reload-done", "steps": [ask(CHECKLIST_T), {"label": "reloaded", "reload": True}]},
     {
         "id": "reload-mid-variant",
         "steps": [
@@ -578,12 +586,26 @@ SCENARIOS: list[dict[str, Any]] = [
             {
                 "label": "variant streaming",
                 "menu": "Kürzer",
-                "reply": T("formats_tr-FV01_t2", hold=first_chunk("formats_tr-FV01_t2") + 1),
+                "reply": T("formats_variants_t2", hold=first_chunk("formats_variants_t2") + 1),
             },
             {"label": "reloaded", "reload": True},
         ],
     },
-    {"id": "tick", "steps": [ask(FV02), {"label": "ticked", "click": ".tick"}, {"label": "reloaded", "reload": True}]},
+    {
+        "id": "tick",
+        "steps": [ask(CHECKLIST_T), {"label": "ticked", "click": ".tick"}, {"label": "reloaded", "reload": True}],
+    },
+    # the chips offered by the profile, chosen before the question: the request carries them
+    {
+        "id": "chips",
+        "steps": [
+            {"label": "chosen", "choose": ["bachelor", "bsc-informatik", "2015"]},
+            ask(CHIPS_T),
+            {"label": "next question", "ask": q(CARRY_2), "reply": T(CARRY_2)},
+        ],
+    },
+    # the page in English: the switch reloads it, the question then carries lang=en
+    {"id": "english", "steps": [{"label": "switched", "click": "#lang-switch"}, ask(ENGLISH_T)]},
     {
         "id": "chart",
         "synthetic": True,

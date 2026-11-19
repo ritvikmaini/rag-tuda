@@ -16,8 +16,8 @@ from typing import Any
 import pytest
 from playwright.sync_api import Browser
 
-V1 = Path(__file__).resolve().parents[1] / "fixtures" / "transcripts_v1"
-# the native recordings carry a sidecar; the converted rec-* streams beside them serve the contract test only
+V1 = Path(__file__).resolve().parents[4] / "tests" / "contracts" / "fixtures" / "transcripts_v1"
+# the named recordings carry a sidecar; the rec-* streams beside them (every scripted turn) serve the contract test only
 NAMES = sorted(p.stem for p in V1.glob("*.json"))
 
 
@@ -54,34 +54,30 @@ def scenario(e2e: ModuleType, name: str, frames: list[str], path: str) -> dict[s
 
     first = {  # path -> the committed transcript whose request the recording answers
         "lookup_formats": e2e.FV01,
-        "direct": e2e.S01,
-        "busy": "busy_tr-busy-1_t1",
-        "not_ready": "busy_tr-busy-1_t1",
+        "direct": e2e.DIRECT_T,
+        "busy": e2e.BUSY_T,
+        "not_ready": e2e.BUSY_T,
         "client_stop": e2e.S01,
     }
     if path in first:
         return {"id": name, "steps": [{"label": path, "ask": e2e.q(first[path]), "reply": swap(T(first[path]))}]}
     if path == "too_long":
-        base = T("plain_tr-H5-t2_t1", expect={"question": e2e.SHORT})
+        base = T(e2e.TOO_LONG_T, expect={"question": e2e.SHORT})
         return {"id": name, "steps": [{"label": path, "ask": e2e.SHORT, "reply": swap(base)}]}
-    prior = [ask(e2e.FV02 if path == "refused" else e2e.FV01)]
-    shorter = {"label": "shorter", "menu": "Kürzer", "reply": T("formats_tr-FV01_t2")}
+    prior = [ask(e2e.REFUSED_T if path == "refused" else e2e.FV01)]
+    shorter = {"label": "shorter", "menu": "Kürzer", "reply": T("formats_variants_t2")}
     last = {
-        "variant": {"label": path, "menu": "Kürzer", "reply": swap(T("formats_tr-FV01_t2"))},
-        "refused": {
-            "label": path,
-            "menu": "Kürzer",
-            "reply": swap(T("formats_tr-refused_t2", expect={"question": e2e.q(e2e.FV02)})),
-        },
-        "version_switch": {"label": path, "tab": "Original", "reply": swap(T("formats_tr-FV01_t5"))},
+        "variant": {"label": path, "menu": "Kürzer", "reply": swap(T("formats_variants_t2"))},
+        "refused": {"label": path, "menu": "Kürzer", "reply": swap(T("formats_refused_t2"))},
+        "version_switch": {"label": path, "tab": "Original", "reply": swap(T("formats_variants_t5"))},
         "version_switch_missing": {
             "label": path,
             "tab": "Kürzer",
-            "reply": swap(T("formats_tr-FV01_t6", expect={"variant_select": "shorter"})),
+            "reply": swap(T("formats_variants_t6", expect={"variant_select": "shorter"})),
         },
     }[path]
     # a switch to the version already on screen sends nothing: the lost-version switch needs the original shown first
-    original = {"label": "switch to the original", "tab": "Original", "reply": T("formats_tr-FV01_t5")}
+    original = {"label": "switch to the original", "tab": "Original", "reply": T("formats_variants_t5")}
     steps = [
         *prior,
         *([shorter] if path.startswith("version_switch") else []),
@@ -122,8 +118,12 @@ def test_the_synthetic_terminated_form_is_the_recording(e2e: ModuleType, name: s
     def normal(fs: list[str]) -> list[dict[str, Any]]:
         items = [json.loads(f[6:]) for f in fs]
         for item in items:
-            if item["type"] == "meta":  # ids aside (the not-ready code comes from the harness's table)
+            if (
+                item["type"] == "meta"
+            ):  # ids, limits and model aside (the not-ready code comes from the harness's table)
                 item["content"] = {"format": item["content"]["format"]}
+            if item["type"] == "done":  # the generation and prompt versions are the backend's to know
+                item["content"] = {"outcome": item["content"]["outcome"]}
         return items
 
     assert normal(synthetic) == normal(frames), name
