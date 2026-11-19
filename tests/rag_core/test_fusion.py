@@ -41,6 +41,15 @@ def test_a_leg_without_spread_scores_one_per_hit() -> None:
     assert fuse([], [], 0.5) == []
 
 
+def test_a_semantic_hit_without_a_score_counts_as_the_worst_distance() -> None:
+    sem = [semantic("a", 0.2), Hit("unscored", {"retriever": "semantic"}), semantic("b", 0.6)]
+    hits = fuse(sem, [], 1.0)
+    assert scores(hits) == pytest.approx({"a": 1.0, "unscored": 0.0, "b": 0.0})
+    assert hits[0].page_content == "a"
+    zero = fuse([semantic("a", 0.0), semantic("b", 0.5)], [], 1.0)  # a distance of 0.0 is a real score, the best
+    assert scores(zero) == {"a": 1.0, "b": 0.0}
+
+
 def test_fuse_leaves_its_input_untouched() -> None:
     sem = [semantic("a", 0.2)]
     fuse(sem, [lexical("a", 1.0)], 0.5)

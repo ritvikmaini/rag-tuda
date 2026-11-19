@@ -18,12 +18,14 @@ def _normalised(values: Sequence[float]) -> list[float]:
 
 
 def _by_text(hits: Sequence[Hit], key: str, sign: float) -> dict[str, tuple[Hit, float]]:
-    """Each distinct text's first hit with its normalised score under `key` (a missing score counts as 0.0); sign -1 for a
-    distance."""
+    """Each distinct text's first hit with its normalised score under `key`; sign -1 for a distance. A hit without the
+    score counts as the leg's worst."""
     first: dict[str, Hit] = {}
     for hit in hits:
         first.setdefault(hit.page_content, hit)
-    normalised = _normalised([sign * float(hit.metadata.get(key) or 0.0) for hit in first.values()])
+    given = [None if (v := hit.metadata.get(key)) is None else sign * float(v) for hit in first.values()]
+    worst = min((v for v in given if v is not None), default=0.0)
+    normalised = _normalised([worst if v is None else v for v in given])
     return {text: (hit, score) for (text, hit), score in zip(first.items(), normalised, strict=True)}
 
 
