@@ -1,14 +1,15 @@
+import { TEXT } from "../config.js";
 import { cardLinkPage, cardPages, citationHref } from "./citations.js";
 
 // The answer as plain text plus one line per card: its numbers, title, facts, pages and the link that opens them.
 export function copyText(answerText, cards) {
     let out = String(answerText || "").trim();
     if (cards && cards.length) {
-        out += "\n\nQuellen:\n" + cards.map(card => {
+        out += "\n\n" + TEXT.sourcesCopy + "\n" + cards.map(card => {
             const facts = [card.type, card.year].filter(Boolean).join(", ");
             const pages = cardPages(card);
             return (card.ns && card.ns.length ? "[" + card.ns.join(", ") + "] " : "- ") + card.title +
-                (facts ? " (" + facts + ")" : "") + (pages.length ? ", S. " + pages.join(", ") : "") +
+                (facts ? " (" + facts + ")" : "") + (pages.length ? ", " + TEXT.pageAbbr + " " + pages.join(", ") : "") +
                 ": " + citationHref(card.url, cardLinkPage(card));
         }).join("\n");
     }

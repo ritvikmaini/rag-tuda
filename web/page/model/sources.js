@@ -1,4 +1,4 @@
-import { FORM_TYPE, OLD_AFTER_YEARS, YEAR_PATTERN } from "../config.js";
+import { FORM_TYPE, OLD_AFTER_YEARS, TEXT, YEAR_PATTERN } from "../config.js";
 import { citedCards } from "./citations.js";
 
 export function parseUrl(url) {
@@ -41,7 +41,7 @@ export function readableSlug(url) {
         // keep the raw slug
     }
     slug = slug.replace(/\.(pdf|docx?|xlsx?)$/i, "").replace(/(.)pdf$/i, "$1").replace(/[-_]+/g, " ").trim();
-    return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : "Dokument";
+    return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : TEXT.document;
 }
 
 export function titleFor(url, meta) {
@@ -69,7 +69,7 @@ export function sourceCards(docs, nowYear) {
         if (!/^https?:\/\//i.test(url)) return;
         let card = byUrl.get(url);
         if (!card) {
-            const type = String(meta.doc_type || "Dokument");
+            const type = String(meta.doc_type || TEXT.document);
             const year = yearFor(url, meta);
             const page = Number(meta.page_number);
             card = {

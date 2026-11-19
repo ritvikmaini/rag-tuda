@@ -1,4 +1,5 @@
 import { CITATION_PATTERN, MAILTO_LIMIT, MENU_GROUPS, SHAPE_NAMES, TEXT } from "../config.js";
+import { fill } from "../i18n.js";
 import { copyText, escapeHtml } from "./text.js";
 
 // ---- response formats v1: pure helpers
@@ -19,9 +20,9 @@ export function menuEntries(turn, isLast) {
     const has = detectShape(originalAnswer(turn));
     const same = name => name === shown || name === has;
     return MENU_GROUPS.filter(group => group.kind === "export" || canVary).map(group => ({
-        label: group.label,
+        label: TEXT[group.label],
         kind: group.kind,
-        items: group.items.map(([name, label]) => ({ name, label, enabled: group.kind === "export" || !same(name) })),
+        items: group.items.map(([name, label]) => ({ name, label: TEXT[label], enabled: group.kind === "export" || !same(name) })),
     }));
 }
 
@@ -128,11 +129,11 @@ export function mindmapTree(src) {
         if (!root && (m = /^#\s+(.+)$/.exec(line))) {
             root = node(m[1]);
         } else if ((m = /^##\s+(.+)$/.exec(line))) {
-            if (!root) root = node("Überblick");
+            if (!root) root = node(TEXT.mindmapRoot);
             area = node(m[1]);
             root.children.push(area);
         } else if ((m = /^\s*[-*]\s+(.+)$/.exec(line))) {
-            if (!root) root = node("Überblick");
+            if (!root) root = node(TEXT.mindmapRoot);
             (area || root).children.push(node(m[1]));
         }
     });
@@ -161,7 +162,7 @@ export function plainAnswer(markdown) {
 // mailto: with subject and body; a body too long for a mailto link goes to the clipboard instead.
 export function mailPlan(question, answerMarkdown, cards) {
     const q = String(question || "").trim();
-    const subject = "Auskunft: " + (q.length > 60 ? q.slice(0, 59) + "…" : q);
+    const subject = fill(TEXT.mailSubject, { question: q.length > 60 ? q.slice(0, 59) + "…" : q });
     const body = copyText(plainAnswer(answerMarkdown), cards);
     const href = "mailto:?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body);
     if (href.length <= MAILTO_LIMIT) return { href, clipboard: null };

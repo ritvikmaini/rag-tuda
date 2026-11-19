@@ -45,8 +45,8 @@ export function renderTurn(turn) {
     view.moreList = h("ul", { class: "source-list" });
     view.more = h("div", { class: "collapsible" }, h("div", { class: "collapsible-inner" }, view.moreList));
     view.moreBtn = h("button", { type: "button", class: "sources-more", hidden: true, "aria-expanded": "false", onclick: () => toggleMore(view) });
-    view.sources = h("section", { class: "sources", hidden: true, "aria-label": "Quellen" },
-        h("h2", { class: "sources-title" }, "Quellen", view.sourcesCount),
+    view.sources = h("section", { class: "sources", hidden: true, "aria-label": TEXT.sources },
+        h("h2", { class: "sources-title" }, TEXT.sources, view.sourcesCount),
         view.sourceList, view.more, view.moreBtn,
         h("p", { class: "sources-note", text: TEXT.sourcesNote }));
     view.copyLabel = h("span", { text: TEXT.copy });

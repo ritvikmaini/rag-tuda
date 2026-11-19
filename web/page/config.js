@@ -1,6 +1,6 @@
 // ------------------------------------------------------------------ settings
 
-export const ASSISTANT_NAME = "Assistant";
+export const ASSISTANT_NAME = "rag-tuda";
 export const API_PATH = "/api/chat";
 export const PROFILE_PATH = "/api/profile";
 export const STORAGE_KEY = "assistant-chat-v1";
@@ -28,13 +28,13 @@ export const CONTACT_PATTERN = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g
 // Response formats v1: the page tells the backend it renders them; the shape names match the backend's.
 export const FORMATS_VERSION = "v1";
 export const SHAPE_NAMES = ["text", "table", "checklist", "steps", "mindmap"];
-export const VARIANT_LABELS = { original: "Original", table: "Tabelle", checklist: "Checkliste", steps: "Ablauf",
-    mindmap: "Mindmap", shorter: "Kürzer", longer: "Ausführlicher", simple: "Einfache Sprache", english: "English" };
+export { VARIANT_LABELS } from "./i18n.js";
+// The "⋯" menu: ids and the keys of their texts (TEXT).
 export const MENU_GROUPS = [
-    { label: "Form", kind: "model", items: [["table", "Als Tabelle"], ["checklist", "Als Checkliste"], ["steps", "Als Ablauf"], ["mindmap", "Als Mindmap"]] },
-    { label: "Länge", kind: "model", items: [["shorter", "Kürzer"], ["longer", "Ausführlicher"]] },
-    { label: "Sprache", kind: "model", items: [["simple", "Einfache Sprache"], ["english", "Auf Englisch"]] },
-    { label: "Export", kind: "export", items: [["mail", "Als E-Mail"], ["print", "Drucken / PDF"]] },
+    { label: "menuForm", kind: "model", items: [["table", "asTable"], ["checklist", "asChecklist"], ["steps", "asSteps"], ["mindmap", "asMindmap"]] },
+    { label: "menuLength", kind: "model", items: [["shorter", "shorter"], ["longer", "longer"]] },
+    { label: "menuLanguage", kind: "model", items: [["simple", "simple"], ["english", "english"]] },
+    { label: "menuExport", kind: "export", items: [["mail", "asMail"], ["print", "asPrint"]] },
 ];
 export const MAILTO_LIMIT = 1800;
 // Pinned, integrity-checked, loaded only when the first mind map or number table appears.
@@ -47,59 +47,5 @@ export const LIBRARIES = {
         integrity: "sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" },
 };
 
-// The degree ids roles.yaml uses, as the chips and the filter line show them.
-export const DEGREE_NAMES = { bachelor: "Bachelor", master: "Master", promotion: "Promotion" };
-
-export const TEXT = {
-    pending: "Frage wird bearbeitet …",
-    pendingDone: "Frage bearbeitet",
-    analysing: "Frage wird analysiert …",
-    analysingDone: "Frage analysiert",
-    searching: "Suche in den Dokumenten …",
-    searchingDone: "In den Dokumenten gesucht",
-    writing: "Antwort wird formuliert …",
-    writingDone: "Antwort formuliert",
-    failed: "Die Antwort konnte nicht geladen werden. Bitte versuchen Sie es noch einmal.",
-    unauthorized: "Der Zugang wurde nicht akzeptiert. Bitte öffnen Sie den Link aus „rag up“ noch einmal.",
-    chipsRefused: "Diese Auswahl aus Abschluss, Studiengang und PO ist nicht möglich. Bitte ändern Sie die Auswahl über dem Eingabefeld.",
-    chipsLabel: "Auswahl für Ihre Frage",
-    chipDegree: "Abschluss",
-    chipProgramme: "Studiengang",
-    chipPo: "PO-Version",
-    filterApplied: "Filter: {filter}",
-    stopped: "Antwort angehalten.",
-    interrupted: "Die Antwort wurde unterbrochen.",
-    reference: "Bitte nennen Sie bei Rückfragen die Referenz {ref}.",
-    sourcesNote: "KI-generiert – verbindlich ist das Originaldokument.",
-    copy: "Kopieren",
-    copied: "Kopiert",
-    retry: "Nochmal versuchen",
-    edit: "Bearbeiten",
-    editing: "Frage {n} wird bearbeitet – alle späteren Nachrichten werden entfernt.",
-    cancelEdit: "Abbrechen",
-    nearLimit: "Ihre Frage wird lang. Tipp: Teilen Sie umfangreiche Anliegen in mehrere Fragen auf – der Assistent berücksichtigt dabei die letzten Antworten.",
-    overLimit: "Zu lang zum Absenden (höchstens {limit} Zeichen). Bitte kürzen Sie die Frage auf das Wesentliche oder stellen Sie mehrere kürzere Fragen nacheinander.",
-    overLimitTitle: "Die Frage ist zu lang zum Absenden",
-    send: "Absenden",
-    stop: "Antwort anhalten",
-    oldDoc: "älteres Dokument",
-    openForm: "Formular öffnen",
-    newTab: "öffnet in neuem Tab",
-    less: "Weniger anzeigen",
-    more: "Weitere Aktionen",
-    versions: "Versionen dieser Antwort",
-    tick: "Erledigt",
-    mindmapWait: "Mindmap wird erstellt …",
-    mindmapFull: "Vollbild",
-    mindmapFullExit: "Vollbild beenden",
-    menuNote: "Neue Fassung aus der Original-Antwort",
-    mindmapSvg: "Als Bild (SVG)",
-    mindmapMm: "Für Freeplane (.mm)",
-    showChart: "Diagramm",
-    showTable: "Tabelle",
-    chartLabel: "Diagramm aus der Tabelle",
-    variantFailed: "Die Umwandlung ist leider nicht gelungen. Die bisherige Antwort bleibt.",
-    variantStopped: "Umwandlung angehalten. Die bisherige Antwort bleibt.",
-    selectFailed: "Die Version konnte nicht gewechselt werden. Bitte versuchen Sie es noch einmal.",
-    mailPaste: "Text liegt in der Zwischenablage – bitte einfügen.",
-};
+// The degree names and the page's texts in the language in use.
+export { DEGREE_NAMES, TEXT } from "./i18n.js";

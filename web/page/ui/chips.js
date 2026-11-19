@@ -1,5 +1,6 @@
 import { withToken } from "../api/auth.js";
 import { CHIPS_KEY, DEGREE_NAMES, PROFILE_PATH, TEXT } from "../config.js";
+import { getLang, providerLine } from "../i18n.js";
 import { h } from "../render/dom.js";
 import { store, ui } from "./state.js";
 
@@ -16,6 +17,11 @@ const selects = {};
 
 // ---- choices
 
+// A programme's name in the page language; the German one where it has no English name.
+function programmeLabel(programme) {
+    return (getLang() === "en" && programme.label_en) || programme.label_de;
+}
+
 // What each selector offers for the current selection: the profile's degrees, the programmes of the chosen degree and the PO
 // years roles.yaml lists for the chosen programme (all years without one).
 export function chipChoices(prof, selection) {
@@ -23,7 +29,7 @@ export function chipChoices(prof, selection) {
     const chosen = prof.programmes.find(p => p.id === selection.programme);
     return {
         degrees: prof.degrees,
-        programmes: programmes.map(p => ({ id: p.id, label: p.label_de })),
+        programmes: programmes.map(p => ({ id: p.id, label: programmeLabel(p) })),
         pos: chosen ? chosen.po_versions : prof.po_versions,
     };
 }
@@ -76,7 +82,7 @@ export function currentChips() {
 
 // Programme id -> label, for the filter line of the "understood" step.
 export function programmeNames() {
-    return profile ? Object.fromEntries(profile.programmes.map(p => [p.id, p.label_de])) : {};
+    return profile ? Object.fromEntries(profile.programmes.map(p => [p.id, programmeLabel(p)])) : {};
 }
 
 // Takes the selection stored for the current conversation (call after the conversation id changes).
@@ -94,8 +100,10 @@ function cleanProfile(data) {
         degrees: list(data && data.degrees).filter(id => typeof id === "string"),
         programmes: list(data && data.programmes)
             .filter(p => p && typeof p.id === "string" && typeof p.label_de === "string" && typeof p.degree === "string")
-            .map(p => ({ id: p.id, label_de: p.label_de, degree: p.degree, po_versions: years(p.po_versions) })),
+            .map(p => ({ id: p.id, label_de: p.label_de, label_en: typeof p.label_en === "string" ? p.label_en : "", degree: p.degree,
+                po_versions: years(p.po_versions) })),
         po_versions: years(data && data.po_versions),
+        answer: data && data.answer && typeof data.answer === "object" ? data.answer : null,
     };
 }
 
@@ -107,6 +115,8 @@ async function loadProfile() {
     } catch (error) {
         return;  // no chips: questions are asked without a selection
     }
+    // the model that answers, named under the composer when it is a remote one
+    if (ui.provider) ui.provider.textContent = providerLine(profile.answer);
     syncChips();
 }
 
@@ -137,7 +147,7 @@ function renderChips() {
 // Puts the (still hidden) selectors above the composer and loads the profile that fills them.
 export function startChips() {
     const make = (name, label) => {
-        selects[name] = h("select", { class: "chip", "aria-label": label, onchange: onPick });
+        selects[name] = h("select", { class: "chip-select", "aria-label": label, onchange: onPick });
         return selects[name];
     };
     ui.chips = h("div", { class: "chips", role: "group", "aria-label": TEXT.chipsLabel, hidden: true },

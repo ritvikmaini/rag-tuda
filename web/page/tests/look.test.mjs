@@ -2,11 +2,24 @@
 // From web/page: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { questionUrl } from "../api/urls.js";
+import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detectLang, getLang, providerLine, setLang }
+    from "../i18n.js";
+import { menuEntries } from "../model/formats.js";
+import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from "../model/thinking.js";
+import { chipChoices } from "../ui/chips.js";
+import { readFileSync } from "node:fs";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { recordStatus } from "../model/turns.js";
 
 const plain = value => JSON.parse(JSON.stringify(value));
+
+// every test that switches the language puts German back
+function inLang(t, lang) {
+    setLang(lang);
+    t.after(() => setLang("de"));
+}
 
 // ---- the watchdog
 
@@ -36,4 +49,141 @@ test("a retry after a network failure forgets the earlier refusal (test_retry_cl
     assert.deepEqual([turn.unauthorized, turn.refused], [true, false]);
     recordStatus(turn, 0);   // the start of the next attempt, before any answer of the backend
     assert.deepEqual([turn.unauthorized, turn.refused], [false, false]);
+});
+
+// ---- languages
+
+test("the page language: stored choice, else browser, else German; the switch changes every text (test_i18n_switch)", t => {
+    assert.deepEqual(LANGS, ["de", "en"]);
+    assert.equal(detectLang("en", "de-DE"), "en");
+    assert.equal(detectLang(null, "en-GB"), "en");
+    assert.equal(detectLang(null, "de-AT"), "de");
+    assert.equal(detectLang(null, "fr-FR"), "de");
+    assert.equal(detectLang("xx", undefined), "de");
+    assert.equal(getLang(), "de");
+    assert.equal(TEXT.failed, "Die Antwort konnte nicht geladen werden. Bitte versuchen Sie es noch einmal.");
+    assert.equal(DEGREE_NAMES.promotion, "Promotion");
+    assert.equal(VARIANT_LABELS.table, "Tabelle");
+    setLang("en");
+    t.after(() => setLang("de"));
+    assert.equal(getLang(), "en");
+    assert.equal(TEXT.failed, "The answer could not be loaded. Please try again.");
+    assert.equal(TEXT.unauthorized, "Access was not accepted. Please open the link from “rag up” again.");
+    assert.equal(DEGREE_NAMES.promotion, "Doctorate");
+    assert.equal(VARIANT_LABELS.table, "Table");
+    assert.equal(VARIANT_LABELS.original, "Original");
+    assert.deepEqual(menuEntries({ id: "a", answer: "Text [1]", state: "done", citations: [{ n: 1 }], shape: "text" }, true)
+        .map(group => group.label), ["Form", "Length", "Language", "Export"]);
+    // anything but de/en is German
+    setLang("fr");
+    assert.equal(getLang(), "de");
+});
+
+test("both languages have the same strings, with the same {marks} (test_i18n_switch)", () => {
+    const marks = text => (String(text).match(/\{\w+\}/g) || []).sort().join();
+    assert.deepEqual(Object.keys(STRINGS.en).sort(), Object.keys(STRINGS.de).sort());
+    for (const key of Object.keys(STRINGS.de)) assert.equal(marks(STRINGS.en[key]), marks(STRINGS.de[key]), key);
+});
+
+test("the page's markup takes its text from the strings in use (test_i18n_switch)", t => {
+    const make = attrs => {
+        const el = { attrs: Object.assign({}, attrs), textContent: "",
+            getAttribute(name) { return this.attrs[name]; }, setAttribute(name, value) { this.attrs[name] = value; } };
+        return el;
+    };
+    const greeting = make({ "data-i18n": "greeting" });
+    const button = make({ "data-i18n-attrs": "title=newChatTitle, aria-label=newChat" });
+    const root = { querySelectorAll: selector => (selector === "[data-i18n]" ? [greeting] : [button]) };
+    applyStatic(root, { name: "rag-tuda" });
+    assert.match(greeting.textContent, /^Hallo, ich bin rag-tuda,/);
+    assert.equal(button.attrs.title, "Neues Gespräch beginnen");
+    inLang(t, "en");
+    applyStatic(root, { name: "rag-tuda" });
+    assert.match(greeting.textContent, /^Hello, I am rag-tuda,/);
+    assert.equal(button.attrs["aria-label"], "New conversation");
+});
+
+test("thinking steps, summaries and numbers are worded in the page language (test_i18n_switch)", t => {
+    const run = () => {
+        const thinking = newThinking(0);
+        applyStatus(thinking, { step: "analysing" }, "Q");
+        applyStatus(thinking, { step: "understood", question: "Anmeldung zur Prüfung" }, "anmeldung");
+        applyStatus(thinking, { step: "searching", queries: ["Prüfung"] }, "Q");
+        applyStatus(thinking, { step: "searching_more" }, "Q");
+        applyStatus(thinking, { step: "found", documents: 2 }, "Q");
+        return thinking;
+    };
+    const german = run();
+    assert.deepEqual(german.steps.map(step => step.text), [
+        "Frage analysiert", "Verstanden als: „Anmeldung zur Prüfung“", "Gesucht nach: „Prüfung“",
+        "Weitere Dokumente gesucht", "2 Dokumente gefunden"]);
+    assert.equal(summaryText(Object.assign(german, { endedAt: 12500 })), "1 Suchbegriff · 2 Dokumente · 13 s");
+    assert.equal(formatSeconds(2500), "2,5 s");
+    inLang(t, "en");
+    const english = run();
+    assert.deepEqual(english.steps.map(step => step.text), [
+        "Question analysed", "Understood as: “Anmeldung zur Prüfung”", "Searched for: “Prüfung”",
+        "Searched for further documents", "2 documents found"]);
+    assert.equal(summaryText(Object.assign(english, { endedAt: 12500 })), "1 search term · 2 documents · 13 s");
+    assert.equal(formatSeconds(2500), "2.5 s");
+});
+
+test("the iterative round has its own status step, active while it runs (test_searching_more_step)", t => {
+    const step = lang => {
+        setLang(lang);
+        const thinking = newThinking(0);
+        applyStatus(thinking, { step: "searching", queries: ["a"] }, "Q");
+        applyStatus(thinking, { step: "searching_more" }, "Q");
+        return thinking.steps[thinking.steps.length - 1];
+    };
+    t.after(() => setLang("de"));
+    assert.deepEqual(plain(step("de")), { key: "search_more", text: "Suche nach weiteren Dokumenten …", state: "active" });
+    assert.deepEqual(plain(step("en")), { key: "search_more", text: "Searching for further documents …", state: "active" });
+});
+
+test("the chips show the English programme labels in English (test_chips_english)", t => {
+    const prof = {
+        degrees: ["master"], po_versions: [2023],
+        programmes: [{ id: "msc-informatik", label_de: "M.Sc. Informatik", label_en: "M.Sc. Computer Science (Informatik)",
+            degree: "master", po_versions: [2023] }],
+    };
+    assert.equal(chipChoices(prof, {}).programmes[0].label, "M.Sc. Informatik");
+    inLang(t, "en");
+    assert.equal(chipChoices(prof, {}).programmes[0].label, "M.Sc. Computer Science (Informatik)");
+    // without an English label the German one stays
+    const bare = { degrees: [], po_versions: [], programmes: [{ id: "x", label_de: "Nur deutsch", degree: "master", po_versions: [] }] };
+    assert.equal(chipChoices(bare, {}).programmes[0].label, "Nur deutsch");
+    assert.equal(filterText({ degree: ["promotion"], programme: ["x"] }, { x: "Name" }), "Filter: Doctorate · Name");
+});
+
+test("a question names the page language (test_question_url_carries_lang)", () => {
+    assert.ok(questionUrl("Q", "c-1", "", "", undefined, undefined, "en").endsWith("&lang=en"));
+    assert.ok(questionUrl("Q", "c-1", "tid", "rid", ["a"], { degree: "master", programme: "", po: "" }, "de")
+        .endsWith("&turn_id=tid&replace_from=rid&kept=a&degree=master&lang=de"));
+    // nothing is sent for a language the page does not know
+    assert.ok(!questionUrl("Q", "c-1", "", "", undefined, undefined, "EN").includes("lang="));
+    assert.ok(!questionUrl("Q", "c-1").includes("lang="));
+});
+
+// ---- the footer and the header
+
+test("the footer says it is no official service and no legal advice, and names a remote answer provider (test_footer_and_provider_line)", t => {
+    assert.equal(providerLine({ model: "llama-3.3", provider: "groq", remote: true }), "Antworten von llama-3.3 über groq.");
+    assert.equal(providerLine({ model: "qwen3", provider: "ollama", remote: false }), "");
+    assert.equal(providerLine(undefined), "");
+    assert.equal(providerLine({ model: "m", provider: "p" }), "");
+    assert.match(TEXT.footer, /kein offizieller Dienst der TU Darmstadt/);
+    assert.match(TEXT.footer, /Keine Rechtsberatung/);
+    assert.equal(TEXT.headerSub, "für den Fachbereich Informatik der TU Darmstadt");
+    inLang(t, "en");
+    assert.equal(providerLine({ model: "llama-3.3", provider: "groq", remote: true }), "Answers by llama-3.3 via groq.");
+    assert.match(TEXT.footer, /not an official service of TU Darmstadt/);
+    assert.match(TEXT.footer, /Not legal advice/);
+    assert.equal(TEXT.headerSub, "for the Department of Computer Science at TU Darmstadt");
+    // the markup carries both lines and the wordmark
+    const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+    assert.match(html, /data-i18n="footer"/);
+    assert.match(html, /data-i18n="headerSub"/);
+    assert.match(html, /id="provider-line"/);
+    assert.match(html, /rag-<span class="brand-hl">tuda<\/span>/);
 });

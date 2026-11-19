@@ -1,4 +1,5 @@
 import { TEXT, VISIBLE_SOURCES } from "../config.js";
+import { fill } from "../i18n.js";
 import { cardLinkPage, cardPages, citationHref, citedCards, citedNumbers } from "../model/citations.js";
 import { h, icon } from "./dom.js";
 
@@ -7,7 +8,7 @@ import { h, icon } from "./dom.js";
 export function sourceElement(card) {
     const pages = cardPages(card);
     const href = citationHref(card.url, cardLinkPage(card));
-    const facts = [card.origin, card.year, pages.length ? "S. " + pages.join(", ") : null].filter(Boolean).join(" · ");
+    const facts = [card.origin, card.year, pages.length ? TEXT.pageAbbr + " " + pages.join(", ") : null].filter(Boolean).join(" · ");
     const body = h("div", { class: "source-body" },
         h("a", { class: "source-title", href, target: "_blank", rel: "noopener noreferrer", text: card.title }),
         h("div", { class: "source-meta" },
@@ -23,7 +24,7 @@ export function sourceElement(card) {
 
 export function setMoreLabel(view) {
     const extra = Math.max(0, view.cardCount - VISIBLE_SOURCES);
-    view.moreBtn.textContent = view.more.classList.contains("open") ? TEXT.less : "+ " + extra + " weitere";
+    view.moreBtn.textContent = view.more.classList.contains("open") ? TEXT.less : fill(TEXT.moreSources, { n: extra });
 }
 
 export function toggleMore(view) {

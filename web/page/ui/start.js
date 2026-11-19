@@ -1,6 +1,7 @@
 import { takeToken } from "../api/auth.js";
 import { ASSISTANT_NAME, TEXT } from "../config.js";
 import { toggleTick } from "../features/tasks.js";
+import { LANG_KEY, applyStatic, detectLang, getLang, setLang } from "../i18n.js";
 import { h } from "../render/dom.js";
 import { hideTip, onTipScroll, showTip } from "../render/tooltip.js";
 import { stopLive } from "./ask.js";
@@ -10,10 +11,35 @@ import { onScroll, readerNearEnd, scrollToEnd, updateJump, userScrolled } from "
 import { state, ui } from "./state.js";
 import { newConversation, restore } from "./storage.js";
 
+// ---- language: the stored choice, else the browser's; the switch stores the other one and reloads the page (the
+// conversation is kept in sessionStorage and comes back in the new language's page)
+
+function storedLang() {
+    try {
+        return window.localStorage.getItem(LANG_KEY);
+    } catch (error) {
+        return null;
+    }
+}
+
+function switchLang() {
+    try {
+        window.localStorage.setItem(LANG_KEY, getLang() === "de" ? "en" : "de");
+    } catch (error) {
+        return;  // blocked storage: the page stays in the language it has
+    }
+    window.location.reload();
+}
+
 // ---- start
 
 export function init() {
     takeToken(window);
+    setLang(detectLang(storedLang(), window.navigator.language));
+    document.documentElement.lang = getLang();
+    applyStatic(document, { name: ASSISTANT_NAME });
+    ui.provider = document.getElementById("provider-line");
+    document.getElementById("lang-switch").addEventListener("click", switchLang);
     ui.conversation = document.getElementById("conversation");
     ui.form = document.getElementById("composer");
     ui.question = document.getElementById("question");
@@ -37,7 +63,6 @@ export function init() {
     startChips();
 
     document.title = ASSISTANT_NAME;
-    document.querySelectorAll("[data-name]").forEach(el => { el.textContent = ASSISTANT_NAME; });
     if (new URLSearchParams(window.location.search).get("m") === "nh") document.body.classList.add("no-header");
     if (window.showdown) {
         state.converter = new window.showdown.Converter({

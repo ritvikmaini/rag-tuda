@@ -1,7 +1,10 @@
 import { DEGREE_NAMES, TEXT } from "../config.js";
+import { fill, getLang } from "../i18n.js";
 
+// The search terms as a quoted list: „a“, „b“ in German, “a”, “b” in English.
 export function quoteList(items) {
-    return items.map(item => "„" + item + "“").join(", ");
+    const [open, close] = getLang() === "en" ? ["“", "”"] : ["„", "“"];
+    return items.map(item => open + item + close).join(", ");
 }
 
 export function normalizeQuestion(text) {
@@ -29,12 +32,12 @@ export function filterText(applied, programmeNames) {
 
 export function formatSeconds(ms) {
     const s = Math.max(0, ms) / 1000;
-    return (s >= 10 ? String(Math.round(s)) : s.toFixed(1).replace(".", ",")) + " s";
+    return (s >= 10 ? String(Math.round(s)) : s.toFixed(1).replace(".", TEXT.decimal)) + " s";
 }
 
 export function foundText(count) {
-    if (count === 0) return "Keine passenden Dokumente gefunden";
-    return count + (count === 1 ? " Dokument" : " Dokumente") + " gefunden";
+    if (count === 0) return TEXT.noDocuments;
+    return fill(count === 1 ? TEXT.foundOne : TEXT.foundMany, { n: count });
 }
 
 // ---- thinking model: steps of one answer, fed by status frames (or by the docs frame)
@@ -59,7 +62,8 @@ export function findStep(t, key) {
 export function doneText(t, step) {
     if (step.key === "pending") return TEXT.pendingDone;
     if (step.key === "analysing") return TEXT.analysingDone;
-    if (step.key === "search") return t.queries.length ? "Gesucht nach: " + quoteList(t.queries) : TEXT.searchingDone;
+    if (step.key === "search") return t.queries.length ? fill(TEXT.searchedFor, { queries: quoteList(t.queries) }) : TEXT.searchingDone;
+    if (step.key === "search_more") return TEXT.searchingMoreDone;
     if (step.key === "writing") return TEXT.writingDone;
     return step.text;
 }
@@ -89,7 +93,7 @@ export function applyStatus(t, content, typed, programmeNames) {
         completeActive(t);
         const question = String(c.question || "").trim();
         if (differsFromTyped(typed, question)) {
-            t.steps.push({ key: "understood", text: "Verstanden als: „" + question + "“", state: "done" });
+            t.steps.push({ key: "understood", text: fill(TEXT.understood, { question }), state: "done" });
         }
         const filter = filterText(c.applied_filter, programmeNames);
         if (filter) t.steps.push({ key: "filter", text: filter, state: "done" });
@@ -98,8 +102,13 @@ export function applyStatus(t, content, typed, programmeNames) {
         completeActive(t);
         t.retrieval = true;
         t.queries = Array.isArray(c.queries) ? c.queries.map(q => String(q).trim()).filter(Boolean) : [];
-        const text = t.queries.length ? "Suche nach " + quoteList(t.queries) + " …" : TEXT.searching;
+        const text = t.queries.length ? fill(TEXT.searchingFor, { queries: quoteList(t.queries) }) : TEXT.searching;
         t.steps.push({ key: "search", text, state: "active" });
+    } else if (c.step === "searching_more") {
+        // the iterative round: a follow-up search for what the first documents left open
+        completeActive(t);
+        t.retrieval = true;
+        t.steps.push({ key: "search_more", text: TEXT.searchingMore, state: "active" });
     } else if (c.step === "found") {
         const count = Math.max(0, Math.floor(Number(c.documents) || 0));
         t.retrieval = true;
@@ -138,9 +147,9 @@ export function haltThinking(t, now) {
 export function summaryText(t) {
     const parts = [];
     const q = t.queries.length;
-    if (q) parts.push(q + (q === 1 ? " Suchbegriff" : " Suchbegriffe"));
+    if (q) parts.push(fill(q === 1 ? TEXT.queryOne : TEXT.queryMany, { n: q }));
     if (t.documents !== null) {
-        parts.push(t.documents === 0 ? "keine Dokumente" : t.documents + (t.documents === 1 ? " Dokument" : " Dokumente"));
+        parts.push(t.documents === 0 ? TEXT.noDocumentsShort : fill(t.documents === 1 ? TEXT.documentOne : TEXT.documentMany, { n: t.documents }));
     }
     const ms = t.endedAt !== null ? t.endedAt - t.startedAt : 0;
     if (ms > 0) parts.push(formatSeconds(ms));

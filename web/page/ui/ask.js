@@ -1,6 +1,7 @@
 import { withToken } from "../api/auth.js";
 import { createFrameParser } from "../api/frames.js";
 import { questionUrl } from "../api/urls.js";
+import { getLang } from "../i18n.js";
 import { renderTabs } from "../features/variants.js";
 import { citationEntries } from "../model/citations.js";
 import { shapeName } from "../model/formats.js";
@@ -53,7 +54,7 @@ export async function stream(turn, view) {
     updateSend();
     let ok = false;
     try {
-        const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept, currentChips()),
+        const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept, currentChips(), getLang()),
             withToken({ signal: session.controller.signal, cache: "no-store" }));
         recordStatus(turn, response.status);
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);

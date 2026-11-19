@@ -3,7 +3,8 @@ import { API_PATH, FORMATS_VERSION } from "../config.js";
 // ---- request, copy, contacts, ids
 
 // chips: { degree, programme, po } as text; an empty one is left out (the backend then applies no chip value for it).
-export function questionUrl(question, id, turnId, replaceFrom, kept, chips) {
+// lang: the page language, "de" or "en" (lower case); it is left out for anything else (the backend then reads the question).
+export function questionUrl(question, id, turnId, replaceFrom, kept, chips, lang) {
     let url = API_PATH + "?question=" + encodeURIComponent(question) +
         "&conversation_id=" + encodeURIComponent(id) + "&formats=" + FORMATS_VERSION;
     if (turnId) url += "&turn_id=" + encodeURIComponent(turnId);
@@ -14,6 +15,7 @@ export function questionUrl(question, id, turnId, replaceFrom, kept, chips) {
     for (const name of ["degree", "programme", "po"]) {
         if (chips && chips[name]) url += "&" + name + "=" + encodeURIComponent(chips[name]);
     }
+    if (lang === "de" || lang === "en") url += "&lang=" + lang;
     return url;
 }
 

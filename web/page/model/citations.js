@@ -1,4 +1,5 @@
 import { CITATION_PATTERN, FORM_TYPE, TEXT, YEAR_PATTERN } from "../config.js";
+import { fill } from "../i18n.js";
 import { isOld, readableSlug } from "./sources.js";
 
 export function citationParts(text) {
@@ -57,12 +58,12 @@ export function citedNumbers(text) {
 }
 
 export function citationFacts(entry) {
-    return [entry.type, entry.date, entry.page ? "S.\u00a0" + entry.page : ""].filter(Boolean).join(" · ");
+    return [entry.type, entry.date, entry.page ? TEXT.pageAbbr + "\u00a0" + entry.page : ""].filter(Boolean).join(" · ");
 }
 
 export function citationLabel(entry) {
     const title = entry.title || readableSlug(entry.url);
-    return "Quelle " + entry.n + ": " + title + (entry.page ? ", S. " + entry.page : "") + " (" + TEXT.newTab + ")";
+    return fill(TEXT.sourceLabel, { n: entry.n, title }) + (entry.page ? ", " + TEXT.pageAbbr + " " + entry.page : "") + " (" + TEXT.newTab + ")";
 }
 
 // The entries an answer's markers use. A searched answer uses only its own. A direct reply without a search (e.g. "kürzer")
@@ -100,7 +101,7 @@ export function citedCards(cards, entries, cited, nowYear) {
         let card = byUrl.get(entry.url);
         if (!card) {
             const year = yearFromDate(entry.date);
-            card = { url: entry.url, title: entry.title || readableSlug(entry.url), type: entry.type || "Dokument",
+            card = { url: entry.url, title: entry.title || readableSlug(entry.url), type: entry.type || TEXT.document,
                 origin: entry.origin, year, page: entry.page, ns: [], pages: [], linkPage: entry.page,
                 old: isOld(year, nowYear), isForm: entry.type === FORM_TYPE };
             byUrl.set(entry.url, card);
