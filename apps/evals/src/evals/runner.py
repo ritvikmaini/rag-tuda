@@ -28,7 +28,7 @@ from datetime import datetime
 
 import httpx
 
-from evals.checks import evaluate_turn, turn_expect
+from evals.checks import LINE_METADATA, evaluate_turn, turn_expect
 from evals.gate import load_config, read_rows, replay_problem
 from evals.settings import load_settings
 from evals.sse import parse_sse
@@ -61,11 +61,13 @@ def sources_from_event(content):
 
 def source_metadata(citations, docs):
     """{n: metadata} of the documents the citations point at: a citation's url is its document's download_url or url, as
-    the docs frame carries them (one entry per number; a citation whose document is not in the frame has none)."""
+    the docs frame carries them (one entry per number; a citation whose document is not in the frame has none). Only the
+    metadata the appended lines depend on (checks.LINE_METADATA) is kept."""
     by_url = {}
     for item in docs or []:
         meta = (item or {}).get("metadata") or {}
-        by_url.setdefault(meta.get("download_url") or meta.get("url") or "", meta)
+        if url := meta.get("download_url") or meta.get("url"):
+            by_url.setdefault(url, {k: meta[k] for k in LINE_METADATA if k in meta})
     return {
         c["n"]: by_url[c["url"]]
         for c in citations or []
@@ -104,12 +106,13 @@ def ask(
     connection after that many seconds (a client stop: the backend sees a disconnect); event_types then ends 'aborted'.
     kept (with replace_from): the ids of the questions the page still shows before the replaced one.
     formats, variant, variant_of, variant_select: response formats; meta (a dict) receives the shape, citations (their
-    numbers, and as source_metadata each cited document's metadata from the docs frame), variant and status-step frames.
+    numbers, and as source_metadata each cited document's line metadata from the docs frame, joined after the stream), variant and status-step frames.
     record: a path stem; the response bytes go to <stem>.raw exactly as received, the
     HTTP status, the response headers and the query parameters (never the token) to <stem>.json. Recorded or not, the
     bytes pass the same incremental UTF-8 decoder, so a recorded run measures like any other."""
     started = time.monotonic()
     first, docs, buf = None, None, ""
+    cited_entries = None  # the citations frame's entries; None when there was none
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     parts, errors, types = [], [], []
     params = {"question": question, "conversation_id": user}
@@ -129,7 +132,7 @@ def ask(
         params["variant_of"] = variant_of
 
     def take(events):
-        nonlocal first, docs
+        nonlocal first, docs, cited_entries
         for ev in events:
             typ = ev.get("type")
             types.append(typ)
@@ -148,7 +151,7 @@ def ask(
                 meta["citations"] = (
                     [c.get("n") for c in content if isinstance(c, dict)] if isinstance(content, list) else []
                 )
-                meta["source_metadata"] = source_metadata(content if isinstance(content, list) else [], docs)
+                cited_entries = content if isinstance(content, list) else []
             elif meta is not None and typ == "variant":
                 meta["variant_ok"] = bool((content or {}).get("ok"))
             elif meta is not None and typ == "status":
@@ -196,6 +199,10 @@ def ask(
             raw.close()
             with open(record + ".json", "w", encoding="utf-8") as fh:
                 json.dump({"status": status, "headers": headers, "params": params}, fh, ensure_ascii=False, indent=1)
+    if (
+        meta is not None and cited_entries is not None
+    ):  # after the stream: the docs frame may follow the citations frame
+        meta["source_metadata"] = source_metadata(cited_entries, docs)
     return "".join(parts), docs, errors, first, time.monotonic() - started, types
 
 
@@ -301,6 +308,7 @@ def run_conversation(conv, ask_fn, min_interval, label, stamp, emit, formats=Non
             "shape": meta.get("shape"),
             "variant": turn.get("variant") or turn.get("select"),
             "citations": meta.get("citations"),
+            "source_metadata": meta.get("source_metadata"),
             "variant_ok": meta.get("variant_ok"),
             "generation": meta.get("generation"),  # None = unrecorded (an old backend, a client stop, a variant)
             "prompts": meta.get("prompts"),

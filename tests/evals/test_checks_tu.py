@@ -2,6 +2,7 @@
 markers and the lines code appends. The expected lines come from the profile's messages through the producer
 (rag_core.domain.notes), so a change of wording moves producer and check together."""
 
+import dataclasses
 import json
 import pathlib
 
@@ -178,7 +179,13 @@ def stream(*items):
     return "".join("data: " + json.dumps({"type": t, "content": c}, ensure_ascii=False) for t, c in items).encode()
 
 
-DOCS = ("docs", [{"page_content": "§ 5", "metadata": {"url": "https://tu.example/po.pdf", **BSC_2023}}])
+DOCS = (
+    "docs",
+    [
+        {"page_content": "§ 5", "metadata": {"url": "https://tu.example/po.pdf", **BSC_2023}},
+        {"page_content": "Krank", "metadata": {"url": "https://tu.example/x", **FAQ}},
+    ],
+)
 CITATIONS = ("citations", [{"n": 1, "url": "https://tu.example/po.pdf"}, {"n": 2, "url": "https://tu.example/x"}])
 
 
@@ -224,8 +231,80 @@ def test_runner_fails_a_citation_without_a_source(monkeypatch):
 
 
 def test_source_metadata_joins_citations_to_documents_by_url():
-    docs = [{"metadata": {"url": "https://a", "po_version": 2023}}, {"metadata": {"download_url": "https://b/x.pdf"}}]
-    found = runner.source_metadata(
-        [{"n": 1, "url": "https://b/x.pdf"}, {"n": 2, "url": "https://a"}, {"n": 3, "url": "https://zz"}, "x"], docs
-    )
-    assert found == {1: {"download_url": "https://b/x.pdf"}, 2: {"url": "https://a", "po_version": 2023}}
+    docs = [
+        {"metadata": {"url": "https://a", "po_version": 2023, "matched_child_text": "Text"}},
+        {"metadata": {"download_url": "https://b/x.pdf", "regulation": "residence"}},
+        {"page_content": "Keine Quellen", "metadata": {}},
+    ]
+    cited = [{"n": 1, "url": "https://b/x.pdf"}, {"n": 2, "url": "https://a"}, {"n": 3, "url": "https://zz"}, "x"]
+    found = runner.source_metadata([*cited, {"n": 4, "url": ""}], docs)
+    # the lines' metadata only; a citation without a url joins nothing, not the document without one
+    assert found == {1: {"regulation": "residence"}, 2: {"po_version": 2023}}
+
+
+def test_runner_fails_the_line_checks_when_the_docs_frame_follows_the_citations(monkeypatch):
+    """sources_event seen/cited: the docs frame comes after the citations frame and is joined all the same."""
+    late = stream(("chunk", DE), CITATIONS, DOCS)
+    assert played(monkeypatch, late, LINE_CHECKS)["checks"]["failed"] == ["po_line_present"]
+    complete = stream(("chunk", with_lines(DE, [BSC_2023])), CITATIONS, DOCS)
+    assert played(monkeypatch, complete, LINE_CHECKS)["checks"]["failed"] == []
+
+
+def test_a_cited_number_without_metadata_fails_the_line_checks(monkeypatch):
+    row = played(monkeypatch, stream(("chunk", DE), CITATIONS), LINE_CHECKS)  # no docs frame at all
+    assert row["checks"]["failed"] == ["po_line_present:unjoined", "visa_disclaimer_present:unjoined"]
+    assert not po_line_present(DE, {}, TEXTS["de"], PROGRAMMES, "de")
+    assert not visa_disclaimer_present(DE, {1: BSC_2023}, TEXTS["de"], PROGRAMMES, "de")  # [2] has none
+
+
+def test_the_row_keeps_what_rescoring_needs(monkeypatch):
+    row = played(monkeypatch, stream(DOCS, ("chunk", DE), CITATIONS), LINE_CHECKS)
+    assert row["citations"] == [1, 2] and row["source_metadata"] == {
+        1: {"programme": "bsc-informatik", "po_version": 2023, "regulation": "po", "lang": "de"},
+        2: {"regulation": "faq", "lang": "de"},
+    }
+
+
+def test_rescore_gives_the_same_verdict_as_the_run(monkeypatch):
+    from evals.rescore import rescore_rows
+
+    failing = played(monkeypatch, stream(DOCS, ("chunk", DE), CITATIONS), LINE_CHECKS)
+    passing = played(monkeypatch, stream(DOCS, ("chunk", with_lines(DE, [BSC_2023])), CITATIONS), LINE_CHECKS)
+    rows = [json.loads(json.dumps(r)) for r in (failing, passing)]  # as read back from results.jsonl: text keys
+    rescored, changed = rescore_rows(rows, set())
+    assert [r["checks"]["failed"] for r in rescored] == [["po_line_present"], []] and changed == 0
+
+
+# ---- quotations, the notes' fields, the declared language
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Im Formular steht: „Du musst dich anmelden“. Sie müssen sich bis Freitag anmelden [1].",
+        'Im Formular steht "du musst dich anmelden". Sie müssen sich bis Freitag anmelden [1].',
+    ],
+)
+def test_a_quoted_du_is_not_an_informal_address(answer):
+    assert sie_form(answer)
+    assert checks.informal_pronouns(answer) == []
+    assert evaluate_turn(answer, [], [], {"sie_form": True})["failed"] == []
+    assert not sie_form("Du musst dich anmelden, wie im Formular steht: „Sie müssen“.")
+
+
+def test_answer_texts_has_one_field_per_notes_text():
+    from rag_core.domain.notes import Texts
+
+    notes_fields = {name for name, value in vars(Texts).items() if isinstance(value, property)}
+    assert {f.name for f in dataclasses.fields(checks.AnswerTexts)} == notes_fields
+
+
+def test_the_declared_language_picks_the_lines(tu_profile):
+    short = "Apply Friday [1]."  # no stopword: the detector would say German
+    assert checks.detect(short) == "de"
+    english_line = with_lines(short, [BSC_2023], "en")
+    meta = {"source_metadata": {1: BSC_2023}}
+    assert run(english_line, meta, po_line_present=True, answer_language_matches="en") == []
+    german_line = with_lines(short, [BSC_2023], "de")  # the detector alone would read this as German and pass it
+    assert "po_line_present" in run(german_line, meta, po_line_present=True, answer_language_matches="en")
+    assert run(german_line, meta, po_line_present=True) == []

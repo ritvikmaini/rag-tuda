@@ -3,7 +3,7 @@
   evals rescore <run folder>... [--check]
 
 Every input evaluate_turn had at run time is rebuilt from the row: the answer, the sources, the errors, the expectation that
-was applied, and meta (the shape frame, and variant_ok: stored, or else read from whether the stored checks
+was applied, and meta (the shape frame, the citation numbers and their sources' metadata, and variant_ok: stored, or else read from whether the stored checks
 failed "variant"); a client stop (abort_after_s in the profile's probe files) stays a passed set-up step. Without --check each
 run gets <out_dir>/<run name>_rescored/results.jsonl (the run itself is untouched; in the container the runs are a read-only
 mount); with --check nothing is written and the exit code is 1 when any turn's failed checks changed."""
@@ -26,6 +26,8 @@ def rescore_rows(rows, aborts):
         old = stored.get("failed", [])
         meta = {
             "shape": row.get("shape"),
+            "citations": row.get("citations") or [],
+            "source_metadata": {int(n): m for n, m in (row.get("source_metadata") or {}).items()},  # JSON keys are text
             "variant_ok": row["variant_ok"] if "variant_ok" in row else "variant" not in old,
         }
         checks: dict[str, Any] = evaluate_turn(

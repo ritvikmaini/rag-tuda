@@ -12,7 +12,7 @@ from typing import Any
 import yaml
 
 from evals.settings import load_settings
-from rag_core.domain.language import detect
+from rag_core.domain.language import QUOTED, detect
 from rag_core.domain.notes import appended_lines, po_line
 
 LEAK_PATTERN = re.compile(r"PdfPipelineOptions|Image not available|\[Page \d+\]|Dokumentenauszüge")
@@ -21,6 +21,12 @@ EMOJI_PATTERN = re.compile("[\U0001f300-\U0001faff\U0001f1e6-\U0001f1ff☀-➿�
 NON_LATIN_PATTERN = re.compile("[\u0400-\u04ff\u0590-\u06ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff]")
 INFORMAL_PATTERN = re.compile(r"\b(du|dich|dir|dein|deine|deinen|deinem|deiner|deines)\b", re.IGNORECASE)
 CITATION_PATTERN = re.compile(r"\[(\d{1,2})\]")
+
+
+def informal_pronouns(text):
+    """The informal pronouns of a text, quoted text (a title or a quotation, not the answer's own address) left out."""
+    return sorted({m.lower() for m in INFORMAL_PATTERN.findall(QUOTED.sub(" ", text))})
+
 
 # Response formats v1: the same checks as rag_core/domain/answer_shapes.py, kept equal by
 # tests/contracts/test_answer_shapes.py; table_cited is the evals' own.
@@ -439,6 +445,9 @@ def group_values_failed(answer, expect):
 # check and producer cannot drift.
 
 
+TEXT_LANGUAGES = ("de", "en")
+
+
 @dataclass(frozen=True)
 class AnswerTexts:
     """The wording of the appended lines, one field per property of rag_core.domain.notes.Texts."""
@@ -451,12 +460,16 @@ class AnswerTexts:
     visa_disclaimer: str = ""
 
 
+# the metadata of a cited source that the appended lines depend on (rag_core.domain.notes reads these and no others)
+LINE_METADATA = ("programme", "po_version", "regulation", "lang")
+
+
 @lru_cache
 def load_answer_texts(profile_dir: str) -> tuple[dict[str, AnswerTexts], Mapping[str, Any]]:
     """({"de": texts, "en": texts}, the roles' programmes) of a profile folder: the `answer` section of its
     messages.<language>.yaml files and the programmes of roles.yaml."""
     texts = {}
-    for language in ("de", "en"):
+    for language in TEXT_LANGUAGES:
         with open(os.path.join(profile_dir, f"messages.{language}.yaml"), encoding="utf-8") as fh:
             answer = (yaml.safe_load(fh) or {}).get("answer") or {}
         texts[language] = AnswerTexts(**{f.name: str(answer.get(f.name) or "") for f in fields(AnswerTexts)})
@@ -489,12 +502,16 @@ def answer_language_matches(answer: str, language: str) -> bool:
 
 def sie_form(answer: str) -> bool:
     """A German answer has no informal pronoun; an answer in another language passes."""
-    prose = _prose(answer)
-    return detect(prose) != "de" or not INFORMAL_PATTERN.search(prose)
+    return detect(_prose(answer)) != "de" or not informal_pronouns(_prose(answer))
 
 
 def _cited(answer: str, source_metadata: Mapping[int, Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [source_metadata[n] for n in sorted(cited_numbers(answer)) if n in source_metadata]
+
+
+def unjoined(answer: str, source_metadata: Mapping[int, Mapping[str, Any]]) -> set[int]:
+    """The cited numbers that have no metadata: what the lines would depend on is unknown for them."""
+    return cited_numbers(answer) - set(source_metadata)
 
 
 def po_line_present(
@@ -505,7 +522,9 @@ def po_line_present(
     language: str,
 ) -> bool:
     """The PO-version line the cited sources call for (either wording: the plain one or the start-term one) is in the
-    answer; no cited source bound to a version, no line."""
+    answer; no cited source bound to a version, no line. A cited number without metadata fails."""
+    if unjoined(answer, source_metadata):
+        return False
     cited = _cited(answer, source_metadata)
     expected = {po_line(cited, programmes, texts, english=language == "en", term=term) for term in (False, True)}
     expected.discard("")
@@ -519,7 +538,10 @@ def visa_disclaimer_present(
     programmes: Mapping[str, Mapping[str, Any]],
     language: str,
 ) -> bool:
-    """The disclaimer is in the answer whenever the producer would append it for the cited sources."""
+    """The disclaimer is in the answer whenever the producer would append it for the cited sources. A cited number
+    without metadata fails."""
+    if unjoined(answer, source_metadata):
+        return False
     lines = appended_lines(
         _cited(answer, source_metadata), programmes, texts, english=language == "en", term=False, answer=""
     )
@@ -530,7 +552,9 @@ def answer_failures(answer: str, expect: Mapping[str, Any], meta: Mapping[str, A
     """The failed answer checks of an expectation. Keys: citations_map_to_sources, po_line_present, sie_form,
     visa_disclaimer_present (true) and answer_language_matches (the question's language). The sources come from the
     turn's meta: `citations` (the numbers the citations frame lists) and `source_metadata` ({n: the source's metadata});
-    the wording from the profile folder the evals settings name."""
+    the wording from the profile folder the evals settings name. The declared language (answer_language_matches) picks the
+    lines' wording; the detector decides only when none is declared. A cited number without metadata fails its line
+    checks as `<check>:unjoined`."""
     failed = []
     if expect.get("citations_map_to_sources") and not citations_map_to_sources(answer, meta.get("citations") or ()):
         failed.append("citations_map_to_sources")
@@ -540,14 +564,16 @@ def answer_failures(answer: str, expect: Mapping[str, Any], meta: Mapping[str, A
         failed.append("sie_form")
     lines = [check for check in (po_line_present, visa_disclaimer_present) if expect.get(check.__name__)]
     if lines:
-        language = detect(_prose(answer))
+        declared = expect.get("answer_language_matches")
+        language = declared if declared in TEXT_LANGUAGES else detect(_prose(answer))
         texts, programmes = load_answer_texts(load_settings().evals.profile_dir)
         source_metadata = meta.get("source_metadata") or {}
-        failed += [
-            check.__name__
-            for check in lines
-            if not check(answer, source_metadata, texts[language], programmes, language)
-        ]
+        missing = unjoined(answer, source_metadata)
+        for check in lines:
+            if missing:
+                failed.append(check.__name__ + ":unjoined")
+            elif not check(answer, source_metadata, texts[language], programmes, language):
+                failed.append(check.__name__)
     return failed
 
 
@@ -573,7 +599,7 @@ def evaluate_turn(answer, sources, errors, expect, meta=None):
         "leaks": sorted(set(LEAK_PATTERN.findall(answer))),
         "non_latin": sorted(set(NON_LATIN_PATTERN.findall(answer))),
         "emojis": len(EMOJI_PATTERN.findall(answer)),
-        "informal": sorted({m.lower() for m in INFORMAL_PATTERN.findall(answer)}),
+        "informal": informal_pronouns(answer),
         "words": len(answer.split()),
         "n_sources": len(sources),
         "internal_sources": sum(1 for s in sources if s["internal"]),  # kept so old and new rows stay comparable
