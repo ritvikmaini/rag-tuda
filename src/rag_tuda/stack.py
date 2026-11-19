@@ -150,7 +150,7 @@ def same_parameters(have: Mapping[str, str], want: Mapping[str, object]) -> bool
     return all(k in have and equal(have[k], v) for k, v in want.items())
 
 
-def _uv(*args: str) -> tuple[str, ...]:
+def uv_argv(*args: str) -> tuple[str, ...]:
     return ("uv", "run", "--frozen", *args)
 
 
@@ -168,7 +168,7 @@ def _download(name: str, pin: Pinned, root: str) -> Step:
         "run",
         name=f"download-{name}",
         text=f"downloading {pin.repo} ({gb:g} GB) from {HF_HOST}",
-        argv=_uv("--project", directory, "huggingface-cli", "download", pin.repo, "--revision", pin.revision),
+        argv=uv_argv("--project", directory, "huggingface-cli", "download", pin.repo, "--revision", pin.revision),
         cwd=root,
         env=HF_ENV,
         gb=gb,
@@ -292,7 +292,7 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
                 "run",
                 name="migrate",
                 text="migrating the database",
-                argv=_uv("--package", "assistant-api", "python", "-m", "assistant_api.migrate"),
+                argv=uv_argv("--package", "assistant-api", "python", "-m", "assistant_api.migrate"),
                 cwd=root,
                 env=runtime.migrate_env(str(state.secrets_dir("migrate"))),
             )
@@ -377,7 +377,7 @@ def _indexer_job(
         profile=args.profile,
         overlay=f"{rag}/overlay.yaml" if overlay else None,
     )
-    argv = _uv("--package", "indexer", "indexer", *tail)
+    argv = uv_argv("--package", "indexer", "indexer", *tail)
     return [*steps, Step("run", name=name, text=text, argv=argv, cwd=root, env=env, inherit=inherit)]
 
 
@@ -401,10 +401,10 @@ def _service(
     if not alive:
         if name == "backend":
             gunicorn = ("gunicorn", "assistant_api.app:create_app()", "-c", "apps/assistant_api/gunicorn_conf.py")
-            argv, cwd = _uv("--package", "assistant-api", *gunicorn), root
+            argv, cwd = uv_argv("--package", "assistant-api", *gunicorn), root
         else:
             directory = f"{root}/model_servers/{name}"  # the server's package is found next to its project
-            argv = _uv(
+            argv = uv_argv(
                 "--project",
                 directory,
                 "uvicorn",
@@ -450,7 +450,7 @@ def _warm(llm: runtime.Llm) -> Step:
 
 def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> list[Step]:
     root, rag = facts.root, str(state.dir)
-    compose = _compose_for(facts, rag, llm)
+    compose = compose_for(facts, rag, llm)
     # the indexer's overlay names the profile's folder sources as the container sees them (/app/profiles/<profile>/...)
     overlay = runtime.overlay_text("/app", args.profile, FOLDER_SOURCES.get(args.profile, {})) or "{}\n"
     env_file = runtime.compose_env_text(
@@ -533,7 +533,7 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
     return steps
 
 
-def _compose_for(facts: Facts, rag: str, llm: runtime.Llm) -> tuple[str, ...]:
+def compose_for(facts: Facts, rag: str, llm: runtime.Llm) -> tuple[str, ...]:
     overlays = (["compose.nvidia.yaml"] if facts.nvidia else []) + (
         ["compose.vllm.yaml"] if llm.provider == "vllm" else []
     )
@@ -626,7 +626,7 @@ def _index_job(
             "stop", name="backend", text="backend: restarting on the new index", path=f"{state.dir}/pids/backend.pid"
         )
         return [*steps, restart, *_backend(state, facts, args, llm, alive=False, ready=False)]
-    compose = _compose_for(facts, str(state.dir), llm)
+    compose = compose_for(facts, str(state.dir), llm)
     job = Step(
         "run",
         name=name,

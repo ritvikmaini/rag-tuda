@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from rag_tuda import ask, cards, classes, doctor, runtime, sources, stack, state
+from rag_tuda import eval as rag_eval
 
 DEFAULT_URL = "http://127.0.0.1:8700"
 
@@ -122,6 +123,42 @@ def _rollback(args: argparse.Namespace) -> int:
     return _index_job(stack.plan_rollback)
 
 
+def _eval(args: argparse.Namespace) -> int:
+    """The eval on the recorded card, or on --card after bringing the stack onto it (downloads need a yes)."""
+    if (root := _at_root()) is None:
+        return 1
+    if not (root / ".rag" / "state.json").is_file():
+        print("nothing was started from this folder yet: run `rag up` first", file=sys.stderr)
+        return 1
+    try:
+        current = state.ensure(root)
+        data = current.data
+        name = args.card or data.get("card")
+        if not name or not data.get("mode"):
+            raise stack.StackError("nothing was started from this folder yet: run `rag up` first")
+        same = name == data.get("card")  # the model and server overrides belong to the card they were given for
+        up = stack.Args(
+            name,
+            data["mode"],
+            data["profile"],
+            data.get("model") if same else None,
+            data.get("llm_url") if same else None,
+        )
+        card = cards.named(name)
+        facts = stack.gather(root, current, card, doctor.gather(), up)
+        steps = [] if same else stack.plan_up(current, facts, up)
+        if not _confirm(steps, args.yes):
+            return 1
+        steps += rag_eval.plan(
+            current, facts, up, retrieval_only=args.retrieval_only, ablation=args.ablation, check_ready=same
+        )
+        stack.execute(steps, stack.System())
+    except (ValueError, stack.StackError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
 def _ask(args: argparse.Namespace) -> int:
     token_file = Path.cwd() / ".rag" / "token"
     if not token_file.is_file():
@@ -195,6 +232,14 @@ def main(argv: list[str] | None = None) -> int:
     r.set_defaults(run=_reindex)
     b = sub.add_parser("rollback", help="make the previous index generation live again and restart the backend")
     b.set_defaults(run=_rollback)
+    e = sub.add_parser("eval", help="run the eval against the running stack (the smoke unless told otherwise)")
+    kind = e.add_mutually_exclusive_group()
+    kind.add_argument("--smoke", action="store_true", help="the smoke questions, answers included (default)")
+    kind.add_argument("--retrieval-only", action="store_true", help="the gold sources' rank after fusion and reranking")
+    e.add_argument("--ablation", action="store_true", help="with --retrieval-only: one row per retrieval switch")
+    e.add_argument("--card", help="run on this card, bringing the stack onto it first (default: the running card)")
+    e.add_argument("--yes", action="store_true", help="confirm the downloads of a card that is not on this machine yet")
+    e.set_defaults(run=_eval)
     a = sub.add_parser("ask", help="ask one question and stream the cited answer")
     a.add_argument("question")
     a.add_argument("--json", action="store_true", help="print the stream's frames, one JSON object per line")
@@ -211,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--topic", help="what the assistant says it is about")
     s.set_defaults(run=_add)
     args = parser.parse_args(argv)
+    if getattr(args, "ablation", False) and not args.retrieval_only:
+        parser.error("--ablation is a retrieval run: add --retrieval-only")
     return args.run(args)
 
 
