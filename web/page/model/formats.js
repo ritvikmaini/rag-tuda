@@ -112,8 +112,8 @@ export function chartConfig(spec) {
     return {
         type: spec.kind,
         data: { labels: spec.labels, datasets: spec.series.map(s => ({ label: s.name, data: s.values })) },
-        // German number format on the axes and in the tooltips (66.500), whatever the browser's language
-        options: { animation: false, responsive: true, maintainAspectRatio: false, locale: "de-DE",
+        // the number format of the page language on the axes and in the tooltips (66.500 in German), whatever the browser's language
+        options: { animation: false, responsive: true, maintainAspectRatio: false, locale: TEXT.printLocale,
             plugins: { legend: { display: spec.series.length > 1 } } },
     };
 }

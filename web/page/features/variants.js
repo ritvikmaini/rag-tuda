@@ -1,5 +1,6 @@
 import { withToken } from "../api/auth.js";
 import { createFrameParser, readFrames } from "../api/frames.js";
+import { getLang } from "../i18n.js";
 import { variantUrl } from "../api/urls.js";
 import { TEXT, VARIANT_LABELS } from "../config.js";
 import { citationEntries } from "../model/citations.js";
@@ -99,7 +100,7 @@ export async function streamVariant(turn, view, version) {
     let fetched = false;
     const run = { session, turn, view, version, confirmed: false };
     try {
-        const response = await fetch(variantUrl(turn.question, store.id, turn.id, version.name, false),
+        const response = await fetch(variantUrl(turn.question, store.id, turn.id, version.name, false, getLang()),
             withToken({ signal: session.controller.signal, cache: "no-store" }));
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
         await readFrames(response.body, session, frame => takeVariantFrame(run, frame));
@@ -121,7 +122,7 @@ export async function selectVersion(turn, view, name) {
     let ok = false;
     view.switching = true;
     try {
-        const response = await fetch(variantUrl(turn.question, store.id, turn.id, name, true), withToken({ cache: "no-store" }));
+        const response = await fetch(variantUrl(turn.question, store.id, turn.id, name, true, getLang()), withToken({ cache: "no-store" }));
         const parser = createFrameParser();
         const frames = parser.push(await response.text()).concat(parser.end());
         ok = response.ok && frames.some(frame => frame && frame.type === "variant" && frame.content && frame.content.ok);

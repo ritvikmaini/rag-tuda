@@ -20,8 +20,9 @@ export function questionUrl(question, id, turnId, replaceFrom, kept, chips, lang
 }
 
 // A variant of the last answer (select: false) or a switch to one of its stored versions (select: true).
-export function variantUrl(question, id, variantOf, name, select) {
+// lang: as for questionUrl (the backend words its busy and error texts in it).
+export function variantUrl(question, id, variantOf, name, select, lang) {
     return API_PATH + "?question=" + encodeURIComponent(question) + "&conversation_id=" + encodeURIComponent(id) +
         "&formats=" + FORMATS_VERSION + "&variant_of=" + encodeURIComponent(variantOf) +
-        (select ? "&variant_select=" : "&variant=") + encodeURIComponent(name);
+        (select ? "&variant_select=" : "&variant=") + encodeURIComponent(name) + (lang === "de" || lang === "en" ? "&lang=" + lang : "");
 }

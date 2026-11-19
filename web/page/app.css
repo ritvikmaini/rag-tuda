@@ -697,6 +697,6 @@ li.task:has(.tick[aria-checked="true"]) { color: var(--ink-2); text-decoration: 
     body.print-one .print-target .table-tools, body.print-one .print-target .sources-more { display: none !important; }
     body.print-one .print-target .collapsible { grid-template-rows: 1fr !important; }
     body.print-one .print-target .collapsible > .collapsible-inner { visibility: visible !important; }
-    body.print-one .print-target::before { content: "Auskunft des Assistenten, Stand " attr(data-print-date);
+    body.print-one .print-target::before { content: attr(data-print-title) " " attr(data-print-date);
         display: block; margin-bottom: 12px; color: #57606A; font-size: 0.9rem; }
 }

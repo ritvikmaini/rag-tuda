@@ -21,6 +21,7 @@ export async function sendMail(turn) {
 
 // Prints only this turn: question, date, answer as shown, sources (print stylesheet); the browser offers "Als PDF".
 export function printTurn(view) {
+    view.root.setAttribute("data-print-title", TEXT.printTitle);
     view.root.setAttribute("data-print-date", new Date().toLocaleDateString(TEXT.printLocale));
     view.root.classList.add("print-target");
     document.body.classList.add("print-one");

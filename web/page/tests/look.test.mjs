@@ -3,13 +3,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFrameParser, readFrames } from "../api/frames.js";
-import { questionUrl } from "../api/urls.js";
+import { questionUrl, variantUrl } from "../api/urls.js";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detectLang, getLang, providerLine, setLang }
     from "../i18n.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from "../model/thinking.js";
 import { sourceCards } from "../model/sources.js";
+import { chartConfig } from "../model/formats.js";
 import { handleFrame } from "../ui/ask.js";
 import { state } from "../ui/state.js";
 import { takeVariantFrame } from "../features/variants.js";
@@ -223,6 +224,26 @@ test("a question names the page language (test_question_url_carries_lang)", () =
     // nothing is sent for a language the page does not know
     assert.ok(!questionUrl("Q", "c-1", "", "", undefined, undefined, "EN").includes("lang="));
     assert.ok(!questionUrl("Q", "c-1").includes("lang="));
+});
+
+test("variants and version switches name the page language too (test_variant_url_carries_lang)", () => {
+    assert.ok(variantUrl("Q", "c-1", "tid", "table", false, "en").endsWith("&variant_of=tid&variant=table&lang=en"));
+    assert.ok(variantUrl("Q", "c-1", "tid", "original", true, "de").endsWith("&variant_select=original&lang=de"));
+    assert.ok(!variantUrl("Q", "c-1", "tid", "table", false, "EN").includes("lang="));
+    assert.ok(!variantUrl("Q", "c-1", "tid", "table", false).includes("lang="));
+});
+
+test("chart numbers and the print header follow the page language (test_print_and_chart_follow_language)", t => {
+    const spec = { kind: "bar", labels: ["a"], series: [{ name: "s", values: [1] }] };
+    assert.equal(chartConfig(spec).options.locale, "de-DE");
+    assert.equal(TEXT.printTitle, "Auskunft des Assistenten, Stand");
+    inLang(t, "en");
+    assert.equal(chartConfig(spec).options.locale, "en-GB");
+    assert.equal(TEXT.printTitle, "Answer of the assistant, as of");
+    // the stylesheet takes the print header from the page, not from a fixed German text
+    const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
+    assert.match(css, /content: attr\(data-print-title\)/);
+    assert.doesNotMatch(css, /Auskunft/);
 });
 
 // ---- the footer and the header

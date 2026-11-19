@@ -39,7 +39,9 @@ export function init() {
     document.documentElement.lang = getLang();
     applyStatic(document, { name: ASSISTANT_NAME });
     ui.provider = document.getElementById("provider-line");
-    document.getElementById("lang-switch").addEventListener("click", switchLang);
+    const switcher = document.getElementById("lang-switch");
+    switcher.lang = getLang() === "de" ? "en" : "de";  // its label is in the other language
+    switcher.addEventListener("click", switchLang);
     ui.conversation = document.getElementById("conversation");
     ui.form = document.getElementById("composer");
     ui.question = document.getElementById("question");

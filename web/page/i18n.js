@@ -100,6 +100,7 @@ export const STRINGS = {
         mailPaste: "Text liegt in der Zwischenablage – bitte einfügen.",
         mailSubject: "Auskunft: {question}",
         printLocale: "de-DE",
+        printTitle: "Auskunft des Assistenten, Stand",
         // the "⋯" menu
         menuForm: "Form",
         menuLength: "Länge",
@@ -206,6 +207,7 @@ export const STRINGS = {
         mailPaste: "The text is on the clipboard – please paste it.",
         mailSubject: "Answer: {question}",
         printLocale: "en-GB",
+        printTitle: "Answer of the assistant, as of",
         menuForm: "Form",
         menuLength: "Length",
         menuLanguage: "Language",
