@@ -231,9 +231,7 @@ def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
             )
         )
     if not facts.crawl_contact and args.profile != "example":
-        steps.append(
-            Step("say", text="note: RAG__CRAWL__CONTACT is not set; the crawler's user agent will not carry a contact")
-        )
+        steps += _CONTACT_NOTE
     plan = _plan_native if args.mode == "native" else _plan_compose
     steps += plan(state, facts, args, llm)
     return steps + _record(state, args, llm)
@@ -323,20 +321,24 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
                     timeout_s=300,
                 )
             )
-    env = runtime.backend_env(llm, root=root, secrets=str(state.secrets_dir("backend")), profile=args.profile)
-    steps += _service(
-        "backend",
-        root,
-        rag,
-        runtime.PORTS["backend"],
-        env,
-        alive="backend" in facts.alive and not restart,
-        ready=backend_up,
-        inherit=("GROQ_API_KEY",) if llm.provider in runtime.REMOTE else (),
-    )
+    steps += _backend(state, facts, args, llm, alive="backend" in facts.alive and not restart, ready=backend_up)
     if llm.warms and (not backend_up or created):
         steps.append(_warm(llm))
     return steps
+
+
+def _backend(state: State, facts: Facts, args: Args, llm: runtime.Llm, *, alive: bool, ready: bool) -> list[Step]:
+    env = runtime.backend_env(llm, root=facts.root, secrets=str(state.secrets_dir("backend")), profile=args.profile)
+    return _service(
+        "backend",
+        facts.root,
+        str(state.dir),
+        runtime.PORTS["backend"],
+        env,
+        alive=alive,
+        ready=ready,
+        inherit=("GROQ_API_KEY",) if llm.provider in runtime.REMOTE else (),
+    )
 
 
 def _base_changed(state: State, args: Args) -> bool:
@@ -344,6 +346,25 @@ def _base_changed(state: State, args: Args) -> bool:
 
 
 def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
+    text = f"building the index of the {args.profile} profile (indexer build)"
+    return [
+        *_crawl_estimate(args, "core"),
+        *_indexer_job(state, facts, args, "index-build", ("build",), text, CRAWL_CONTACT),
+    ]
+
+
+def _crawl_estimate(args: Args, which: str) -> list[Step]:
+    """The crawl is outbound traffic: its size is announced before it starts (the example profile crawls nothing)."""
+    if args.profile == "example":
+        return []
+    text = f"crawling the {which} source set ({classes.CRAWL_SETS[which]}), about 1 request per second per host"
+    return [Step("say", text=text)]
+
+
+def _indexer_job(
+    state: State, facts: Facts, args: Args, name: str, tail: tuple[str, ...], text: str, inherit: tuple[str, ...] = ()
+) -> list[Step]:
+    """One `indexer` command as a native process: its overlay file (the profile's folder sources) and the run."""
     root, rag = facts.root, str(state.dir)
     steps: list[Step] = []
     overlay = runtime.overlay_text(root, args.profile, FOLDER_SOURCES.get(args.profile, {}))
@@ -356,9 +377,8 @@ def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
         profile=args.profile,
         overlay=f"{rag}/overlay.yaml" if overlay else None,
     )
-    argv = _uv("--package", "indexer", "indexer", "build")
-    text = f"building the index of the {args.profile} profile (indexer build)"
-    return [*steps, Step("run", name="index-build", text=text, argv=argv, cwd=root, env=env, inherit=CRAWL_CONTACT)]
+    argv = _uv("--package", "indexer", "indexer", *tail)
+    return [*steps, Step("run", name=name, text=text, argv=argv, cwd=root, env=env, inherit=inherit)]
 
 
 def _service(
@@ -430,10 +450,7 @@ def _warm(llm: runtime.Llm) -> Step:
 
 def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> list[Step]:
     root, rag = facts.root, str(state.dir)
-    overlays = (["compose.nvidia.yaml"] if facts.nvidia else []) + (
-        ["compose.vllm.yaml"] if llm.provider == "vllm" else []
-    )
-    compose = _compose(root, rag, *overlays)
+    compose = _compose_for(facts, rag, llm)
     # the indexer's overlay names the profile's folder sources as the container sees them (/app/profiles/<profile>/...)
     overlay = runtime.overlay_text("/app", args.profile, FOLDER_SOURCES.get(args.profile, {})) or "{}\n"
     env_file = runtime.compose_env_text(
@@ -516,6 +533,13 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
     return steps
 
 
+def _compose_for(facts: Facts, rag: str, llm: runtime.Llm) -> tuple[str, ...]:
+    overlays = (["compose.nvidia.yaml"] if facts.nvidia else []) + (
+        ["compose.vllm.yaml"] if llm.provider == "vllm" else []
+    )
+    return _compose(facts.root, rag, *overlays)
+
+
 def _warm_body(llm: runtime.Llm) -> str:
     return json.dumps(
         {
@@ -542,6 +566,97 @@ def _warm_in_compose(llm: runtime.Llm, compose: tuple[str, ...], root: str) -> S
         cwd=root,
         timeout_s=900,
     )
+
+
+# --- reindex and rollback ---------------------------------------------------------------------------------------------------
+
+
+def plan_reindex(state: State, facts: Facts, args: Args, full: bool = False, resume: bool = False) -> list[Step]:
+    """A new index generation from a re-crawl and an atomic swap, then a backend restart. `args` is what the last `up`
+    recorded; `full` adds the full source set, `resume` continues an interrupted crawl."""
+    which = "full" if full else "core"
+    tail = ("build", *(("--sources", "full") if full else ()), *(("--resume",) if resume else ()))
+    text = f"building a new index generation of the {args.profile} profile (indexer build, {which} source set)"
+    note = [] if facts.crawl_contact or args.profile == "example" else _CONTACT_NOTE
+    return _index_job(
+        state, facts, args, "index-build", tail, text, [*_crawl_estimate(args, which), *note], CRAWL_CONTACT
+    )
+
+
+def plan_rollback(state: State, facts: Facts, args: Args) -> list[Step]:
+    """The previous index generation goes live again, then a backend restart."""
+    return _index_job(
+        state, facts, args, "rollback", ("rollback",), "rolling the index back (indexer rollback)", [], ()
+    )
+
+
+_CONTACT_NOTE = [
+    Step("say", text="note: RAG__CRAWL__CONTACT is not set; the crawler's user agent will not carry a contact")
+]
+
+
+def _index_job(
+    state: State,
+    facts: Facts,
+    args: Args,
+    name: str,
+    tail: tuple[str, ...],
+    text: str,
+    notes: list[Step],
+    inherit: tuple[str, ...],
+) -> list[Step]:
+    llm = runtime.resolve(facts.card, args.mode, model=args.model, llm_url=args.llm_url)
+    if not state.data.get("first_run_done"):
+        raise StackError("nothing was started from this folder yet: run `rag up` first")
+    if not facts.docker:
+        raise StackError(
+            "Docker is not running: start Docker Desktop, OrbStack or Colima (`colima start`), then try again"
+        )
+    if not facts.postgres:
+        raise StackError("postgres is not running: run `rag up` first")
+    if llm.provider in runtime.REMOTE and not facts.groq_key:
+        raise StackError(f"{llm.card}: the backend restarts with GROQ_API_KEY from the environment: export it first")
+    if args.mode == "native":
+        if tail[0] == "build" and "embedding" not in facts.ready:
+            raise StackError("the embedding server is not running: run `rag up` first")
+        steps = [*notes, *_indexer_job(state, facts, args, name, tail, text, inherit)]
+        if "backend" not in facts.alive:
+            return [*steps, Step("say", text="backend: not running; `rag up` starts it on the new index")]
+        restart = Step(
+            "stop", name="backend", text="backend: restarting on the new index", path=f"{state.dir}/pids/backend.pid"
+        )
+        return [*steps, restart, *_backend(state, facts, args, llm, alive=False, ready=False)]
+    compose = _compose_for(facts, str(state.dir), llm)
+    job = Step(
+        "run",
+        name=name,
+        text=text,
+        argv=(*compose, "--profile", "build", "run", "--rm", "indexer", *tail),
+        cwd=facts.root,
+        inherit=inherit,
+    )
+    if "backend" not in facts.ready:
+        return [*notes, job, Step("say", text="backend: not running; `rag up` starts it on the new index")]
+    return [
+        *notes,
+        job,
+        Step(
+            "run",
+            name="restart-backend",
+            text="backend: restarting on the new index",
+            argv=(*compose, "restart", "backend"),
+            cwd=facts.root,
+            timeout_s=300,
+        ),
+        Step(
+            "wait",
+            name="backend",
+            text="backend: waiting until it is ready",
+            url=f"http://{runtime.LOOPBACK}:{runtime.PORTS['backend']}/readyz",
+            log="`docker compose -p rag-tuda logs backend`",
+            timeout_s=READY_WAIT_S["backend"],
+        ),
+    ]
 
 
 # --- down ----------------------------------------------------------------------------------------------------------------

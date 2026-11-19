@@ -98,6 +98,13 @@ FIXED_MODELS = (
 )
 
 
+# what a crawl of the core and the full source set fetches (estimates of the sources' size; the full set takes hours)
+CRAWL_SETS = {
+    "core": "about 300 pages and 120-150 PDFs",
+    "full": "about 1,500-2,000 pages and 250-350 PDFs, which takes hours",
+}
+
+
 def download_total_gb(cls: SizeClass) -> float:
     return (cls.download_gb or 0) + sum(m.gb for m in FIXED_MODELS)
 

@@ -91,6 +91,36 @@ def _down(args: argparse.Namespace) -> int:
     return 0
 
 
+def _index_job(plan) -> int:
+    """Runs a reindex or rollback plan with what the last `up` recorded in .rag/state.json."""
+    if (root := _at_root()) is None:
+        return 1
+    if not (root / ".rag" / "state.json").is_file():
+        print("nothing was started from this folder yet: run `rag up` first", file=sys.stderr)
+        return 1
+    try:
+        current = state.ensure(root)
+        data = current.data
+        card = cards.named(data["card"]) if data.get("card") else None
+        if card is None or not data.get("mode"):
+            raise stack.StackError("nothing was started from this folder yet: run `rag up` first")
+        up = stack.Args(card["name"], data["mode"], data["profile"], data.get("model"), data.get("llm_url"))
+        steps = plan(current, stack.gather(root, current, card, doctor.gather(), up), up)
+        stack.execute(steps, stack.System())
+    except (ValueError, stack.StackError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+def _reindex(args: argparse.Namespace) -> int:
+    return _index_job(lambda *a: stack.plan_reindex(*a, full=args.full, resume=args.resume))
+
+
+def _rollback(args: argparse.Namespace) -> int:
+    return _index_job(stack.plan_rollback)
+
+
 def _ask(args: argparse.Namespace) -> int:
     token_file = Path.cwd() / ".rag" / "token"
     if not token_file.is_file():
@@ -155,6 +185,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     w.add_argument("--yes", action="store_true", help="confirm --purge")
     w.set_defaults(run=_down)
+    r = sub.add_parser(
+        "reindex", help="build a new index generation from a re-crawl, swap it in and restart the backend"
+    )
+    r.add_argument("--full", action="store_true", help="also crawl the full source set (takes hours)")
+    r.add_argument("--resume", action="store_true", help="continue an interrupted crawl")
+    r.set_defaults(run=_reindex)
+    b = sub.add_parser("rollback", help="make the previous index generation live again and restart the backend")
+    b.set_defaults(run=_rollback)
     a = sub.add_parser("ask", help="ask one question and stream the cited answer")
     a.add_argument("question")
     a.add_argument("--json", action="store_true", help="print the stream's frames, one JSON object per line")
