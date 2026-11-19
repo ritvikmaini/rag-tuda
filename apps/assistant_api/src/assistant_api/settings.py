@@ -72,6 +72,15 @@ class AnswerMessages(_Texts):
     version_table: str = ""
     scope_note_one: str = ""
     scope_note_other: str = ""
+    # the lines appended to an answer from the sources it cites: the PO versions (po_line {entries}: one entry per programme;
+    # po_line_term for a PO that follows from a start term; po_one {version}; po_programme {entry}, {programme}), the note on an
+    # English information translation of a binding text and the disclaimer on a residence source
+    po_line: str = ""
+    po_line_term: str = ""
+    po_one: str = ""
+    po_programme: str = ""
+    non_binding: str = ""
+    visa_disclaimer: str = ""
     # the line that closes an answer to a search that found nothing under a hard filter: no_match names the filter's one part
     # ({filter}), no_match_more its first part and the others ({first}, {rest}); the parts are the programmes ({labels}) or the
     # degree, and the PO years ({years}). Empty: the answer is left as the model wrote it.

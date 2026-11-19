@@ -3,8 +3,9 @@ the node, so LangChain's callbacks stream the answer. A documents answer to a qu
 held back and replaced by one sentence when it writes a past date as coming. With the profile's status_groups switches the
 node also tells the status groups and PO versions apart: a comparison, and a question whose best sources are for different
 groups or versions, get a prompt line; with the card's version table an answer citing several versions gets the side-by-side
-format; a German answer cited only from one side's sources is closed with a note on whom it concerns. Which sources are
-searched is the question's hard filter, not this node's."""
+format; a German answer cited only from one side's sources is closed with a note on whom it concerns. Lines taken from the
+cited sources' metadata end the answer: the PO versions it rests on, the disclaimer on a residence source, the note on an
+English information translation. Which sources are searched is the question's hard filter, not this node's."""
 
 import asyncio
 import logging
@@ -26,12 +27,13 @@ from rag_core.domain.answer_shapes import (
 from rag_core.domain.context_budget import ContextBudget, fit_context, rank_score
 from rag_core.domain.dates import asks_for_event, format_date, shown_as_coming, written_dates
 from rag_core.domain.history import context_turns, conversation_state, select_turns
+from rag_core.domain.notes import appended_lines
 from rag_core.domain.query_analysis import RETRIEVAL_INTENTS
 from rag_core.domain.status_groups import GENERAL, Scope, note_for, question_scope, scope_lines, source_group
 from rag_core.settings.profile import StatusGroup
 
 from assistant_api.graph.filter_line import no_match_line
-from assistant_api.graph.history import as_messages, insert_history, to_messages
+from assistant_api.graph.history import as_messages, insert_history, line_texts, to_messages, without_lines
 from assistant_api.graph.state import AgentState, GraphDeps
 
 logger = logging.getLogger(__name__)
@@ -124,6 +126,7 @@ def make_generate(deps: GraphDeps):
         full_sources=deps.card.budget.full_sources,
     )
     labels = deps.messages.labels.source_labels()
+    answer_texts = line_texts(deps)
     table = {key: StatusGroup.model_validate(group) for key, group in ((deps.roles or {}).get("groups") or {}).items()}
 
     def answer_prompt(name: str, input_messages: list[Any], variables: dict[str, Any], position: str) -> list[Any]:
@@ -148,8 +151,14 @@ def make_generate(deps: GraphDeps):
         current = state["messages"][-1]
         intent = state.get("intent") or "lookup"
         position = profile.history.position
-        prior = context_turns(
-            state["messages"], deps.card.budget.history_turns, profile.history.max_age_hours, datetime.now(timezone.utc)
+        prior = without_lines(
+            context_turns(
+                state["messages"],
+                deps.card.budget.history_turns,
+                profile.history.max_age_hours,
+                datetime.now(timezone.utc),
+            ),
+            answer_texts,
         )
         chosen = await select_turns(prior, deps.card.budget.history_tokens, deps.counter.count_text)
         history = as_messages(chosen)
@@ -169,6 +178,7 @@ def make_generate(deps: GraphDeps):
         }
         english = answer_language(state) == "Englisch"
         sources: list[Any] = []
+        shown: list[Any] = []  # the metadata of each source in the context
         no_match = ""  # the closing line of an answer to an empty search under a filter
         groups = profile.status_groups
         status_on = bool(table) and (
@@ -194,10 +204,14 @@ def make_generate(deps: GraphDeps):
             fitted = await fit_context(budget, deps.counter, fixed_prompt, history, candidates, labels=labels)
             variables["context"] = fitted["context"]
             sources = fitted.get("sources", [])
+            try:
+                by_section = {(d.metadata or {}).get("section_id"): d.metadata for d in candidates}
+                shown = [by_section.get(s.get("section_id")) for s in sources]
+            except Exception as exc:  # the lines and the groups lose their sources' metadata; the answer goes on
+                logger.warning(f"[Notes] metadata_failed={type(exc).__name__}")
+                shown = [None] * len(sources)
             if status_on:
                 try:
-                    by_section = {(d.metadata or {}).get("section_id"): d.metadata for d in candidates}
-                    shown = [by_section.get(s.get("section_id")) for s in sources]
                     group_of = {s["n"]: source_group(m, table) for s, m in zip(sources, shown)}
                     # the best-ranked sources in the context (its numbers follow the documents, not the ranking)
                     ids = {s.get("section_id") for s in sources}
@@ -296,6 +310,23 @@ def make_generate(deps: GraphDeps):
                         response = AIMessage(content=answer + "\n\n" + text)
                 except Exception as exc:  # the note never costs an answer: the model's is sent
                     logger.warning(f"[StatusGroups] note_failed={type(exc).__name__}")
+            if sources:
+                try:
+                    answer = str(response.content)
+                    numbers = {int(n) for n in CITATION.findall(answer)}
+                    applied = state.get("filter")
+                    lines = appended_lines(
+                        [m for s, m in zip(sources, shown) if s["n"] in numbers],
+                        (deps.roles or {}).get("programmes") or {},
+                        (deps.messages_en if english and deps.messages_en else deps.messages).answer,
+                        english=english,
+                        term=bool(applied and applied.po_source == "term"),
+                        answer=answer,
+                    )
+                    if lines:
+                        response = AIMessage(content="\n\n".join([answer, *lines]))
+                except Exception as exc:  # the lines never cost an answer: the model's is sent
+                    logger.warning(f"[Notes] lines_failed={type(exc).__name__}")
             return {"messages": [response], "generation": response.content, "context_sources": sources, "usage": usage}
         except Exception as e:
             status = getattr(e, "status_code", None)

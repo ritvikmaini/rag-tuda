@@ -10,7 +10,8 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from rag_core.domain.filters import Filter
-from rag_core.domain.history import TS_KEY, PastTurn, Turn, VariantInput, clean_answer
+from rag_core.domain.history import TS_KEY, Answer, PastTurn, Turn, VariantInput, clean_answer
+from rag_core.domain.notes import Texts, strip_lines
 
 from assistant_api.chat.turns_store import stored_filter
 
@@ -28,6 +29,17 @@ def as_messages(turns: Sequence[Turn]) -> list[BaseMessage]:
         out.append(HumanMessage(content=str(question.content)))
         out.append(AIMessage(content=clean_answer(answer.content)))
     return out
+
+
+def line_texts(deps: Any) -> list[Texts]:
+    """The wording of the appended lines in each language the deps hold (a stand-in without messages has none)."""
+    found = (getattr(getattr(deps, name, None), "answer", None) for name in ("messages", "messages_en"))
+    return [texts for texts in found if texts is not None]
+
+
+def without_lines(turns: Sequence[Turn], texts: Sequence[Texts]) -> list[Turn]:
+    """The turns with the lines the code appended to each answer removed (the stored turn and the page keep them)."""
+    return [(question, Answer(strip_lines(str(answer.content), texts))) for question, answer in turns]
 
 
 def insert_history(

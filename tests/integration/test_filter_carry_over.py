@@ -70,6 +70,9 @@ def test_variant_keeps_filter_and_po_line(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str, db: psycopg.Connection[Any]
 ) -> None:
     turn = new_id()
+    llm.script(
+        {"purpose": "answer", "reply": "Die Dauer steht in den Quellen " + " ".join(f"[{n}]" for n in range(1, 10))}
+    )
     original = assistant.ask(THESIS_2015, user, turn_id=turn, formats="v1")
     assert original.path == harness.LOOKUP_FORMATS
     before = stored(db, user)
@@ -80,6 +83,15 @@ def test_variant_keeps_filter_and_po_line(
     assert {c["url"] for c in variant.first("citations")} <= urls(original) and PO_2015 in urls(original)
     assert not {PO_2023, PO_2023_PDF} & urls(original)
     assert stored(db, user) == before
+    # the docs frame hands the page the typed values, and the answer and its variants end with the line naming the version
+    assert {"regulation", "degree", "programme", "po_version", "lang"} <= next(
+        d["metadata"] for d in original.first("docs") if d["metadata"]["url"] == PO_2015
+    ).keys()
+    assert original.text.endswith("Grundlage: Prüfungsordnung 2015 des B.Sc. Informatik")
+    assert variant.text.endswith("Grundlage: Prüfungsordnung 2015 des B.Sc. Informatik")
+    translated = assistant.ask(THESIS_2015, user, formats="v1", variant="english", variant_of=turn)
+    assert translated.first("variant") == {"name": "english", "ok": True}
+    assert translated.text.endswith("Based on: Examination regulations 2015 of the B.Sc. Informatik")
     # and the next question still starts from that filter
     llm.script(FAIL_ANALYSIS)
     follow_up = assistant.ask(FOLLOW_UP, user, turn_id=new_id(), formats="v1")

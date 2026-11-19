@@ -7,6 +7,10 @@ from typing import Any, cast
 
 from rag_core.domain.types import Doc
 
+# the regulations whose German text binds: a twin of one of them is never shown in place of the German section, and an
+# English section of one is an information translation
+BINDING_GERMAN = frozenset({"po", "mhb", "spp", "apb", "eso", "promotion"})
+
 
 def deduplicate(documents: Sequence[Any]) -> list[Any]:
     """The first document of each distinct text, in order: a dict's "text", else the document's page_content."""

@@ -23,7 +23,7 @@ from rag_core.domain.parent_rerank import parent_texts, rerank_texts, score_chil
 from rag_core.domain.ranking import RankingPolicy, rank
 from rag_core.domain.references import find_references
 from rag_core.domain.resilience import gather_bounded
-from rag_core.domain.retrieval import Hit, Section, deduplicate, parents_of
+from rag_core.domain.retrieval import BINDING_GERMAN, Hit, Section, deduplicate, parents_of
 from rag_core.ports.access import AccessFilter
 from rag_core.ports.retrieval import FullTextIndex, Reranker, RerankError, SectionStore, VectorStore
 from rag_core.settings.profile import Ranking, Retrieval
@@ -44,9 +44,6 @@ CUT_PARENT_TOKENS = 512
 # the sections the reference hop adds at most, and the references it looks up at most, per question
 MAX_HOP_SECTIONS = 3
 MAX_HOP_REFERENCES = 10
-
-# the documents whose German text binds: a twin of one of them is never shown in place of the German section
-BINDING_GERMAN = frozenset({"po", "mhb", "spp", "apb", "eso", "promotion"})
 
 
 def collapse_twins(hits: list[Hit], language: str) -> list[Hit]:

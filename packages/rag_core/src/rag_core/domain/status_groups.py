@@ -249,6 +249,11 @@ def source_programme(metadata: Mapping[str, Any] | None, groups: Groups) -> str 
     return _single_group(metadata, "programme", groups)
 
 
+def source_programmes(metadata: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """The programme ids a source document is for (its `programme`); none for a source valid for every programme."""
+    return tuple(str(v) for v in _column(metadata, "programme"))
+
+
 def source_versions(metadata: Mapping[str, Any] | None) -> tuple[int, ...]:
     """The PO years a source document is for (its `po_version`), oldest first; none for a source not bound to a version."""
     return tuple(sorted(v for v in _column(metadata, "po_version") if isinstance(v, int) and not isinstance(v, bool)))

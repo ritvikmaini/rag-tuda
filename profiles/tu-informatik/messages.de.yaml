@@ -19,6 +19,14 @@ answer:
   scope_differ: "Die Quellen gelten für unterschiedliche Gruppen oder Studiengänge. Sage bei jeder Regel, für wen sie gilt, und nenne die Unterschiede."
   scope_versions: "Die Quellen gehören zu den Prüfungsordnungen {versions}. Sage bei jeder Regel, für welche Version sie gilt, und nenne die Unterschiede zwischen den Versionen."
   version_table: "Nennt deine Antwort mehr als eine Version einer Prüfungsordnung, stelle die Versionen zusätzlich nebeneinander in einer Tabelle dar: eine Zeile je Version."
+  # appended to an answer from the sources it cites: the PO versions ({entries}, {version}, {programme}), the note on an English
+  # translation, the disclaimer on a residence source
+  po_line: "Grundlage: {entries}"
+  po_line_term: "Grundlage (in der Regel): {entries}"
+  po_one: "Prüfungsordnung {version}"
+  po_programme: "{entry} des {programme}"
+  non_binding: "Nicht rechtsverbindlich: Die zitierte Quelle ist eine englische Informationsübersetzung. Verbindlich ist der deutsche Text."
+  visa_disclaimer: "Keine Rechtsberatung. Verbindlich entscheidet die zuständige Ausländerbehörde (Stadt Darmstadt oder Landkreis Darmstadt-Dieburg, je nach Wohnort)."
   # closes an answer to a search that found nothing under a filter; {filter}, {first}, {rest}: what the filter names
   no_match: "Für {filter} habe ich nichts gefunden."
   no_match_more: "Für {first}, {rest}, habe ich nichts gefunden."

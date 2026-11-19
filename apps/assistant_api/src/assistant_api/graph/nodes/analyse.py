@@ -10,6 +10,7 @@ from rag_core.domain.filters import resolve_filter
 from rag_core.domain.history import context_turns, history_text
 from rag_core.services.analysis import analyse
 
+from assistant_api.graph.history import line_texts, without_lines
 from assistant_api.graph.state import AgentState, GraphDeps
 
 
@@ -19,9 +20,12 @@ def make_analyse(deps: GraphDeps):
         deps.roles if deps.profile.retrieval.switches.filters else None
     )  # no roles.yaml or the switch off: no filter
 
+    answer_texts = line_texts(deps)
+
     async def rewrite_follow_up_question(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
-        prior = context_turns(
-            state["messages"], budget.history_turns, history.max_age_hours, datetime.now(timezone.utc)
+        prior = without_lines(
+            context_turns(state["messages"], budget.history_turns, history.max_age_hours, datetime.now(timezone.utc)),
+            answer_texts,
         )
         question = state["messages"][-1].content
         analysis, queries = await analyse(
