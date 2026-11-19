@@ -1,13 +1,14 @@
-"""Status groups (Beamte, Anwärter, Tarifbeschäftigte, Auszubildende, ...) read from a profile's group
-table: what a question is about (its own group, a comparison, a subject, nothing) and which group a source document is for.
-The code is generic over the table; the German lead-ins of the question kinds are the only fixed words."""
+"""Status groups (bachelor, master, promotion, the programmes) read from a profile's group table: what a question is about
+(its own group, a comparison, a subject, nothing) and which group, programme and PO versions a source document is for, read
+from the typed columns `degree`, `programme` and `po_version` of its metadata. From both the answer prompt gets its group
+lines: a comparison, sources that differ by group or version, and the side-by-side table of versions. The code is generic
+over the table; the German and English lead-ins of the question kinds are the only fixed words."""
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Protocol
-from urllib.parse import unquote, urlparse
 
 
 class Group(Protocol):
@@ -23,8 +24,6 @@ class Group(Protocol):
     def ask(self) -> Sequence[str]: ...  # question words: at a word start or the end of a compound
     @property
     def ask_self(self) -> Sequence[str]: ...  # question words that count only when the asker names itself
-    @property
-    def source(self) -> Sequence[str]: ...  # regular expressions, matched at a word start in a source's text
 
 
 Groups = Mapping[str, Group]
@@ -32,19 +31,48 @@ Groups = Mapping[str, Group]
 SELF, COMPARE, SUBJECT, GENERAL = "self", "compare", "subject", "general"
 LETTERS = "a-zäöüß"
 TOKEN = re.compile(rf"[{LETTERS}]+(?:-[{LETTERS}]+)*")
-ARTICLES = frozenset({"ein", "eine", "einer"})
-NEGATIONS = frozenset({"nicht", "kein", "keine", "keiner", "keinen", "keinem", "keines"})
+ARTICLES = frozenset({"ein", "eine", "einer", "a", "an"})
+NEGATIONS = frozenset(
+    {"nicht", "kein", "keine", "keiner", "keinen", "keinem", "keines", "not", "no", "never", "without", "ohne"}
+)
+NEGATED_PREFIXES = ("nicht", "non-")
+# the words before a group word that name the asker ("als Master", "I'm a PhD", "we are ..."); "i'm" is read as i, m
+SELF_LEADS = (("als",), ("bin",), ("wir", "sind"), ("as",), ("i", "am"), ("i", "m"), ("we", "are"))
 FOLLOW_UP_WORDS = 8  # a follow-up that counts as the asker's own group is at most this long
-FOLLOW_UPS = ("und ", "was ist mit", "wie sieht es", "wie ist es", "wie ist das")
-COMPARE_WORDS = ("unterschied", "unterscheid", "im vergleich", "gegenüber")
+FOLLOW_UPS = (
+    "und ",
+    "was ist mit",
+    "wie sieht es",
+    "wie ist es",
+    "wie ist das",
+    "and ",
+    "what about",
+    "how about",
+    "how is it",
+    "what is it like",
+)
+COMPARE_WORDS = (
+    "unterschied",
+    "unterscheid",
+    "im vergleich",
+    "gegenüber",
+    "differ",
+    "compared to",
+    "compared with",
+    "versus",
+)
 COMPARE_PATTERNS = tuple(
     re.compile(p)
     for p in (
         rf"\bauch\s+für\s+(?:(?:die|den|alle)\s+)?([{LETTERS}-]+)",
         rf"\bgilt\s+(?:das|dies|die|der)\b[^?.!;]*?\bfür\s+(?:(?:die|den|alle)\s+)?([{LETTERS}-]+)",
+        rf"\balso\s+(?:for|valid\s+for|applies?\s+to)\s+(?:(?:the|all)\s+)?([{LETTERS}-]+)",
+        rf"\b(?:does|do|is|are)\s+(?:this|that|it|these|those)\b[^?.!;]*?\b(?:apply|applies|hold|holds|valid)\s+"
+        rf"(?:to|for)\s+(?:(?:the|all)\s+)?([{LETTERS}-]+)",
     )
 )
-SOWOHL_ALS_AUCH = re.compile(r"\bsowohl\b.*\bals\s+auch\b")
+SOWOHL_ALS_AUCH = re.compile(r"\bsowohl\b.*\bals\s+auch\b|\bboth\b.*\band\b")
+DEGREE_ABBREVIATION = re.compile(r"\b([bm])\.\s?sc\b\.?")  # "B.Sc." is read as bsc
 CONTACT_WORDS = (
     "an wen",
     "wer ist zuständig",
@@ -55,6 +83,13 @@ CONTACT_WORDS = (
     "e-mail",
     "email",
     "kontakt",
+    "who is responsible",
+    "who handles",
+    "who do i",
+    "who should i",
+    "where can i find",
+    "contact",
+    "phone",
 )
 
 
@@ -89,15 +124,27 @@ def _token_groups(token: str, groups: Groups, with_self: bool) -> set[str]:
 
 
 def _negated(tokens: list[str], i: int) -> bool:
-    return tokens[i].startswith("nicht") or any(t in NEGATIONS for t in tokens[max(0, i - 2) : i])
+    return tokens[i].startswith(NEGATED_PREFIXES) or any(t in NEGATIONS for t in tokens[max(0, i - 2) : i])
 
 
 def _self_lead(tokens: list[str], i: int) -> bool:
-    """True when the token follows "als", "bin" or "wir sind" (and an article)."""
+    """True when the token follows a lead of SELF_LEADS ("als", "ich bin", "wir sind", "as", "I am", "we are"), and an
+    article."""
     j = i - 1
     if j >= 0 and tokens[j] in ARTICLES:
         j -= 1
-    return j >= 0 and (tokens[j] in ("als", "bin") or (tokens[j] == "sind" and j >= 1 and tokens[j - 1] == "wir"))
+    return any(j + 1 >= len(lead) and tuple(tokens[j + 1 - len(lead) : j + 1]) == lead for lead in SELF_LEADS)
+
+
+def _generic(token_groups: set[str], groups: Groups) -> bool:
+    """True when every group of the token is the parent of a subgroup ("student", "studierende")."""
+    return bool(token_groups) and all(any(g.part_of == key for g in groups.values()) for key in token_groups)
+
+
+def _specific(keys: Iterable[str], groups: Groups) -> frozenset[str]:
+    """The groups without those whose subgroup is also in the set: "Master-Studierende" names master, not the students."""
+    found = set(keys)
+    return frozenset(k for k in found if not any(groups[j].part_of == k for j in found))
 
 
 def _sides(groups: Groups, keys: Iterable[str]) -> set[str]:
@@ -113,28 +160,32 @@ class _Read:
 
 
 def _read(text: str, groups: Groups) -> _Read:
-    low = text.lower()
+    low = DEGREE_ABBREVIATION.sub(r"\1sc", text.lower())
     tokens = TOKEN.findall(low)
-    mentioned: set[str] = set()
-    own: set[str] = set()
+    heard: set[str] = set()  # every group a token names
+    self_named: set[str] = set()  # the groups after a self lead
+    previous: set[str] = set()  # the groups the token before names
     for i, token in enumerate(tokens):
-        if _negated(tokens, i):
+        found = _token_groups(token, groups, False)
+        last, previous = previous, found
+        if _negated(tokens, i) or (_generic(found, groups) and last):  # "PhD student": the head noun adds no group
             continue
-        mentioned |= _token_groups(token, groups, False)
+        heard |= found
         if _self_lead(tokens, i):
-            own |= _token_groups(token, groups, True)
-    named: set[str] = set()  # the groups after "auch für" or "gilt das ... für"
+            self_named |= _token_groups(token, groups, True)
+    after_for: set[str] = set()  # the groups after "auch für" or "gilt das ... für"
     for pattern in COMPARE_PATTERNS:
-        for found in pattern.findall(low):
-            named |= _token_groups(found, groups, True)
+        for word in pattern.findall(low):
+            after_for |= _token_groups(word, groups, True)
     keyword = any(w in low for w in COMPARE_WORDS) or SOWOHL_ALS_AUCH.search(low) is not None
-    everything = frozenset(mentioned | own | named)
+    mentioned, own, named = _specific(heard, groups), _specific(self_named, groups), _specific(after_for, groups)
+    everything = _specific(mentioned | own | named, groups)
     contact = any(w in low for w in CONTACT_WORDS)
     if named or (keyword and everything) or len(_sides(groups, everything)) > 1:
         return _Read(COMPARE, everything, everything, contact)
     if own:
-        return _Read(SELF, frozenset(own), everything, contact)
-    return _Read(SUBJECT if mentioned else GENERAL, frozenset(mentioned), everything, contact)
+        return _Read(SELF, own, everything, contact)
+    return _Read(SUBJECT if mentioned else GENERAL, mentioned, everything, contact)
 
 
 def question_scope(groups: Groups, question: str, standalone: str = "") -> Scope:
@@ -171,34 +222,48 @@ def named_sides(text: str, groups: Groups) -> set[str]:
     return {groups[k].side for t in TOKEN.findall(text.lower()) for k in _token_groups(t, groups, False)}
 
 
-def _source_named(text: str, groups: Groups) -> set[str]:
-    low = text.lower()
-    return {k for k, g in groups.items() if any(_source_pattern(w).search(low) for w in g.source)}
+def _column(metadata: Mapping[str, Any] | None, name: str) -> list[Any]:
+    """The values of a typed column in a source's metadata: a list, a bare value or nothing (NULL: applies to all)."""
+    value: Any = (metadata or {}).get(name)
+    items: list[Any] = [*value] if isinstance(value, (list, tuple)) else [value]  # pyright: ignore[reportUnknownVariableType]
+    return [v for v in items if v not in (None, "")]
 
 
-def source_group(
-    metadata: Mapping[str, Any] | None, groups: Groups, overrides: Mapping[str, str] | None = None
-) -> str | None:
-    """The group a source document is for, None for a general one. The inputs, most specific first: the profile's override
-    for a title substring ("alle" gives None), the document's own scope statement, the section path, the title, the file's
-    name. The first input naming one group decides; an input naming groups of two sides gives None and ends the search."""
-    m = metadata or {}
-    title = str(m.get("title") or "")
-    for part, group in (overrides or {}).items():
-        if part.lower() in title.lower():
-            return group if group in groups else None
-    url = str(m.get("download_url") or m.get("url") or "")
-    # the file's own name only: the folders above it are categories
-    slug = unquote(urlparse(url).path).rstrip("/").rsplit("/", 1)[-1].replace("-", " ").replace("_", " ")
-    path = " ".join(str(m.get(k) or "") for k in ("section_path", "title_path"))
-    for text in (str(m.get("scope") or ""), path, title, slug):
-        named = _source_named(text, groups)
-        if len(_sides(groups, named)) > 1:
-            return None
-        top = [k for k in named if groups[k].part_of not in named]  # a group and its subgroup count as the group
-        if len(top) == 1:
-            return top[0]
-    return None
+def _single_group(metadata: Mapping[str, Any] | None, name: str, groups: Groups) -> str | None:
+    values = _column(metadata, name)
+    return values[0] if len(values) == 1 and values[0] in groups else None
+
+
+def source_group(metadata: Mapping[str, Any] | None, groups: Groups) -> str | None:
+    """The group a source document is for: the group named by its one `degree`; None for a general source (NULL) and for
+    one valid for several degrees."""
+    return _single_group(metadata, "degree", groups)
+
+
+def source_programme(metadata: Mapping[str, Any] | None, groups: Groups) -> str | None:
+    """The programme group a source document is for: its one `programme` that the table has a group for, else None."""
+    return _single_group(metadata, "programme", groups)
+
+
+def source_versions(metadata: Mapping[str, Any] | None) -> tuple[int, ...]:
+    """The PO years a source document is for (its `po_version`), oldest first; none for a source not bound to a version."""
+    return tuple(sorted(v for v in _column(metadata, "po_version") if isinstance(v, int) and not isinstance(v, bool)))
+
+
+Metadata = Sequence[Mapping[str, Any] | None]
+
+
+def versions_of(sources: Metadata) -> list[int]:
+    """The distinct PO years of the sources, newest first."""
+    return sorted({v for m in sources for v in source_versions(m)}, reverse=True)
+
+
+def sources_differ(sources: Metadata, groups: Groups) -> bool:
+    """True when the sources are for more than one degree group or more than one programme. A general source (NULL) and one
+    valid for several degrees name no group, so a programme's source beside a plain one of its degree does not differ."""
+    degrees = {g for m in sources if (g := source_group(m, groups))}
+    programmes = {g for m in sources if (g := source_programme(m, groups))}
+    return len(degrees) > 1 or len(programmes) > 1
 
 
 def label_of_side(groups: Groups, side: str) -> str:
@@ -206,18 +271,23 @@ def label_of_side(groups: Groups, side: str) -> str:
     return next((g.label for g in groups.values() if g.side == side and not g.part_of), side)
 
 
-def join_labels(labels: Sequence[str]) -> str:
-    return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + " sowie " + labels[-1]
+def _asked_sides(groups: Groups) -> list[str]:
+    """The sides a question can name (a group of the side has question words); the programmes are read from sources only."""
+    return list(dict.fromkeys(g.side for g in groups.values() if g.ask or g.ask_self))
 
 
-def compare_labels(groups: Groups, asked: Iterable[str]) -> str:
-    """The labels of the asked groups, plus the top group of every other side when the asked ones cover one side only."""
+def join_labels(labels: Sequence[str], conj: str = "sowie") -> str:
+    return labels[0] if len(labels) == 1 else ", ".join(labels[:-1]) + f" {conj} " + labels[-1]
+
+
+def compare_labels(groups: Groups, asked: Iterable[str], conj: str = "sowie") -> str:
+    """The labels of the asked groups, plus the top group of every other side when a single group is asked."""
     keys = [k for k in groups if k in set(asked)]
     covered = _sides(groups, keys)
     labels = [groups[k].label for k in keys]
-    if len(covered) < 2:
-        labels += [label_of_side(groups, s) for s in dict.fromkeys(g.side for g in groups.values()) if s not in covered]
-    return join_labels(labels)
+    if len(keys) < 2 and len(covered) < 2:
+        labels += [label_of_side(groups, s) for s in _asked_sides(groups) if s not in covered]
+    return join_labels(labels, conj)
 
 
 @dataclass(frozen=True)
@@ -254,7 +324,62 @@ def note_for(groups: Groups, scope: Scope, cited: Sequence[str | None], answer: 
     # the limit is told between the top groups only: documents all of a subgroup, or a subgroup asker, get no "one" note
     if all(groups[k].part_of for k in keys) or any(groups[k].part_of for k in scope.groups):
         return None
-    others = [s for s in dict.fromkeys(g.side for g in groups.values()) if s != side]
+    others = [s for s in _asked_sides(groups) if s != side]
     if not others or named_sides(answer, groups) & set(others):
         return None
     return Note("one", group, join_labels([label_of_side(groups, s) for s in others]))
+
+
+class Texts(Protocol):
+    """The wording of the prompt lines (the profile's `answer` messages); an empty text leaves its line out."""
+
+    @property
+    def scope_compare(self) -> str: ...  # {groups}: the labels of the groups compared
+    @property
+    def scope_differ(self) -> str: ...  # the best sources are for different groups or programmes
+    @property
+    def scope_versions(self) -> str: ...  # {versions}: the PO years, newest first
+    @property
+    def version_table(self) -> str: ...  # the side-by-side format for an answer citing more than one version
+
+
+def scope_lines(
+    groups: Groups,
+    scope: Scope,
+    asked_versions: Iterable[int],
+    top: Metadata,
+    shown: Metadata,
+    texts: Texts,
+    *,
+    compare: bool,
+    differ: bool,
+    version_table: bool,
+    conj: str = "sowie",
+) -> list[str]:
+    """The prompt lines for a question and the metadata of its sources:
+    - compare: a comparison of groups names their labels; else a question naming two PO versions names the versions;
+    - differ: a general question (no contact) whose best sources (`top`) are for different groups or programmes asks to
+      tell the groups apart, and best sources of more than one PO version ask to name each version (for any question
+      that compares nothing);
+    - version_table: sources in the context (`shown`) of more than one PO version ask for the versions side by side, one row each.
+    Each switch is the caller's decision; a text the profile leaves empty drops its line."""
+    asked = sorted(set(asked_versions), reverse=True)
+    lines: list[str] = []
+
+    def versions_line(years: Sequence[int]) -> None:
+        if texts.scope_versions:
+            lines.append(texts.scope_versions.format(versions=join_labels([f"PO {y}" for y in years], conj)))
+
+    if compare and scope.kind == COMPARE and scope.groups:
+        if texts.scope_compare:
+            lines.append(texts.scope_compare.format(groups=compare_labels(groups, scope.groups, conj)))
+    elif compare and len(asked) > 1:
+        versions_line(asked)
+    elif differ and not scope.contact:
+        if scope.kind == GENERAL and sources_differ(top, groups) and texts.scope_differ:
+            lines.append(texts.scope_differ)
+        if len(years := versions_of(top)) > 1:
+            versions_line(years)
+    if version_table and len(versions_of(shown)) > 1 and texts.version_table:
+        lines.append(texts.version_table)
+    return lines

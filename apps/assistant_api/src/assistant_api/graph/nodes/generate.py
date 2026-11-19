@@ -1,9 +1,10 @@
 """The answer node: the response generator over the prompt service and the context budget; the model is awaited here, inside
 the node, so LangChain's callbacks stream the answer. A documents answer to a question about the next or a coming event is
 held back and replaced by one sentence when it writes a past date as coming. With the profile's status_groups switches the
-node also tells the status groups apart: a question about the asker's own group drops the other sides' sources, a
-comparison and a general question whose best sources differ by group get a prompt line, and a German answer cited only
-from one side's sources is closed with a note on whom it concerns."""
+node also tells the status groups and PO versions apart: a comparison, and a question whose best sources are for different
+groups or versions, get a prompt line; with the card's version table an answer citing several versions gets the side-by-side
+format; a German answer cited only from one side's sources is closed with a note on whom it concerns. Which sources are
+searched is the question's hard filter, not this node's."""
 
 import asyncio
 import logging
@@ -26,17 +27,8 @@ from rag_core.domain.context_budget import ContextBudget, fit_context, rank_scor
 from rag_core.domain.dates import asks_for_event, format_date, shown_as_coming, written_dates
 from rag_core.domain.history import context_turns, conversation_state, select_turns
 from rag_core.domain.query_analysis import RETRIEVAL_INTENTS
-from rag_core.domain.status_groups import (
-    SUBJECT,
-    COMPARE,
-    GENERAL,
-    SELF,
-    Scope,
-    compare_labels,
-    note_for,
-    question_scope,
-    source_group,
-)
+from rag_core.domain.status_groups import GENERAL, Scope, note_for, question_scope, scope_lines, source_group
+from rag_core.settings.profile import StatusGroup
 
 from assistant_api.graph.filter_line import no_match_line
 from assistant_api.graph.history import as_messages, insert_history, to_messages
@@ -132,6 +124,7 @@ def make_generate(deps: GraphDeps):
         full_sources=deps.card.budget.full_sources,
     )
     labels = deps.messages.labels.source_labels()
+    table = {key: StatusGroup.model_validate(group) for key, group in ((deps.roles or {}).get("groups") or {}).items()}
 
     def answer_prompt(name: str, input_messages: list[Any], variables: dict[str, Any], position: str) -> list[Any]:
         """The messages of an answer prompt: the rag-generation form instruction and reminders added, the history inserted."""
@@ -177,12 +170,10 @@ def make_generate(deps: GraphDeps):
         sources: list[Any] = []
         no_match = ""  # the closing line of an answer to an empty search under a filter
         groups = profile.status_groups
-        table = groups.groups
         status_on = bool(table) and (
-            groups.filter or groups.compare or groups.reminder != "off" or groups.note != "off"
+            groups.compare or groups.reminder != "off" or groups.note != "off" or deps.card.gated.version_table
         )
         scope = Scope(GENERAL, frozenset(), False)
-        seen: set[str] = set()  # the sides of the best-ranked sources
         group_of: dict[Any, str | None] = {}  # context source number -> its status group
         if intent not in RETRIEVAL_INTENTS and not state.get("scope_fallback"):
             # About the bot, conversation requests, out of scope, urgent: no retrieval (unless the search found a strong hit
@@ -194,17 +185,7 @@ def make_generate(deps: GraphDeps):
             if status_on:
                 try:
                     scope = question_scope(table, str(current.content), state.get("standalone_question") or "")
-                    if groups.filter and scope.kind in (SELF, SUBJECT) and len(scope.groups) == 1:
-                        (own,) = scope.groups
-                        keep = {None, own, table[own].part_of}  # its own, its parent group's and the general sources
-                        kept = [d for d in candidates if source_group(d.metadata, table, groups.overrides) in keep]
-                        logger.info(f"[StatusGroups] filter={own} dropped={len(candidates) - len(kept)}")
-                        candidates = kept or candidates
-                    if groups.compare and scope.kind == COMPARE:
-                        variables["scope_reminder"] = deps.messages.answer.scope_compare.format(
-                            groups=compare_labels(table, scope.groups)
-                        )
-                except Exception as exc:  # the groups never cost an answer: all sources stay
+                except Exception as exc:  # the groups never cost an answer
                     logger.warning(f"[StatusGroups] scope_failed={type(exc).__name__}")
             fixed_prompt = await asyncio.to_thread(
                 answer_prompt, "rag-generation", [], dict(variables, context=""), position
@@ -214,28 +195,32 @@ def make_generate(deps: GraphDeps):
             sources = fitted.get("sources", [])
             if status_on:
                 try:
-                    by_section = {
-                        (d.metadata or {}).get("section_id"): source_group(d.metadata, table, groups.overrides)
-                        for d in candidates
-                    }
-                    group_of = {s["n"]: by_section.get(s.get("section_id")) for s in sources}
+                    by_section = {(d.metadata or {}).get("section_id"): d.metadata for d in candidates}
+                    shown = [by_section.get(s.get("section_id")) for s in sources]
+                    group_of = {s["n"]: source_group(m, table) for s, m in zip(sources, shown)}
                     # the best-ranked sources in the context (its numbers follow the documents, not the ranking)
-                    shown = {s.get("section_id") for s in sources}
+                    ids = {s.get("section_id") for s in sources}
                     best = sorted(
-                        (d for d in candidates if (d.metadata or {}).get("section_id") in shown), key=rank_score
+                        (d for d in candidates if (d.metadata or {}).get("section_id") in ids), key=rank_score
                     )
-                    top = best[::-1][: groups.reminder_sources]
-                    seen = {
-                        table[g].side for g in (by_section.get((d.metadata or {}).get("section_id")) for d in top) if g
-                    }
-                    if (
-                        groups.reminder == "differ"
-                        and scope.kind == GENERAL
-                        and not scope.contact
-                        and shape_of(state.get("answer_shape")) == "text"
-                        and len(seen) > 1
-                    ):
-                        variables["scope_reminder"] = deps.messages.answer.scope_differ
+                    top = [d.metadata for d in best[::-1][: groups.reminder_sources]]
+                    english = answer_language(state) == "Englisch"
+                    applied = state.get("filter")
+                    plain = shape_of(state.get("answer_shape")) == "text"
+                    lines = scope_lines(
+                        table,
+                        scope,
+                        (applied.po_version or ()) if applied else (),
+                        top,
+                        shown,
+                        (deps.messages_en if english and deps.messages_en else deps.messages).answer,
+                        compare=groups.compare,
+                        differ=groups.reminder == "differ" and plain,
+                        version_table=deps.card.gated.version_table and plain,
+                        conj="and" if english else "sowie",
+                    )
+                    if lines:
+                        variables["scope_reminder"] = "\n".join(lines)
                 except Exception as exc:
                     logger.warning(f"[StatusGroups] reminder_failed={type(exc).__name__}")
             prompt = await asyncio.to_thread(answer_prompt, "rag-generation", fitted["history"], variables, position)
@@ -289,7 +274,7 @@ def make_generate(deps: GraphDeps):
                     cited = [g for n, g in group_of.items() if n in numbers]
                     note = note_for(table, scope, cited, answer)
                     logger.info(
-                        f"[StatusGroups] kind={scope.kind} asked={sorted(scope.groups)} seen={sorted(seen)} "
+                        f"[StatusGroups] kind={scope.kind} asked={sorted(scope.groups)} "
                         f"contact={scope.contact} note={note.kind if note else None}"
                     )
                     if note:

@@ -190,16 +190,13 @@ class Formats(ProfileModel):
 
 
 class StatusGroup(ProfileModel):
-    """One status group (a row of the group table); the words are lowercase."""
+    """One status group (a row of roles.yaml's group table); the words are lowercase."""
 
     label: str  # the group's name in the answer texts
     side: str  # the groups of one side are contrasted with those of the other sides, never a subgroup with its parent
     part_of: str | None = None  # the parent group of a subgroup (a key of the table)
     ask: tuple[str, ...] = ()  # question words: at a word start or the end of a compound ("Verwaltungsbeamtin")
     ask_self: tuple[str, ...] = ()  # question words that count only after "als", "ich bin", ... (ambiguous words)
-    source: tuple[
-        str, ...
-    ] = ()  # regular expressions, matched at a word start in a source's scope, path, title, file name
 
 
 def _check_part_of(groups: dict[str, StatusGroup]) -> None:
@@ -210,34 +207,22 @@ def _check_part_of(groups: dict[str, StatusGroup]) -> None:
 
 
 class StatusGroups(ProfileModel):
-    """How an answer tells status groups (Beamte with Anwärter, Tarifbeschäftigte with Auszubildende) apart."""
+    """Which lines about status groups and PO versions the answer prompt gets; the group table is roles.yaml's `groups`, the
+    version table of an answer is the model card's `gated.version_table`. The questions' hard filter is the retrieval's."""
 
-    groups: dict[str, StatusGroup] = {}
-    filter: bool = (
-        False  # a question naming its own group drops the sources of the other sides (when any source remains)
-    )
-    compare: bool = False  # a question comparing groups gets a prompt line asking for each group's rule
-    # a general question whose best sources carry two sides gets a prompt line to separate the groups where they differ
+    compare: bool = False  # a question comparing groups or PO versions gets a prompt line asking for each one's rule
+    # a question whose best sources are for different groups, programmes or PO versions gets a prompt line to tell them apart
     reminder: Literal["off", "differ"] = "off"
     # a German answer cited only from one side's sources gets a closing note on whom the rule is for
     note: Literal["off", "classic"] = "off"
     # only the best-ranked context sources count for the reminder: a far-down source of the other side does not
     # make a process question group-specific
     reminder_sources: int = 5
-    overrides: dict[str, str] = {}  # title substring (any case) -> the group key it is for, or "alle" for none
 
     @field_validator("reminder", "note", mode="before")
     @classmethod
     def _unquoted_off(cls, value: object) -> object:
         return "off" if value is False else value  # YAML reads a bare off as false
-
-    @model_validator(mode="after")
-    def _table_is_consistent(self) -> "StatusGroups":
-        _check_part_of(self.groups)
-        for part, key in self.overrides.items():
-            if key != "alle" and key not in self.groups:
-                raise ValueError(f"status group override {part!r}: unknown group {key!r}")
-        return self
 
 
 class Profile(ProfileModel):

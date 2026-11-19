@@ -14,6 +14,11 @@ answer:
   past_event: Der in den Dokumenten genannte Termin, {dates}, ist bereits vorbei
   past_events: Die in den Dokumenten genannten Termine, {dates}, sind bereits vorbei
   no_newer_event: "; einen neueren Termin nennen die Dokumente nicht"
+  # the lines the prompt gets about status groups and PO versions; {groups}: the labels compared, {versions}: the PO years
+  scope_compare: "Die Frage vergleicht {groups}. Nenne für jede Gruppe ihre Regel und sage, wo sich die Regeln unterscheiden."
+  scope_differ: "Die Quellen gelten für unterschiedliche Gruppen oder Studiengänge. Sage bei jeder Regel, für wen sie gilt, und nenne die Unterschiede."
+  scope_versions: "Die Quellen gehören zu den Prüfungsordnungen {versions}. Sage bei jeder Regel, für welche Version sie gilt, und nenne die Unterschiede zwischen den Versionen."
+  version_table: "Nennt deine Antwort mehr als eine Version einer Prüfungsordnung, stelle die Versionen zusätzlich nebeneinander in einer Tabelle dar: eine Zeile je Version."
   # closes an answer to a search that found nothing under a filter; {filter}, {first}, {rest}: what the filter names
   no_match: "Für {filter} habe ich nichts gefunden."
   no_match_more: "Für {first}, {rest}, habe ich nichts gefunden."

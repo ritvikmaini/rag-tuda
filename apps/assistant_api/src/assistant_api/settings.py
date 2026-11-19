@@ -63,10 +63,13 @@ class AnswerMessages(_Texts):
     past_event: str
     past_events: str
     no_newer_event: str
-    # status groups: the prompt lines ({groups}: the labels of the groups compared) and the closing notes ({group},
-    # {other}, {asked}: a group's label)
+    # status groups: the prompt lines (scope_compare {groups}: the labels of the groups compared; scope_versions {versions}:
+    # the PO years; version_table: the side-by-side format for several versions) and the closing notes ({group}, {other},
+    # {asked}: a group's label)
     scope_compare: str = ""
     scope_differ: str = ""
+    scope_versions: str = ""
+    version_table: str = ""
     scope_note_one: str = ""
     scope_note_other: str = ""
     # the line that closes an answer to a search that found nothing under a hard filter: no_match names the filter's one part

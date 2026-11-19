@@ -57,3 +57,5 @@ generation:
   analysis_temperature: 0
   analysis_max_tokens: 800
 formats: {sources_event: before}
+# the groups are roles.yaml's; the version table of an answer is the model card's
+status_groups: {compare: true, reminder: differ}

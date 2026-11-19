@@ -15,6 +15,11 @@ answer:
   past_event: The date named in the documents, {dates}, has already passed
   past_events: The dates named in the documents, {dates}, have already passed
   no_newer_event: "; the documents name no later date"
+  # the lines the prompt gets about status groups and PO versions; {groups}: the labels compared, {versions}: the PO years
+  scope_compare: "The question compares {groups}. Give each group's rule and say where the rules differ."
+  scope_differ: "The sources apply to different groups or programmes. For each rule, say whom it applies to and name the differences."
+  scope_versions: "The sources belong to the examination regulations {versions}. For each rule, say which version it applies to and name the differences between the versions."
+  version_table: "If your answer cites more than one version of an examination regulation, also show the versions side by side in a table: one row per version."
   # closes an answer to a search that found nothing under a filter; {filter}, {first}, {rest}: what the filter names
   no_match: "I found nothing for {filter}."
   no_match_more: "I found nothing for {first}, {rest}."

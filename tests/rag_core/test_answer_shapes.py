@@ -182,6 +182,7 @@ def sent_prompt(**state):
         prompts=PromptService(load_profile_prompts(profile_file.parent / "prompts")),
         answer_llm=Model(),
         counter=Counter(),
+        roles=None,
     )
     doc = Document(page_content="Quelle eins", metadata={"filename": "a.pdf", "section_id": "p1", "url": "https://x/a"})
     full = {
