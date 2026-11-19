@@ -2,7 +2,8 @@
 // web/page:   node tests/fake_backend.mjs   then open http://localhost:8765/index.html
 // Question words pick the shape: "tabelle", "zahlen", "ablauf"/"wie beantrage", "mindmap"; "ich …" gets a checklist; anything
 // else plain text. The "⋯" menu's variants and version switches answer like the backend (shape, chunk, citations, variant).
-// --v1: stream format 1: "\n\n" after each frame, meta first, done last, code on a refused switch.
+// --v1: stream format 1: "\n\n" after each frame, meta first (with the request's limits and the model), done last, code on a
+// refused switch. GET /api/profile answers the recorded profile (fixtures/profile.json) for the chips and the footer.
 // FAKE_PORT picks the port (default 8765).
 import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
@@ -12,6 +13,7 @@ const V1 = process.argv.includes("--v1");
 const PORT = Number(process.env.FAKE_PORT || 8765);
 
 const DIR = new URL("../", import.meta.url);
+const PROFILE = JSON.parse(readFileSync(new URL("fixtures/profile.json", import.meta.url), "utf8"));
 const DOC = "https://docs.example.org/handbook/agreements/working-hours/?layout=file";
 const ANSWERS = {
     text: "Die Kernarbeitszeit endet um 15:00 Uhr [1].",
@@ -56,7 +58,10 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function open(res) {
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
-    if (V1) res.write(frame({ type: "meta", content: { format: 1, turn_id: randomUUID(), trace_id: null } }));
+    if (V1) {
+        const { model, provider } = PROFILE.answer;
+        res.write(frame({ type: "meta", content: { format: 1, turn_id: randomUUID(), trace_id: null, deadline_s: 240, idle_s: 90, model, provider } }));
+    }
 }
 
 function close(res, outcome) {
@@ -103,6 +108,11 @@ createServer(async (req, res) => {
         originalShape.set(user, shapeFor(p.get("question") || "") === "numbers" ? "table" : shapeFor(p.get("question") || ""));
         const shape = shapeFor(p.get("question") || "");
         await stream(res, [{ type: "docs", content: DOCS }], ANSWERS[shape], shape, []);
+        return;
+    }
+    if (url.pathname === "/api/profile") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(PROFILE));
         return;
     }
     const name = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
