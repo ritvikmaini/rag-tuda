@@ -264,11 +264,27 @@
   "MetaContent": {
    "additionalProperties": false,
    "properties": {
+    "deadline_s": {
+     "title": "Deadline S",
+     "type": "number"
+    },
     "format": {
      "const": 1,
      "default": 1,
      "title": "Format",
      "type": "integer"
+    },
+    "idle_s": {
+     "title": "Idle S",
+     "type": "number"
+    },
+    "model": {
+     "title": "Model",
+     "type": "string"
+    },
+    "provider": {
+     "title": "Provider",
+     "type": "string"
     },
     "trace_id": {
      "anyOf": [
@@ -288,7 +304,11 @@
    },
    "required": [
     "turn_id",
-    "trace_id"
+    "trace_id",
+    "deadline_s",
+    "idle_s",
+    "model",
+    "provider"
    ],
    "title": "MetaContent",
    "type": "object"

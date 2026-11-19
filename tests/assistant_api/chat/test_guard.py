@@ -16,7 +16,7 @@ MESSAGES = {  # the four guard texts under the profile's flat keys (Runtime.mess
     "guard.timeout": "Die Antwort dauert gerade ungewöhnlich lange, deshalb habe ich abgebrochen. Bitte stellen Sie Ihre Frage in "
     "ein paar Minuten noch einmal.",
 }
-META = fr.meta("11111111-1111-4111-8111-111111111111", None)
+META = fr.meta("11111111-1111-4111-8111-111111111111", None, 5.0, 5.0, "m", "vllm")
 
 
 def frame(kind, content, code: Any = "pipeline_error"):

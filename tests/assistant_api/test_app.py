@@ -18,6 +18,10 @@ from assistant_api.app import create_app
 from assistant_api.chat.turns_store import TurnRecord
 from assistant_api.sse import frames as fr
 
+CARD = types.SimpleNamespace(
+    timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5), answer=types.SimpleNamespace(model="m", provider="vllm")
+)
+
 
 def app_with(chain: object = None, token: str = "t0k"):
     app = create_app()
@@ -119,7 +123,7 @@ def test_the_chat_route_makes_a_turn_record_for_a_question_and_ends_it_through_t
     client, rt = app_with()
     rt.turns, rt.handler, rt.messages_for = Turns(), None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+    rt.settings.card = CARD
     ask = {"conversation_id": "c-1"}
 
     def get(**params):
@@ -148,7 +152,7 @@ def chat_client(monkeypatch):
     client, rt = app_with()
     rt.turns, rt.handler, rt.messages_for = Turns(), None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+    rt.settings.card = CARD
     return client
 
 
@@ -231,7 +235,7 @@ def test_the_route_s_principal_reaches_the_turn_record_and_the_service(monkeypat
     client, rt = app_with()
     rt.turns, rt.handler, rt.messages_for = None, None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+    rt.settings.card = CARD
     params = {"question": "Frage", "conversation_id": "c-2"}
     assert client.get("/api/chat", params=params, headers={"Authorization": "Bearer t0k"}).status_code == 200
     assert seen[0][0] is principal and seen[0][1].principal == "amt-32"
@@ -251,7 +255,7 @@ def test_the_page_lang_reaches_the_service_and_chooses_the_guard_s_texts(monkeyp
         asked.append(lang) or {"guard.busy": {"de": "Beschäftigt", "en": "Busy"}[lang or "de"]}
     )
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+    rt.settings.card = CARD
     base = {"question": "Frage", "conversation_id": "c-3"}
     got = {}
     for lang in ("en", "de", "fr", None):
@@ -321,7 +325,7 @@ def chip_client(monkeypatch, roles):
     rt.turns, rt.handler, rt.messages_for = Turns(), None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.roles = roles
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
-    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+    rt.settings.card = CARD
 
     def get(**params):
         return client.get(

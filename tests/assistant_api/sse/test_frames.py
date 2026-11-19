@@ -67,9 +67,10 @@ def test_code_follows_type_and_content():
 
 
 def test_meta_and_done():
-    meta = fr.meta("0b0e7a52-6a1f-4a8e-9c7e-1f2e3d4c5b6a", None)
+    meta = fr.meta("0b0e7a52-6a1f-4a8e-9c7e-1f2e3d4c5b6a", None, 240.0, 90.0, "qwen3.6:35b-a3b", "ollama")
     assert fr.encode(meta) == (
-        'data: {"type": "meta", "content": {"format": 1, "turn_id": "0b0e7a52-6a1f-4a8e-9c7e-1f2e3d4c5b6a", "trace_id": null}}\n\n'
+        'data: {"type": "meta", "content": {"format": 1, "turn_id": "0b0e7a52-6a1f-4a8e-9c7e-1f2e3d4c5b6a", '
+        '"trace_id": null, "deadline_s": 240.0, "idle_s": 90.0, "model": "qwen3.6:35b-a3b", "provider": "ollama"}}\n\n'
     )
     assert fr.encode(fr.done("too_long")) == 'data: {"type": "done", "content": {"outcome": "too_long"}}\n\n'
 

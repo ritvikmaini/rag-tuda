@@ -3,8 +3,9 @@
 One pydantic model per type; every frame has `type` and `content`, `code` sits beside them on `error` and on a
 `variant` with ok false. `encode` writes "data: " + JSON + a blank line: Python's separators, ASCII, keys in model order, NaN and
 ±Infinity as null (a NaN would stop the page's parser for the rest of the answer). `meta` is the first frame of every
-response and `done` the last one the client stays for; both come from the guard; `done` also names the turn's index generation
-and prompt versions when known (left out otherwise). `Declared` is the pipeline's outcome for the
+response (the turn, the trace, the request's deadline and silence limit, the answer model and its provider) and `done` the last
+one the client stays for; both come from the guard; `done` also names the turn's index generation and prompt versions when
+known (left out otherwise). `Declared` is the pipeline's outcome for the
 guard, never sent. `python -m assistant_api.sse.frames` prints the JSON schema (`just stream-schema`)."""
 
 import json
@@ -39,6 +40,11 @@ class MetaContent(_Model):
     format: Literal[1] = 1
     turn_id: str
     trace_id: str | None
+    # the request's limits and the model that answers: the page's watchdog waits as long as the backend does, and says who answers
+    deadline_s: float
+    idle_s: float
+    model: str
+    provider: str
 
 
 class Meta(_Model):
@@ -127,8 +133,12 @@ class Declared:
     outcome: Outcome
 
 
-def meta(turn_id: str, trace_id: str | None) -> Meta:
-    return Meta(content=MetaContent(turn_id=turn_id, trace_id=trace_id))
+def meta(turn_id: str, trace_id: str | None, deadline_s: float, idle_s: float, model: str, provider: str) -> Meta:
+    return Meta(
+        content=MetaContent(
+            turn_id=turn_id, trace_id=trace_id, deadline_s=deadline_s, idle_s=idle_s, model=model, provider=provider
+        )
+    )
 
 
 def done(
