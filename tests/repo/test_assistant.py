@@ -45,6 +45,7 @@ STANDARD_TYPED = {
         "domain/answer_shapes.py",
         "domain/citations.py",
         "domain/context_budget.py",
+        "domain/follow_up.py",
         "domain/history.py",
         "domain/parent_rerank.py",
         "domain/query_analysis.py",

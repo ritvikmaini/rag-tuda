@@ -1,4 +1,4 @@
-"""Prompts: the profile's four chat prompts, loaded from its prompts folder, and one renderer, {{variable}} substitution
+"""Prompts: the profile's four chat prompts and its optional follow-up prompt, loaded from its prompts folder, and one renderer, {{variable}} substitution
 (every other brace untouched, so the analysis prompt may carry JSON examples)."""
 
 from collections.abc import Mapping
@@ -10,6 +10,7 @@ import yaml
 from rag_core.domain.query_analysis import VAR_PATTERN, fill_template
 
 PROMPT_NAMES = ("rag-generation", "no-docs-found", "question-rewriting", "direct-reply")
+FOLLOW_UP_PROMPT = "follow-up-queries"  # a profile without the file has no iterative round
 
 
 @dataclass(frozen=True)
@@ -33,8 +34,9 @@ def load_profile_prompt(folder: Path, name: str) -> PromptText:
 
 
 def load_profile_prompts(folder: Path) -> dict[str, PromptText]:
-    """The profile's four chat prompts."""
-    return {name: load_profile_prompt(folder, name) for name in PROMPT_NAMES}
+    """The profile's four chat prompts, and the follow-up prompt when the folder has it."""
+    names = (*PROMPT_NAMES, FOLLOW_UP_PROMPT) if (folder / f"{FOLLOW_UP_PROMPT}.yaml").exists() else PROMPT_NAMES
+    return {name: load_profile_prompt(folder, name) for name in names}
 
 
 class PromptService:

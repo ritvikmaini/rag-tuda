@@ -64,7 +64,7 @@ def test_each_prompt_keeps_its_variables_and_the_fake_llms_marker():
         holders = [
             n for n in PROMPT_OF.values() if marker in (EXAMPLE / "prompts" / f"{n}.yaml").read_text(encoding="utf-8")
         ]
-        assert holders == [PROMPT_OF[purpose]], purpose
+        assert holders == ([PROMPT_OF[purpose]] if purpose in PROMPT_OF else []), purpose  # no follow-up prompt
     for mark in llm.QUESTION_MARKS.values():
         assert any(
             mark.strip() in (EXAMPLE / "prompts" / f"{n}.yaml").read_text(encoding="utf-8") for n in PROMPT_OF.values()

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from rag_core.services.prompts import PROMPT_NAMES, PromptService, load_profile_prompts
+from rag_core.services.prompts import FOLLOW_UP_PROMPT, PROMPT_NAMES, PromptService, load_profile_prompts
 
 FOLDER = Path(__file__).resolve().parents[2] / "profiles" / "example" / "prompts"
 
@@ -28,6 +28,12 @@ def test_prompts_load_from_profile_without_langfuse() -> None:
         check=True,
     ).stdout.strip()
     assert imported == "False"
+
+
+def test_the_follow_up_prompt_loads_when_the_folder_has_it() -> None:
+    tu = Path(__file__).resolve().parents[2] / "profiles" / "tu-informatik" / "prompts"
+    assert tuple(load_profile_prompts(tu)) == (*PROMPT_NAMES, FOLLOW_UP_PROMPT)
+    assert FOLLOW_UP_PROMPT not in load_profile_prompts(FOLDER)  # the example profile has no iterative round
 
 
 def test_an_unknown_prompt_is_refused() -> None:

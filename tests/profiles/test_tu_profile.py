@@ -21,12 +21,14 @@ PROMPT_OF = {
     "direct": "direct-reply",
     "no_docs": "no-docs-found",
     "answer": "rag-generation",
+    "follow_up": "follow-up-queries",
 }
 VARIABLES = {  # the variables the assistant fills in for each prompt
     "question-rewriting": {"bot_name", "current_date", "history", "question", "today_iso"},
     "direct-reply": {"bot_name", "conversation_state", "current_date", "intent", "language", "question"},
     "no-docs-found": {"bot_name", "current_date", "language", "question"},
     "rag-generation": {"bot_name", "context", "current_date", "language", "question"},
+    "follow-up-queries": {"bot_name", "question", "searched", "sections"},
 }
 HUBS = "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/"
 
@@ -227,13 +229,16 @@ def _rendered(name):
 
 def test_prompts_render_de():
     prompts = load_profile_prompts(TU / "prompts")
-    assert tuple(prompts) == PROMPT_NAMES
+    assert tuple(prompts) == (*PROMPT_NAMES, "follow-up-queries")
     for name, prompt in prompts.items():
         assert prompt.version == 1 and set(prompt.variables) == VARIABLES[name], name
         system, user = _rendered(name)
         assert system[0] == "system" and user[0] == "user"
         assert "{{" not in system[1] + user[1] and "<bot_name>" in system[1]
-        if name != "question-rewriting":  # the analysis answers in JSON, not to the person
+        if name not in (
+            "question-rewriting",
+            "follow-up-queries",
+        ):  # the analysis calls answer in JSON, not to the person
             assert '("Sie")' in system[1], name  # German answers address the person with Sie
             assert "Antworte in: Deutsch" in system[1], name
         assert "Studierende und Promovierende des Fachbereichs Informatik der TU Darmstadt" in system[1], name

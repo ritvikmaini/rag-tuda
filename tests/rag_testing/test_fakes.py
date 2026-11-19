@@ -34,6 +34,19 @@ def test_every_call_is_classified_by_its_system_message_and_its_question_found()
     assert llm.question(DIRECT, "direct") == "Was kannst du?"
 
 
+def test_the_follow_up_prompt_is_classified_and_answers_done_unless_scripted():
+    asked = [
+        {"role": "system", "content": "Du führst eine Folgesuche durch."},
+        {"role": "user", "content": "Frage: Wann?"},
+    ]
+    assert llm.purpose(asked) == "follow_up"
+    done = json.loads(llm.reply(llm.pick([], "follow_up", asked), "follow_up", asked))
+    assert done == {"reasoning": "", "queries": [], "done": True}
+    rules = [{"purpose": "follow_up", "reply": {"queries": ["APB Rücktritt"], "done": False}}]
+    more = json.loads(llm.reply(llm.pick(rules, "follow_up", asked), "follow_up", asked))
+    assert more == {"reasoning": "", "queries": ["APB Rücktritt"], "done": False}
+
+
 def test_the_first_fitting_rule_answers_and_the_analysis_keeps_its_defaults():
     rules = [
         {"purpose": "answer", "match": "Kantine", "reply": "nein"},

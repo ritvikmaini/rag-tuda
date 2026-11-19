@@ -109,11 +109,13 @@ def build_chat_openai(
     )
 
 
-def response_format(structured_output: str, provider: str, schema: Mapping[str, Any]) -> dict[str, Any] | None:
+def response_format(
+    structured_output: str, provider: str, schema: Mapping[str, Any], name: str = "query_analysis"
+) -> dict[str, Any] | None:
     """The request's response_format for the card's structured_output: the schema (json_schema, strict only at Groq, whose
     models enforce it), any JSON object (json_object), or none (prompt: the lenient parser reads the text)."""
     if structured_output == "json_schema":
-        json_schema = {"name": "query_analysis", "schema": dict(schema), "strict": provider == "groq"}
+        json_schema = {"name": name, "schema": dict(schema), "strict": provider == "groq"}
         return {"type": "json_schema", "json_schema": json_schema}
     if structured_output == "json_object":
         return {"type": "json_object"}

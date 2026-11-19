@@ -420,6 +420,8 @@ def test_the_cards_structured_output_picks_the_response_format_and_strict_is_gro
         asyncio.run(analysis_model(bodies, structured_output=structured_output).complete([("user", "q")]))
         return bodies[0]
 
+    named = response_format("json_schema", "groq", schema, "follow_up_queries")
+    assert named is not None and named["json_schema"]["name"] == "follow_up_queries"
     assert body_of("json_object")["response_format"] == {"type": "json_object"}
     assert "response_format" not in body_of("prompt")
 

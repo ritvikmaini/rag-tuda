@@ -4,6 +4,7 @@ per-test script answers, how the answer streams, and /tokenize's count. Determin
 A script is a list of rules; the first rule whose purpose, `match` (a part of the question) and `system` (a part of the
 system message) fit a call answers it:
   {"purpose": "analysis", "match": "Witz", "reply": {"intent": "out_of_scope"}}       analysis JSON fields to change
+  {"purpose": "follow_up", "reply": {"queries": ["APB Rücktritt"], "done": false}}    follow-up JSON fields to change
   {"purpose": "answer", "reply": "Text [1].", "first_delay_s": 8, "token_delay_s": 0}  answer text and its timing
   {"purpose": "answer", "fail": 500}                                                  an HTTP error instead
 Without a fitting rule a call gets the default reply of its purpose."""
@@ -18,11 +19,13 @@ MAX_MODEL_LEN = 8192
 # (purpose, a text that only this prompt's system message carries; the profile's prompts/*.yaml, pinned by
 # tests/contracts/test_harness_contracts.py)
 MARKERS = (
+    ("follow_up", "Folgesuche"),
     ("analysis", '"standalone_question"'),
     ("direct", "Die Nachricht wurde als"),
     ("no_docs", "keine passenden Informationen gefunden"),
     ("answer", "Belege jede Aussage"),
 )
+FOLLOW_UP_REPLY = {"reasoning": "", "queries": [], "done": True}  # the iterative round finds nothing more to ask
 DEFAULT_REPLIES = {
     "answer": "Die gesuchte Angabe steht in der Quelle [1].",
     "direct": "Dabei kann ich Ihnen leider nicht helfen.",
@@ -88,6 +91,8 @@ def reply(rule: Rule, kind: str, messages: Sequence[Message]) -> str:
         }
         analysis.update(rule.get("reply") or {})
         return json.dumps(analysis, ensure_ascii=False)
+    if kind == "follow_up":
+        return json.dumps({**FOLLOW_UP_REPLY, **(rule.get("reply") or {})}, ensure_ascii=False)
     value = rule.get("reply")
     return DEFAULT_REPLIES.get(kind, "OK.") if value is None else str(value)
 
