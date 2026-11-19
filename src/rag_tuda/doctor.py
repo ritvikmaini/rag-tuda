@@ -295,13 +295,22 @@ def problems(f: Facts) -> list[str]:
     return out
 
 
-def warnings(f: Facts, cls: SizeClass) -> list[str]:
+def card_total_gb(card: dict) -> float:
+    """What a run with this card downloads: its model (none for a hosted one) and the models every class needs."""
+    return (card.get("download_gb") or 0) + sum(m.gb for m in classes.FIXED_MODELS)
+
+
+def fits(f: Facts, card: dict) -> bool:
+    return any(c["name"] == card["name"] for c in cards.fitting(f))
+
+
+def warnings(f: Facts, cls: SizeClass, total: float | None = None) -> list[str]:
     out = []
     if f.ram_gb and f.ram_gb < MIN_RAM_GB - RAM_TOLERANCE_GB:
         out.append(
             f"Only {f.ram_gb:.1f} GB RAM; 16 GB or more is recommended. Staying on class S, expect it to be slow."
         )
-    total = classes.download_total_gb(cls)
+    total = classes.download_total_gb(cls) if total is None else total
     if f.disk_free_gb < total:
         out.append(f"Only {f.disk_free_gb:.1f} GB free disk; the downloads need about {total:.1f} GB.")
     return out
@@ -322,7 +331,20 @@ def card_line(card: dict) -> str:
     return f"  {card['name']}  class {card['class']}, {card['answer']['provider']}, {size}"
 
 
-def report(f: Facts, cls: SizeClass) -> str:
+def _chosen(f: Facts, card: dict) -> list[str]:
+    total = card_total_gb(card)
+    note = "" if fits(f, card) else " - this card does not fit this machine (the list above shows the cards that do)"
+    return [f"Chosen card: {card_line(card)}", f"Download total with this card: {total:.1f} GB{note}"]
+
+
+def _crawl() -> list[str]:
+    return [
+        "Crawl (rag up crawls the core set, rag reindex --full adds the full set; about 1 request per second per host):",
+        *(f"  {name}: {size}" for name, size in classes.CRAWL_SETS.items()),
+    ]
+
+
+def report(f: Facts, cls: SizeClass, card: dict | None = None) -> str:
     where = "WSL2" if f.is_wsl else {"darwin": "macOS", "linux": "Linux", "windows": "Windows"}.get(f.os, f.os)
     lines = [
         f"Platform: {where} {f.arch}, {f.cpu_name or 'unknown CPU'}, {f.cores} cores, {f.ram_gb:.1f} GB RAM, {f.disk_free_gb:.0f} GB free disk",
@@ -337,6 +359,9 @@ def report(f: Facts, cls: SizeClass) -> str:
     ]
     lines += [f"  {m.name} ({m.gb:g} GB)" for m in classes.FIXED_MODELS]
     lines.append(f"Download total: {classes.download_total_gb(cls):.1f} GB")
+    if card:
+        lines += _chosen(f, card)
+    lines += _crawl()
     lines.append(f"Suits: {cls.use_case}")
     lines.append(f"Mode: {runtime_mode(f)}")
     lines.append(
@@ -347,7 +372,7 @@ def report(f: Facts, cls: SizeClass) -> str:
         if f.ollama.installed
         else "Ollama: not installed"
     )
-    lines += [f"Warning: {w}" for w in warnings(f, cls)]
+    lines += [f"Warning: {w}" for w in warnings(f, cls, card_total_gb(card) if card else None)]
     missing = problems(f)
     lines += [f"Missing: {m}" for m in missing]
     lines.append(
@@ -356,7 +381,7 @@ def report(f: Facts, cls: SizeClass) -> str:
     return "\n".join(lines)
 
 
-def report_json(f: Facts, cls: SizeClass) -> str:
+def report_json(f: Facts, cls: SizeClass, card: dict | None = None) -> str:
     missing = problems(f)
     return json.dumps(
         {
@@ -375,8 +400,16 @@ def report_json(f: Facts, cls: SizeClass) -> str:
             "usable_gb": round(classes.usable_gb(f), 1),
             "fixed_models": [asdict(m) for m in classes.FIXED_MODELS],
             "download_total_gb": round(classes.download_total_gb(cls), 1),
+            "crawl": classes.CRAWL_SETS,
+            "card": None
+            if card is None
+            else {
+                "name": card["name"],
+                "download_total_gb": round(card_total_gb(card), 1),
+                "fits": fits(f, card),
+            },
             "mode": runtime_mode(f),
-            "warnings": warnings(f, cls),
+            "warnings": warnings(f, cls, card_total_gb(card) if card else None),
             "missing": missing,
             "ok": not missing,
             "next": "uv run rag up" if not missing else "rag doctor",

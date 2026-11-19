@@ -16,7 +16,8 @@ def _doctor(args: argparse.Namespace) -> int:
     facts = doctor.gather()
     try:
         cls = classes.pick_class(facts)
-        text = doctor.report_json(facts, cls) if args.json else doctor.report(facts, cls)
+        card = cards.named(args.card) if args.card else None
+        text = doctor.report_json(facts, cls, card) if args.json else doctor.report(facts, cls, card)
     except ValueError as exc:  # the model cards are missing or unreadable
         print(str(exc), file=sys.stderr)
         return 1
@@ -165,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag", description="Local RAG assistant with cited answers")
     sub = parser.add_subparsers(dest="command", required=True)
     d = sub.add_parser("doctor", help="check this machine and pick a class")
+    d.add_argument("--card", help="also show this card's download size and whether it fits this machine")
     d.add_argument("--json", action="store_true", help="print the result as JSON")
     d.set_defaults(run=_doctor)
     u = sub.add_parser("up", help="bring the stack up (a second run changes nothing)")

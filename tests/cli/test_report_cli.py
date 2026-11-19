@@ -189,3 +189,32 @@ def test_the_probes_do_not_get_the_provider_key(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-secret")
     monkeypatch.setenv("PATH", os.environ["PATH"])
     assert "GROQ_API_KEY" not in (doctor._run(["env"]) or "")
+
+
+def test_doctor_prints_the_crawl_estimate_for_both_source_sets(scenario):
+    f = scenario("m2_16")
+    text = doctor.report(f, classes.pick_class(f))
+    assert "core: about 300 pages and 120-150 PDFs" in text
+    assert "full: about 1,500-2,000 pages and 250-350 PDFs" in text and "1 request per second per host" in text
+    assert json.loads(doctor.report_json(f, classes.pick_class(f)))["crawl"] == classes.CRAWL_SETS
+
+
+def test_doctor_card_shows_that_cards_download_and_whether_it_fits(scenario):
+    f = scenario("m2_16")
+    cls = classes.pick_class(f)
+    small = doctor.report(f, cls, cards.named("s-gemma4-e4b"))
+    assert "Chosen card:   s-gemma4-e4b  class S" in small and "does not fit" not in small
+    big = doctor.report(f, cls, cards.named("m-qwen3.6-35b-a3b"))
+    assert "Chosen card:   m-qwen3.6-35b-a3b  class M" in big and "does not fit this machine" in big
+    gb = cards.named("m-qwen3.6-35b-a3b")["download_gb"] + sum(m.gb for m in classes.FIXED_MODELS)
+    assert f"Download total with this card: {gb:.1f} GB" in big
+    data = json.loads(doctor.report_json(f, cls, cards.named("m-qwen3.6-35b-a3b")))
+    assert data["card"]["fits"] is False and data["card"]["download_total_gb"] == round(gb, 1)
+
+
+def test_doctor_card_through_the_command(monkeypatch, capsys, scenario):
+    monkeypatch.setattr(d, "gather", lambda: scenario("rtx4090"))
+    assert cli.main(["doctor", "--card", "s-gemma4-e4b"]) == 0
+    assert "Chosen card:" in capsys.readouterr().out
+    assert cli.main(["doctor", "--card", "nope"]) == 1
+    assert "nope" in capsys.readouterr().err
