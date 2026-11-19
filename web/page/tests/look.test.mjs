@@ -322,3 +322,37 @@ test("06151 numbers and e-mail addresses become links, other numbers do not (tes
         { text: "Frankfurt 069 12345678, Postfach 06151, PO 2023, 12 Credits" }]);
     assert.deepEqual(parts("Keine Kontaktdaten."), [{ text: "Keine Kontaktdaten." }]);
 });
+
+// ---- the palette
+
+const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
+const luminance = hex => {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+        .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+};
+const tokens = block => Object.fromEntries(Array.from(block.matchAll(/(--[\w-]+):\s*(#[0-9A-Fa-f]{6})/g)).map(m => [m[1], m[2].toUpperCase()]));
+
+test("small accent text and white-on-accent fills use the AA text token (test_accent_text_token)", () => {
+    const dark = css.slice(css.indexOf("prefers-color-scheme: dark"), css.indexOf("/* ----", css.indexOf("prefers-color-scheme: dark")));
+    const light = tokens(css.slice(0, css.indexOf("@media (prefers-color-scheme: dark)")));
+    const night = tokens(dark);
+    // the accent stays for graphics and large text; the ink token carries text and the fills under it
+    assert.equal(light["--accent"], "#0D9488");
+    assert.equal(light["--accent-ink"], "#0F766E");
+    assert.ok(contrast(light["--accent-ink"], light["--surface"]) >= 4.5);
+    assert.ok(contrast(light["--accent-ink"], light["--on-accent"]) >= 4.5);
+    assert.ok(contrast(light["--accent-ink"], light["--brand-soft"]) >= 4.5);
+    assert.ok(contrast(night["--accent-ink"], night["--surface"]) >= 4.5);
+    assert.ok(contrast(night["--accent-ink"], night["--on-accent"]) >= 4.5);
+    assert.ok(contrast(night["--accent-ink"], night["--brand-soft"]) >= 4.5);
+    // no rule sets text in the accent, or white text on an accent fill
+    for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        assert.doesNotMatch(body, /(^|[;\s])color:\s*var\(--accent\)/, selector.trim());
+        if (/(^|[;\s])color:\s*var\(--on-accent\)/.test(body)) assert.doesNotMatch(body, /background:\s*var\(--accent\)/, selector.trim());
+    }
+});

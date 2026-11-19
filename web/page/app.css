@@ -8,6 +8,7 @@
     --line: #E4E4E7;
     --brand: #4F46E5;
     --accent: #0D9488;
+    --accent-ink: #0F766E;
     --brand-soft: #EEF2FF;
     --cite-ink: #4338CA;
     --on-brand: #FFFFFF;
@@ -39,6 +40,7 @@
         --line: #27272A;
         --brand: #818CF8;
         --accent: #2DD4BF;
+        --accent-ink: #2DD4BF;
         --brand-soft: #1E1B4B;
         --cite-ink: #A5B4FC;
         --on-brand: #0C0C0F;
@@ -197,7 +199,7 @@ button:disabled { cursor: default; }
 .md h1 { font-size: 1.2em; }
 .md h2 { font-size: 1.12em; }
 .md strong { font-weight: 600; }
-.md a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
+.md a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
 .md code { font-family: var(--mono); font-size: 0.9em; padding: 0.1em 0.35em; border-radius: 6px; background: var(--bg); }
 .md pre { padding: 12px 14px; border-radius: var(--r-card); background: var(--bg); overflow-x: auto; }
 .md pre code { padding: 0; background: none; }
@@ -239,7 +241,7 @@ button:disabled { cursor: default; }
 }
 span.cite { opacity: 0.75; }
 a.cite { color: var(--cite-ink); text-decoration: none; cursor: pointer; }
-a.cite:hover, a.cite:focus-visible { background: var(--accent); color: var(--on-accent); }
+a.cite:hover, a.cite:focus-visible { background: var(--accent-ink); color: var(--on-accent); }
 .cite-tip {
     position: fixed;
     z-index: 20;
@@ -317,7 +319,7 @@ a.cite:hover, a.cite:focus-visible { background: var(--accent); color: var(--on-
 
 .notice { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 0.94rem; color: var(--ink-2); }
 .notice.is-error { color: var(--ink); }
-.notice .icon { color: var(--accent); }
+.notice .icon { color: var(--accent-ink); }
 .notice-ref { margin: 4px 0 0; font-size: 0.86rem; color: var(--ink-2); }
 .actions { display: flex; flex-wrap: wrap; gap: 2px; margin: 10px 0 -4px -8px; }
 .act {
@@ -364,7 +366,7 @@ a.cite:hover, a.cite:focus-visible { background: var(--accent); color: var(--on-
     transition: border-color var(--t-fast), box-shadow var(--t-mid) var(--ease);
 }
 .source:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
-.source:hover .source-title { color: var(--accent); }
+.source:hover .source-title { color: var(--accent-ink); }
 .source:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 .source-body { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .source-title {
@@ -392,7 +394,7 @@ a.cite:hover, a.cite:focus-visible { background: var(--accent); color: var(--on-
     border-radius: 7px;
     display: inline-grid;
     place-items: center;
-    background: var(--accent);
+    background: var(--accent-ink);
     color: var(--on-accent);
     font-size: 0.75rem;
     font-weight: 600;
@@ -419,14 +421,14 @@ a.cite:hover, a.cite:focus-visible { background: var(--accent); color: var(--on-
     padding: 2px 12px;
     border: 1px solid currentColor;
     border-radius: var(--r-pill);
-    color: var(--accent);
+    color: var(--accent-ink);
     font-size: 0.78rem;
     font-weight: 600;
     white-space: nowrap;
     text-decoration: none;
     transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
 }
-.source-form:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.source-form:hover { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--on-accent); }
 .sources-more {
     margin-top: 8px;
     padding: 3px 12px;
@@ -597,7 +599,7 @@ a.cite:hover, a.cite:focus-visible { background: var(--accent); color: var(--on-
     margin-left: auto;
     border: 0;
     background: none;
-    color: var(--accent);
+    color: var(--accent-ink);
     font: inherit;
     cursor: pointer;
     text-decoration: underline;
@@ -639,14 +641,14 @@ li.task:has(.tick[aria-checked="true"]) { color: var(--ink-2); text-decoration: 
 .md.shape-steps ol > li + li { margin-top: 0; }
 .md.shape-steps ol > li::before { content: counter(step); position: absolute; left: 0; top: -2px; width: 26px; height: 26px;
     display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--brand-soft);
-    color: var(--accent); font-size: 0.88em; font-weight: 600; }
+    color: var(--accent-ink); font-size: 0.88em; font-weight: 600; }
 .md.shape-steps ol > li:not(:last-child)::after { content: ""; position: absolute; left: 12px; top: 28px; bottom: 2px;
     width: 2px; background: var(--line); }
 
 .mindmap { margin: 0 0 0.75em; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
 .mindmap-tools { display: flex; flex-wrap: wrap; gap: 2px; padding: 4px 4px 0; }
 .mindmap-canvas { height: 420px; }
-.mindmap .markmap { --markmap-text-color: var(--ink); --markmap-circle-open-bg: var(--surface); --markmap-a-color: var(--accent); }
+.mindmap .markmap { --markmap-text-color: var(--ink); --markmap-circle-open-bg: var(--surface); --markmap-a-color: var(--accent-ink); }
 .mindmap-svg { display: block; width: 100%; height: 100%; color: var(--ink); }
 .mindmap-wait { margin: 0; padding: 16px; color: var(--ink-2); }
 .mindmap-list { padding: 8px 14px; }
@@ -686,7 +688,7 @@ li.task:has(.tick[aria-checked="true"]) { color: var(--ink-2); text-decoration: 
 .version { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border: 1px solid var(--line);
     border-radius: var(--r-pill); background: var(--surface); color: var(--ink-2); font: inherit; font-size: 0.88rem;
     cursor: pointer; }
-.version[aria-selected="true"] { border-color: var(--accent); background: var(--brand-soft); color: var(--accent); }
+.version[aria-selected="true"] { border-color: var(--accent); background: var(--brand-soft); color: var(--accent-ink); }
 .version[disabled] { cursor: default; opacity: 0.6; }
 
 @media print {
