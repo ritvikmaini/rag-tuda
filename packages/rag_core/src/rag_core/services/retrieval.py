@@ -1,6 +1,7 @@
 """The retrieval sequence over ports. Per query the semantic and full-text children (each query bounded); deduplicated;
-reranked, children with their parent sections' texts; the parents of the reranked children; sorted, ranked (rank()) and cut
-to final_k. Children and sections are the domain's Hit and Section; the service reads and annotates hits by attribute."""
+reranked, children with their parent sections' texts; the parents of the reranked children; twins collapsed to one language;
+sorted, ranked (rank()) and cut to final_k. Children and sections are the domain's Hit and Section; the service reads and
+annotates hits by attribute."""
 
 import asyncio
 import logging
@@ -12,6 +13,7 @@ from typing import Any
 from rag_core.domain.access import ANONYMOUS, AllowAll, Principal, allowed
 from rag_core.domain.doc_scores import mark_unscored, sort_score
 from rag_core.domain.filters import Filter
+from rag_core.domain.language import detect
 from rag_core.domain.parent_rerank import parent_texts, rerank_texts, score_children
 from rag_core.domain.ranking import RankingPolicy, rank
 from rag_core.domain.resilience import gather_bounded
@@ -28,6 +30,34 @@ def _metadata(doc: Any) -> dict[str, Any]:
     """The document's metadata dict, {} when it has none."""
     meta: dict[str, Any] = doc.metadata if doc.metadata else {}
     return meta
+
+
+# the documents whose German text binds: a twin of one of them is never shown in place of the German section
+BINDING_GERMAN = frozenset({"po", "mhb", "spp", "apb", "eso", "promotion"})
+
+
+def collapse_twins(hits: list[Hit], language: str) -> list[Hit]:
+    """The hits without the twins of the wrong language, not one hit per key. Sections that share a twin_key are the same text
+    in two languages (a page section and its counterpart; every section of a PDF and of its counterpart). A key is binding
+    when any hit of it carries a regulation in BINDING_GERMAN (the twins' labels are derived apart and may differ): the German
+    sections stay for a binding key, else those in the question's language. A key whose hits are all in the other language
+    stays whole, so a regulation found only in English is shown in English; so does a hit without a twin_key."""
+    languages: dict[str, set[Any]] = {}
+    binding: set[str] = set()
+    for h in hits:
+        if key := h.metadata.get("twin_key"):
+            languages.setdefault(key, set()).add(h.metadata.get("lang"))
+            if h.metadata.get("regulation") in BINDING_GERMAN:
+                binding.add(key)
+
+    def kept(h: Hit) -> bool:
+        key = h.metadata.get("twin_key")
+        if not key:
+            return True
+        wanted = "de" if key in binding else language
+        return wanted not in languages[key] or h.metadata.get("lang") == wanted
+
+    return [h for h in hits if kept(h)]
 
 
 def without_denied(
@@ -152,7 +182,7 @@ class RetrievalService:
             logger.warning("[DocumentRetriever] no parents for the matched chunks; answering from the chunks")
             parent_docs = reranked_docs
 
-        final_docs = deduplicate(parent_docs)
+        final_docs = collapse_twins(deduplicate(parent_docs), detect(question or " ".join(queries)))
         # Always sort by score before the cut: otherwise the list is in database order and the cut could drop the best.
         final_docs.sort(key=lambda d: sort_score(d.metadata), reverse=True)
 
