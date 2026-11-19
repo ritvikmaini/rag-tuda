@@ -251,6 +251,36 @@ def test_seit_wann_is_a_question_not_the_start_of_the_studies() -> None:
     assert resolve("Ich bin im M.Sc. Informatik seit WiSe 2024/25.").po_version == (2023,)
 
 
+def test_a_cleared_chip_lifts_its_filter() -> None:
+    chips = Chips(degree="bachelor", programme="bsc-informatik", po=2015)
+    first = resolve("Wie melde ich mich an?", chips)
+    assert first.from_chips == {"degree", "programme", "po_version"}
+    cleared = resolve("Und wie melde ich mich ab?", previous=first)
+    assert (cleared.degree, cleared.programme, cleared.po_version, cleared.po_source) == (None, None, None, None)
+    assert cleared.from_chips == frozenset() and resolve("Und die Frist?", previous=cleared) == Filter()
+    # a chip still set is taken from the chips again, whatever the question names
+    kept = resolve("Und wie melde ich mich ab?", chips, previous=first)
+    assert (kept.degree, kept.programme, kept.po_version, kept.po_source) == (
+        ("bachelor",),
+        ("bsc-informatik",),
+        (2015,),
+        "chip",
+    )
+    # only the cleared field is lifted
+    some = resolve("Und die Frist?", Chips(degree="bachelor"), previous=first)
+    assert (some.degree, some.programme, some.po_version) == (("bachelor",), None, None)
+    # a cleared chip's programme does not stand in for a start term either
+    assert resolve("Seit WiSe 2024/25, was gilt?", previous=first).po_version is None
+
+
+def test_values_from_text_are_carried_after_the_chips_are_cleared() -> None:
+    chips = Chips(degree="master")
+    first = resolve("Was gilt in der PO 2015 im M.Sc. Informatik?", chips)
+    assert first.from_chips == frozenset()  # the question named the degree itself: the chip supplied nothing
+    later = resolve("Und die Frist?", previous=first)
+    assert (later.programme, later.po_version, later.po_source) == (("msc-informatik",), (2015,), "carried")
+
+
 def test_the_po_source_names_where_the_year_came_from() -> None:
     assert resolve("Wie melde ich mich ab?").po_source is None
     assert resolve("Was gilt in PO 2015?").po_source == "text"
@@ -270,7 +300,11 @@ def test_a_filter_round_trips_through_json_with_its_tuples_and_its_date() -> Non
     assert Filter.from_json(json.loads(json.dumps(Filter().as_json()))) == Filter()
     assert full.as_json()["date"] == "2026-10-01" and full.as_json()["po_version"] == [2015, 2023]
     assert Filter.from_json({}) == Filter()
-    for bad in ({"degree": "master"}, {"date": "gestern"}):
+    chipped = replace(full, from_chips=frozenset({"degree", "po_version"}))
+    assert Filter.from_json(json.loads(json.dumps(chipped.as_json()))) == chipped
+    assert chipped.as_json()["from_chips"] == ["degree", "po_version"]
+    assert Filter.from_json(Filter().as_json() | {"from_chips": None}) == Filter()  # a filter stored without the field
+    for bad in ({"degree": "master"}, {"date": "gestern"}, {"from_chips": "degree"}):
         with pytest.raises((TypeError, ValueError)):
             Filter.from_json(bad)
 

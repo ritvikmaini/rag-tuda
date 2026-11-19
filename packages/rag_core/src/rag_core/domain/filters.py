@@ -3,8 +3,9 @@
 A value comes from the first source that gives one, in this order: explicit text read by deterministic readers ("PO 2015",
 "im Master", "laut Modulhandbuch"), the page chips, the term-to-PO parser (cohort.py), the analysis enums, the previous turn's
 filter. A source's value that contradicts one already taken (a programme of another degree, a PO year the programme lacks) is
-dropped. Text values hold for the question that carries them; the chips are sent with every question and so stay. Regulation
-and date are carried from the previous turn only when the new question names no value at all.
+dropped. Text values hold for the question that carries them; the chips are sent with every question and so stay. A field a
+chip supplied is never carried to a turn whose chips no longer set it (the user cleared the chip); a value from text or the
+term parser is. Regulation and date are carried from the previous turn only when the new question names no value at all.
 
 Roles are plain data: the dump of roles.yaml (`programmes` with `degree` and `po_versions`, `groups`)."""
 
@@ -34,6 +35,8 @@ class Filter:
     # where po_version came from: "text", "chip", "term" (derived from a start term: the PO "in der Regel" in force), "analysis",
     # "carried" (the previous turn's; a term-derived one stays "term"); None without a PO
     po_source: str | None = None
+    # the fields (degree, programme, po_version) whose value a chip supplied: not carried once the chip is cleared
+    from_chips: frozenset[str] = frozenset()
 
     def as_json(self) -> dict[str, Any]:
         """The filter as plain JSON (lists, the date as ISO text): what the turn store keeps and the status frame names."""
@@ -45,6 +48,7 @@ class Filter:
             "date": None if self.date is None else self.date.isoformat(),
             "include_archived": self.include_archived,
             "po_source": self.po_source,
+            "from_chips": sorted(self.from_chips),
         }
 
     @classmethod
@@ -58,6 +62,9 @@ class Filter:
                 raise TypeError(f"{name}: a list or null, not {type(value).__name__}")
             return None if value is None else tuple(cast("list[Any]", value))
 
+        chipped = data.get("from_chips")  # absent in a filter stored before the field existed
+        if chipped is not None and not isinstance(chipped, list):
+            raise TypeError(f"from_chips: a list or null, not {type(chipped).__name__}")
         day = data.get("date")
         return cls(
             degree=values("degree"),
@@ -67,6 +74,7 @@ class Filter:
             date=None if day is None else dt.date.fromisoformat(day),
             include_archived=data.get("include_archived") is True,
             po_source=data.get("po_source"),
+            from_chips=frozenset(cast("list[str]", chipped or ())),
         )
 
 
@@ -243,6 +251,7 @@ def resolve_filter(
     current: dict[str, Any] = dict.fromkeys(allowed)
     own = _read(text, roles)
     po_source: str | None = None
+    from_chips: set[str] = set()
 
     def take(layer: Mapping[str, Iterable[Any] | None], source: str) -> None:
         nonlocal po_source
@@ -261,12 +270,19 @@ def resolve_filter(
                     continue
                 po_source = source
             current[field] = value
+            if source == "chip":
+                from_chips.add(field)
 
+    # the chips are sent with every question: a chip's value the chips no longer set is not carried
+    carry = {
+        field: None if field in previous.from_chips else getattr(previous, field)
+        for field in ("degree", "programme", "po_version")
+    }
     take(own, "text")
     take({"degree": [chips.degree], "programme": [chips.programme], "po_version": [chips.po]}, "chip")
     from_analysis = {f: _listed(analysis, f) for f in allowed}
     if term := _cohort_term(text, analysis):
-        known = current["programme"] or _keep(from_analysis["programme"], allowed["programme"]) or previous.programme
+        known = current["programme"] or _keep(from_analysis["programme"], allowed["programme"]) or carry["programme"]
         years = [po_for_term(p, term, roles) for p in known or ()]
         if years and None not in years:
             take({"po_version": years}, "term")
@@ -275,7 +291,7 @@ def resolve_filter(
     history = bool(HISTORY.search(text))
     named = date is not None or any(v is not None for v in current.values())
     carried = "term" if previous.po_source == "term" else "carried"
-    take({"degree": previous.degree, "programme": previous.programme, "po_version": previous.po_version}, carried)
+    take(carry, carried)
     if not named:
         take({"regulation": previous.regulation}, carried)
         date = previous.date
@@ -284,7 +300,14 @@ def resolve_filter(
         history or current["po_version"] is not None or (previous.include_archived and previous.po_version is None)
     )
     return Filter(
-        current["degree"], current["programme"], current["po_version"], current["regulation"], date, archived, po_source
+        current["degree"],
+        current["programme"],
+        current["po_version"],
+        current["regulation"],
+        date,
+        archived,
+        po_source,
+        frozenset(from_chips),
     )
 
 

@@ -119,6 +119,7 @@ def test_status_frame_carries_applied_filter(ready: None, assistant: harness.Ass
         "date": None,
         "include_archived": True,  # a PO filter keeps the archived versions in
         "po_source": "chip",
+        "from_chips": ["degree", "po_version", "programme"],  # not carried once the chips are cleared
     }
     plain = assistant.ask(harness.OFFICE_HOURS, "harness-" + new_id()[:12])
     assert applied(plain) == {
@@ -129,4 +130,5 @@ def test_status_frame_carries_applied_filter(ready: None, assistant: harness.Ass
         "date": None,
         "include_archived": False,
         "po_source": None,
+        "from_chips": [],
     }
