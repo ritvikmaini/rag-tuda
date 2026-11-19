@@ -20,7 +20,7 @@ def test_folder(tmp_path):
     s = sources.register(tmp_path, SAMPLE)
     assert (s.name, s.connector, s.target, s.allowed_hosts) == ("sample_docs", "folder", str(SAMPLE.resolve()), ())
     reg = sources.load(tmp_path)
-    assert reg.sources == [s] and reg.only is False and reg.topic is None
+    assert reg.sources == [s] and reg.only is False
 
 
 def test_relative_folder_resolves_against_cwd(tmp_path, monkeypatch):
@@ -107,20 +107,16 @@ def test_bad_names(tmp_path, name):
         sources.register(tmp_path, SAMPLE, name=name)
 
 
-def test_only_and_topic_are_stored_and_sticky(tmp_path):
-    sources.register(tmp_path, SAMPLE, only=True, topic="house rules")
-    reg = sources.load(tmp_path)
-    assert (reg.only, reg.topic) == (True, "house rules")
-    sources.register(tmp_path, "https://example.org")  # later adds do not clear them
-    reg = sources.load(tmp_path)
-    assert (reg.only, reg.topic) == (True, "house rules")
-    sources.register(tmp_path, "https://example.org", topic="a building")
-    assert sources.load(tmp_path).topic == "a building"
+def test_only_is_stored_and_sticky(tmp_path):
+    sources.register(tmp_path, SAMPLE, only=True)
+    assert sources.load(tmp_path).only is True
+    sources.register(tmp_path, "https://example.org")  # a later add does not clear it
+    assert sources.load(tmp_path).only is True
 
 
 def test_load_without_file_is_empty(tmp_path):
     reg = sources.load(tmp_path)
-    assert reg.sources == [] and reg.only is False and reg.topic is None
+    assert reg.sources == [] and reg.only is False
 
 
 def test_file_is_stable_json(tmp_path):

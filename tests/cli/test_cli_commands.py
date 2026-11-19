@@ -30,11 +30,11 @@ def fixture_frames():
 
 
 def test_add_registers_and_points_to_reindex(project, capsys):
-    assert cli.main(["add", str(FIX / "sample_docs"), "--name", "house", "--only", "--topic", "house rules"]) == 0
+    assert cli.main(["add", str(FIX / "sample_docs"), "--name", "house", "--only"]) == 0
     out = capsys.readouterr().out
     assert "house" in out and "folder" in out and "rag reindex" in out
     reg = sources.load(project)
-    assert [s.name for s in reg.sources] == ["house"] and reg.only and reg.topic == "house rules"
+    assert [s.name for s in reg.sources] == ["house"] and reg.only
 
 
 def test_add_is_idempotent(project, capsys):

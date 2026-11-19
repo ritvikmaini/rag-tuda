@@ -1,4 +1,4 @@
-"""User sources in `.rag/sources.json`: which connector reads what, plus the `--only` and `--topic` settings.
+"""User sources in `.rag/sources.json`: which connector reads what, plus the `--only` setting.
 
 Registration is pure file work; the indexer reads the file on the next reindex."""
 
@@ -24,7 +24,6 @@ class Source:
 class Registry:
     sources: list[Source] = field(default_factory=list)
     only: bool = False
-    topic: str | None = None
 
 
 def _file(root: str | Path) -> Path:
@@ -37,7 +36,7 @@ def load(root: str | Path) -> Registry:
         return Registry()
     data = json.loads(path.read_text(encoding="utf-8"))
     items = [Source(s["name"], s["connector"], s["target"], tuple(s.get("allowed_hosts", ()))) for s in data["sources"]]
-    return Registry(items, bool(data.get("only")), data.get("topic"))
+    return Registry(items, bool(data.get("only")))
 
 
 def _save(root: str | Path, reg: Registry) -> None:
@@ -50,7 +49,7 @@ def _save(root: str | Path, reg: Registry) -> None:
         if not s.allowed_hosts:
             del d["allowed_hosts"]
         sources.append(d)
-    text = json.dumps({"version": 1, "only": reg.only, "topic": reg.topic, "sources": sources}, indent=2) + "\n"
+    text = json.dumps({"version": 1, "only": reg.only, "sources": sources}, indent=2) + "\n"
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
@@ -79,13 +78,11 @@ def _classify(target: str | Path) -> tuple[str, str, str, tuple[str, ...]]:
     raise ValueError(f"not a folder, an http(s) URL or an existing .csv file: {text}")
 
 
-def register(
-    root: str | Path, target: str | Path, name: str | None = None, only: bool = False, topic: str | None = None
-) -> Source:
+def register(root: str | Path, target: str | Path, name: str | None = None, only: bool = False) -> Source:
     """Add the source, or update it when the same target is registered already.
 
     A default name that is taken by another target gets `-2`, `-3`, ...; an explicit name taken by another target is an error.
-    `only` and `topic` are sticky: a later add without them leaves them as they were."""
+    `only` is sticky: a later add without it leaves it as it was."""
     connector, norm, default, hosts = _classify(target)
     if name is not None and not NAME.fullmatch(name):
         raise ValueError(f"a source name is 1-64 letters, digits, '.', '_' or '-': {name!r}")
@@ -109,6 +106,5 @@ def register(
     else:
         reg.sources[reg.sources.index(existing)] = source
     reg.only = reg.only or only
-    reg.topic = topic if topic else reg.topic
     _save(root, reg)
     return source

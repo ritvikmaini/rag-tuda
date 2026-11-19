@@ -190,7 +190,7 @@ def _ask(args: argparse.Namespace) -> int:
 
 def _add(args: argparse.Namespace) -> int:
     try:
-        source = sources.register(Path.cwd(), args.target, name=args.name, only=args.only, topic=args.topic)
+        source = sources.register(Path.cwd(), args.target, name=args.name, only=args.only)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -253,7 +253,6 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("target", help="a folder, an http(s) URL or a .csv file")
     s.add_argument("--name", help="the source's name (default: from the target)")
     s.add_argument("--only", action="store_true", help="index only your sources, not the default corpus")
-    s.add_argument("--topic", help="what the assistant says it is about")
     s.set_defaults(run=_add)
     args = parser.parse_args(argv)
     if getattr(args, "ablation", False) and not args.retrieval_only:
