@@ -560,3 +560,16 @@ def test_purge_removes_crawl_dirs(repo, monkeypatch, capsys):
     assert not (current.dir / "crawl").exists() and not (current.dir / "snapshots").exists()
     assert (current.dir / "state" / "corpus_build_stats.json").is_file() and (current.dir / "token").is_file()
     assert cli.main(["down", "--purge", "--yes"]) == 0  # nothing left to delete is not an error
+
+
+def test_up_defaults_to_the_tu_informatik_profile(repo, monkeypatch):
+    system = FakeSystem()
+    monkeypatch.setattr(stack, "System", lambda: system)
+    monkeypatch.setattr(stack, "gather", settled_facts(repo))
+    seen = []
+    plan_up = stack.plan_up
+    monkeypatch.setattr(
+        stack, "plan_up", lambda current, facts, up: seen.append(up.profile) or plan_up(current, facts, up)
+    )
+    assert cli.main(["up", "--yes"]) == 0 and cli.main(["up", "--yes", "--profile", "example"]) == 0
+    assert seen == ["tu-informatik", "example"]

@@ -215,7 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     u.add_argument("--card", help="the model card (default: the card of the class this machine fits)")
     u.add_argument("--model", help="a model for the answers: the Ollama model the card's derived model is made from")
     u.add_argument("--llm-url", help="an OpenAI-compatible server you run; the stack does not manage it")
-    u.add_argument("--profile", default="example", help="the profile to index and answer from (default %(default)s)")
+    u.add_argument(
+        "--profile", default="tu-informatik", help="the profile to index and answer from (default %(default)s)"
+    )
     u.add_argument(
         "--mode",
         choices=runtime.MODES,

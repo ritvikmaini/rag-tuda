@@ -46,7 +46,7 @@ The stream (format 1) sends `meta` first, then `status` (five steps), `docs`, `c
 s-qwen3-4b-instruct-2507 --yes` starts Postgres in Docker on `127.0.0.1:55432`, migrates, starts the embedding (8701) and
 reranker (8702) servers and the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`), builds the
 index when there is none, creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints
-the link. Ollama must be running (`ollama serve`). A model that is already on the machine (the pinned snapshots in the Hugging Face
+the link. `--profile` defaults to `tu-informatik`, which crawls the department's pages; `example` indexes the ten law texts. Ollama must be running (`ollama serve`). A model that is already on the machine (the pinned snapshots in the Hugging Face
 cache, the Ollama tag) is not downloaded again; a second `up` changes nothing, and `uv run rag down` stops everything (safe to
 repeat, data stays; `--purge` also deletes `.rag/crawl` and `.rag/snapshots`). On Linux or WSL2, `--mode compose` runs the compose
 files below with the card, its window, the profile and the secrets taken from `.rag/` (build, then migrate, then up, then a
