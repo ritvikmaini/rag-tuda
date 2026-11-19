@@ -49,3 +49,21 @@ labels:
     www.ladadi.de: District of Darmstadt-Dieburg
     www.gesetze-im-internet.de: Gesetze im Internet
   scope: Scope according to the document  # the source header's line for a document's own scope statement
+  # the words that frame the sources in the prompt: the line before them ({n}: how many), what a search that found nothing
+  # gives instead, and the names of a header's date and page fields and of the line before a link
+  sources_lead: "There are {n} sources:"
+  nothing_found: "No relevant information was found."
+  date: As of
+  page: Page
+  link: Link
+# The same lines for an answer in English.
+shapes:
+  table: '- Form: Begin with one sentence that answers the question. Then present the comparison as a Markdown table: one row per option, one column per feature, at most 6 rows and 4 columns, and as the last column Source with the source numbers of the row, for example [2] or [1], [3]. After the table at most two sentences.'
+  checklist: '- Form: Begin with one sentence that puts the matter in context. Structure the rest as a checklist, each item on its own line in the format: - [ ] Task – deadline – responsible office [n], with the source number at the end. Order the items by time, at most 10 items. Include only tasks that appear in the sources. Leave out the deadline or the office if the sources do not name it.'
+  steps: '- Form: Begin with one sentence. Then describe the procedure as numbered steps (1., 2., 3.), one sentence per step with the responsible office and the source number [n], at most 8 steps. Include only steps that appear in the sources, and do not add any of your own.'
+  mindmap: '- Form: Begin with one sentence. Then give an overview as a mind map in a code block that starts with ```mindmap and ends with ```. In the code block: one line # Topic, below it at most 6 areas as ## Area and below those at most 5 points per area as - Point [n] with the source number, no deeper levels.'
+  shorter: '- Length: Shorten the answer to what matters most: tables, checklists and steps to at most half the rows, otherwise at most 3 sentences. Every source number stays with its statement.'
+  longer: '- Length: Answer in more detail, deviating from the length above up to about 400 words, with all important details from the sources, each with its source number.'
+  simple: '- Language: Write in plain language: short sentences, one thought per sentence, familiar words; explain technical terms briefly. Every source number stays with its statement.'
+  english: '- Language: Answer completely in English, even if the question and the sources are German: the whole answer including tables, lists and mind map. Give German names of offices and titles of documents in brackets after the English translation. Every source number stays with its statement.'
+  english_reminder: 'Answer in English only: the whole answer, although the sources are German.'

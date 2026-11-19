@@ -7,7 +7,7 @@ page_number). Standard library only.
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as _date
 from urllib.parse import unquote, urlparse
 
@@ -18,12 +18,18 @@ HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
 
 @dataclass(frozen=True)
 class SourceLabels:
-    """Where a source comes from, as its header and its citation name it: the profile's messages, labels.*."""
+    """Where a source comes from, as its header and its citation name it, and the words that frame the sources in the prompt: the
+    profile's messages, labels.* (one set per language)."""
 
     source_types: Mapping[str, str]  # metadata source_type -> label (checked first)
     origins: Mapping[str, str]  # metadata origin -> label
     hosts: Mapping[str, str]  # the url's host -> label, for a source without a known origin
     scope: str = ""  # the label of the header's scope line; "" prints no line
+    sources_lead: str = field(kw_only=True)  # the line before the sources, {n}: how many
+    nothing_found: str = field(kw_only=True)  # the sources of a search that found nothing
+    date: str = field(kw_only=True)  # the header's date field reads "<date>: 2021"
+    page: str = field(kw_only=True)  # and its page field "<page> 4"
+    link: str = field(kw_only=True)  # the line before a source's url reads "<link>: https://..."
 
 
 def strip_source_text(text):

@@ -39,7 +39,15 @@ def doc(section_id: str, **columns) -> Document:
 
 
 def sent_user_message(
-    docs, *, gated: bool, question: str = QUESTION, applied: Filter | None = None, shape="text", english=False
+    docs,
+    *,
+    gated: bool,
+    question: str = QUESTION,
+    applied: Filter | None = None,
+    shape="text",
+    english=False,
+    whole=False,
+    formats="",
 ) -> str:
     """The user message the node sends to the model for sources with the given typed columns."""
     seen = []
@@ -74,9 +82,10 @@ def sent_user_message(
         "answer_shape": shape,
         "filter": applied,
         "language": "en" if english else "de",
+        "formats": formats,
     }
     asyncio.run(make_generate(deps)(state, {}))  # pyright: ignore[reportArgumentType]  # stand-ins for GraphDeps and AgentState
-    return seen[0][-1].content
+    return "\n\n".join(str(m.content) for m in seen[0]) if whole else seen[0][-1].content
 
 
 def test_the_version_table_line_follows_the_card_gate_and_the_cited_versions():
@@ -135,3 +144,22 @@ def test_an_english_answer_gets_the_english_lines_and_labels():
     assert "The question compares Bachelor students and Master students." in message
     assert "PO 2023 and PO 2015" in message
     assert "one row per version" in message
+
+
+def test_an_english_answer_frames_its_sources_and_asks_for_its_form_in_english():
+    sources = [doc("a", degree=["master"], po_version=[2023], title="Thesis rules", doc_year=2023)]
+    english = sent_user_message(
+        sources,
+        gated=False,
+        question="How many credits does the thesis give?",
+        english=True,
+        shape="steps",
+        whole=True,
+        formats="v1",
+    )
+    assert "There are 1 sources:" in english and "As of: 2023" in english
+    assert "Es liegen" not in english and "Stand:" not in english
+    assert "- Form: Begin with one sentence. Then describe the procedure as numbered steps" in english
+    assert "Beginne mit einem Satz" not in english
+    german = sent_user_message(sources, gated=False, shape="steps", whole=True, formats="v1")
+    assert "Es liegen 1 Quellen vor:" in german and "Stand: 2023" in german and "Beginne mit einem Satz" in german

@@ -49,3 +49,22 @@ labels:
     www.ladadi.de: Landkreis Darmstadt-Dieburg
     www.gesetze-im-internet.de: Gesetze im Internet
   scope: Geltungsbereich laut Dokument  # the source header's line for a document's own scope statement
+  # the words that frame the sources in the prompt: the line before them ({n}: how many), what a search that found nothing
+  # gives instead, and the names of a header's date and page fields and of the line before a link
+  sources_lead: "Es liegen {n} Quellen vor:"
+  nothing_found: "Es wurden keine relevanten Informationen gefunden."
+  date: Stand
+  page: Seite
+  link: Link
+# The instruction lines for an answer's form (a table, a checklist, steps, a mind map) and for the length and language
+# variants; each restates the citation rule. english_reminder ends the user message of an English answer.
+shapes:
+  table: '- Form: Beginne mit einem Satz, der die Frage beantwortet. Stelle dann den Vergleich als Markdown-Tabelle dar: eine Zeile je Möglichkeit, eine Spalte je Merkmal, höchstens 6 Zeilen und 4 Spalten, dazu als letzte Spalte Quelle mit den Quellennummern der Zeile, zum Beispiel [2] oder [1], [3]. Nach der Tabelle höchstens zwei Sätze.'
+  checklist: '- Form: Beginne mit einem Satz zur Einordnung. Gliedere den Rest als Checkliste, jeder Punkt in einer eigenen Zeile im Format: - [ ] Aufgabe – Frist – zuständige Stelle [n], mit der Quellennummer am Ende. Ordne die Punkte zeitlich, höchstens 10 Punkte. Nimm nur Aufgaben auf, die in den Quellen stehen. Lass Frist oder Stelle weg, wenn die Quellen sie nicht nennen.'
+  steps: '- Form: Beginne mit einem Satz. Beschreibe dann den Ablauf als nummerierte Schritte (1., 2., 3.), je Schritt ein Satz mit der zuständigen Stelle und der Quellennummer [n], höchstens 8 Schritte. Nimm nur Schritte auf, die in den Quellen stehen, und ergänze keine eigenen.'
+  mindmap: '- Form: Beginne mit einem Satz. Gib dann einen Überblick als Mindmap in einem Codeblock, der mit ```mindmap beginnt und mit ``` endet. Im Codeblock: eine Zeile # Thema, darunter höchstens 6 Bereiche als ## Bereich und darunter höchstens 5 Punkte je Bereich als - Punkt [n] mit der Quellennummer, keine tieferen Ebenen.'
+  shorter: '- Länge: Kürze die Antwort auf das Wichtigste: Tabellen, Checklisten und Schritte auf höchstens die Hälfte der Zeilen, sonst höchstens 3 Sätze. Jede Quellennummer bleibt bei ihrer Aussage.'
+  longer: '- Länge: Antworte ausführlicher, abweichend von der Länge oben bis etwa 400 Wörter, mit allen wichtigen Einzelheiten aus den Quellen, jede mit ihrer Quellennummer.'
+  simple: '- Sprache: Schreibe in Einfacher Sprache: kurze Sätze, ein Gedanke pro Satz, bekannte Wörter; erkläre Fachbegriffe kurz. Jede Quellennummer bleibt bei ihrer Aussage.'
+  english: '- Sprache: Antworte vollständig auf Englisch, auch wenn Frage und Quellen deutsch sind: die ganze Antwort einschließlich Tabellen, Listen und Mindmap. Nenne deutsche Namen von Ämtern und Titel von Dokumenten nach der englischen Übersetzung in Klammern. Jede Quellennummer bleibt bei ihrer Aussage.'
+  english_reminder: 'Answer in English only: the whole answer, although the question and the sources are German.'

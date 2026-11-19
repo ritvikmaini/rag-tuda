@@ -10,6 +10,11 @@ EXAMPLE = sm.SourceLabels(  # the literal of tests/rag_core/domain/test_source_l
     source_types={"map": "Karte"},
     origins={"archive": "Archiv", "website": "example.org"},
     hosts={"docs.example.org": "Archiv", "example.org": "example.org", "www.example.org": "example.org"},
+    sources_lead="Es liegen {n} Quellen vor:",
+    nothing_found="Es wurden keine relevanten Informationen gefunden.",
+    date="Stand",
+    page="Seite",
+    link="Link",
 )
 
 

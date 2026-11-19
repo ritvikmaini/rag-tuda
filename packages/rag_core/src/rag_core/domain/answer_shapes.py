@@ -1,14 +1,17 @@
 # pyright: standard
 """
-Response formats v1: the fixed instruction texts for answer shapes and variants, cheap checks of what an answer contains
-and the check whether a stored conversation can make a variant of its last answer.
+Response formats v1: which instruction line of an answer shape or variant a generation needs, cheap checks of what an answer
+contains and the check whether a stored conversation can make a variant of its last answer.
 
-The texts are German, contain no braces (they go through LangChain's template) and each restates the citation rule.
-Standard library only: the frames, the message helpers and the store block of the variants live in assistant_api
-(sse.events, graph.nodes.generate, graph.routes, chat.turns_store).
+The lines themselves are the profile's, one set per language (messages.<language>.yaml, `shapes`): they contain no braces (they
+go through LangChain's template) and each restates the citation rule. The functions take them as a mapping from the name of
+a shape (table, checklist, steps, mindmap), of a length or language variant (shorter, longer, simple, english) and
+`english_reminder`. Standard library only: the frames, the message helpers and the store block of the variants live in
+assistant_api (sse.events, graph.nodes.generate, graph.routes, chat.turns_store).
 """
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 from rag_core.domain.language import LANGUAGES, detect, looks_english_question
@@ -16,57 +19,8 @@ from rag_core.domain.language import LANGUAGES, detect, looks_english_question
 FORMATS_VERSION = "v1"
 SHAPES = ("text", "table", "checklist", "steps", "mindmap")
 SHAPE_VARIANTS = ("table", "checklist", "steps", "mindmap")
-VARIANTS = SHAPE_VARIANTS + ("shorter", "longer", "simple", "english")
-
-SHAPE_TEXTS = {
-    # a last column Quelle, so every row names its source (tables with such a column were fully cited, cell citations
-    # were often left out)
-    "table": (
-        "- Form: Beginne mit einem Satz, der die Frage beantwortet. Stelle dann den Vergleich als Markdown-Tabelle dar: "
-        "eine Zeile je Möglichkeit, eine Spalte je Merkmal, höchstens 6 Zeilen und 4 Spalten, dazu als letzte Spalte "
-        "Quelle mit den Quellennummern der Zeile, zum Beispiel [2] oder [1], [3]. Nach der Tabelle höchstens zwei Sätze."
-    ),
-    # only what the sources name (otherwise generic steps without a source appeared). No way out into sentences: with
-    # one, real procedures came back as prose.
-    "checklist": (
-        "- Form: Beginne mit einem Satz zur Einordnung. Gliedere den Rest als Checkliste, jeder Punkt in einer eigenen "
-        "Zeile im Format: - [ ] Aufgabe – Frist – zuständige Stelle [n], mit der Quellennummer am Ende. Ordne die Punkte "
-        "zeitlich, höchstens 10 Punkte. Nimm nur Aufgaben auf, die in den Quellen stehen. Lass Frist oder Stelle weg, "
-        "wenn die Quellen sie nicht nennen."
-    ),
-    "steps": (
-        "- Form: Beginne mit einem Satz. Beschreibe dann den Ablauf als nummerierte Schritte (1., 2., 3.), je Schritt ein "
-        "Satz mit der zuständigen Stelle und der Quellennummer [n], höchstens 8 Schritte. Nimm nur Schritte auf, die in "
-        "den Quellen stehen, und ergänze keine eigenen."
-    ),
-    "mindmap": (
-        "- Form: Beginne mit einem Satz. Gib dann einen Überblick als Mindmap in einem Codeblock, der mit ```mindmap "
-        "beginnt und mit ``` endet. Im Codeblock: eine Zeile # Thema, darunter höchstens 6 Bereiche als ## Bereich und "
-        "darunter höchstens 5 Punkte je Bereich als - Punkt [n] mit der Quellennummer, keine tieferen Ebenen."
-    ),
-}
-VARIANT_TEXTS = {
-    "shorter": (
-        "- Länge: Kürze die Antwort auf das Wichtigste: Tabellen, Checklisten und Schritte auf höchstens die Hälfte der "
-        "Zeilen, sonst höchstens 3 Sätze. Jede Quellennummer bleibt bei ihrer Aussage."
-    ),
-    "longer": (
-        "- Länge: Antworte ausführlicher, abweichend von der Länge oben bis etwa 400 Wörter, mit allen wichtigen "
-        "Einzelheiten aus den Quellen, jede mit ihrer Quellennummer."
-    ),
-    "simple": (
-        "- Sprache: Schreibe in Einfacher Sprache: kurze Sätze, ein Gedanke pro Satz, bekannte Wörter; erkläre "
-        "Fachbegriffe kurz. Jede Quellennummer bleibt bei ihrer Aussage."
-    ),
-    # the language line alone did not make the model answer in English
-    "english": (
-        "- Sprache: Antworte vollständig auf Englisch, auch wenn Frage und Quellen deutsch sind: die ganze Antwort "
-        "einschließlich Tabellen, Listen und Mindmap. Nenne deutsche Namen von Ämtern und Titel von Dokumenten nach der "
-        "englischen Übersetzung in Klammern. Jede Quellennummer bleibt bei ihrer Aussage."
-    ),
-}
-# The English reminder at the end of the user message, where a small model follows it best.
-ENGLISH_REMINDER = "Answer in English only: the whole answer, although the question and the sources are German."
+LINE_VARIANTS = ("shorter", "longer", "simple", "english")  # the variants that add a length or language line
+VARIANTS = SHAPE_VARIANTS + LINE_VARIANTS
 
 
 def shape_of(value) -> str:
@@ -79,35 +33,35 @@ def formats_on(state) -> bool:
     return (state.get("formats") or "") == FORMATS_VERSION
 
 
-def format_instruction(state) -> str:
+def format_instruction(state, texts: Mapping[str, str]) -> str:
     """The format instruction of a generation (appended by with_instruction): the shape's form, then the variant's length or language.
     Empty without formats=v1 and for plain text, so those answers get the plain prompt."""
     if not formats_on(state):
         return ""
     lines = []
     shape = shape_of(state.get("answer_shape"))
-    if shape in SHAPE_TEXTS:
-        lines.append(SHAPE_TEXTS[shape])
+    if shape in SHAPE_VARIANTS:
+        lines.append(texts[shape])
     variant = state.get("variant")
-    if variant in VARIANT_TEXTS:
-        lines.append(VARIANT_TEXTS[variant])
+    if variant in LINE_VARIANTS:
+        lines.append(texts[variant])
     return "\n".join(lines)
 
 
-def shape_reminder(state) -> str:
+def shape_reminder(state, texts: Mapping[str, str]) -> str:
     """The shape's form line for the end of the user message (repeated after the question, where the model reads it last),
     then the length line of a shorter or longer variant, so the length is still read after the form (with the form line
     alone the longer answers shrank); not the simple or English line. Empty without formats=v1 and for plain text."""
     shape = shape_of(state.get("answer_shape"))
-    if not formats_on(state) or shape not in SHAPE_TEXTS:
+    if not formats_on(state) or shape not in SHAPE_VARIANTS:
         return ""
     variant = state.get("variant")
-    return "\n".join([SHAPE_TEXTS[shape]] + ([VARIANT_TEXTS[variant]] if variant in ("shorter", "longer") else []))
+    return "\n".join([texts[shape]] + ([texts[variant]] if variant in ("shorter", "longer") else []))
 
 
-def language_reminder(state) -> str:
+def language_reminder(state, texts: Mapping[str, str]) -> str:
     """The English reminder for the user message of an English answer (see answer_language); empty otherwise."""
-    return ENGLISH_REMINDER if answer_language(state) == "en" else ""
+    return texts["english_reminder"] if answer_language(state) == "en" else ""
 
 
 def answer_language(state) -> str:

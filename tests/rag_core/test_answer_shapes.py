@@ -1,11 +1,35 @@
 """Response formats v1: instruction texts, shape detection, frames."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
 from assistant_api.sse import frames as fr
 from rag_core.domain import answer_shapes as af  # noqa: E402
 from rag_core.domain.answer_shapes import turn_variant_problem
 from rag_core.domain.history import LastTurn
+
+PROFILES = Path(__file__).resolve().parents[2] / "profiles"
+FILES = {
+    "example.de": PROFILES / "example" / "messages.de.yaml",
+    "tu.de": PROFILES / "tu-informatik" / "messages.de.yaml",
+    "tu.en": PROFILES / "tu-informatik" / "messages.en.yaml",
+}
+TEXTS = {name: yaml.safe_load(file.read_text(encoding="utf-8"))["shapes"] for name, file in FILES.items()}
+SHAPES = TEXTS["example.de"]  # the German lines the tests below send through the generate node
+
+
+def format_instruction(state):
+    return af.format_instruction(state, SHAPES)
+
+
+def shape_reminder(state):
+    return af.shape_reminder(state, SHAPES)
+
+
+def language_reminder(state):
+    return af.language_reminder(state, SHAPES)
+
 
 TABLE = (
     "Es gibt zwei Regelungen [1].\n\n| Gruppe | Urlaub |\n| --- | --- |\n| Beamte | 30 Tage [1] |\n"
@@ -26,31 +50,42 @@ MINDMAP = (
 
 
 def test_texts_have_no_braces_and_restate_the_citation_rule():
-    for name, text in list(af.SHAPE_TEXTS.items()) + list(af.VARIANT_TEXTS.items()):
-        assert "{" not in text and "}" not in text, name
-        assert "Quellennummer" in text, name
-        assert text.startswith("- "), name
+    for profile, texts in TEXTS.items():
+        rule = "Quellennummer" if profile.endswith(".de") else "source number"
+        for name, text in texts.items():
+            assert "{" not in text and "}" not in text, (profile, name)
+            if name != "english_reminder":
+                assert rule in text and text.startswith("- "), (profile, name)
+        assert "English" in texts["english_reminder"] and texts["english_reminder"].startswith("Answer in English only")
+
+
+def test_every_language_has_the_lines_of_every_shape_and_variant():
+    for profile, texts in TEXTS.items():
+        assert set(texts) == set(af.VARIANTS) | {"english_reminder"}, profile
+    assert (
+        "vollständig auf Englisch" in TEXTS["tu.de"]["english"] and "completely in English" in TEXTS["tu.en"]["english"]
+    )
+    assert TEXTS["tu.en"]["table"].startswith("- Form: Begin") and TEXTS["tu.de"]["table"].startswith("- Form: Beginne")
 
 
 def test_every_variant_has_a_text_and_the_names_are_fixed():
     assert af.VARIANTS == ("table", "checklist", "steps", "mindmap", "shorter", "longer", "simple", "english")
     assert af.SHAPES == ("text", "table", "checklist", "steps", "mindmap")
-    assert set(af.SHAPE_TEXTS) == set(af.SHAPE_VARIANTS)
-    assert set(af.VARIANT_TEXTS) == set(af.VARIANTS) - set(af.SHAPE_VARIANTS)
+    assert set(af.LINE_VARIANTS) == set(af.VARIANTS) - set(af.SHAPE_VARIANTS)
 
 
 def test_no_instruction_without_formats_or_for_plain_text():
-    assert af.format_instruction({"answer_shape": "table"}) == ""
-    assert af.format_instruction({"formats": "v2", "answer_shape": "table"}) == ""
-    assert af.format_instruction({"formats": "v1", "answer_shape": "text"}) == ""
-    assert af.format_instruction({"formats": "v1"}) == ""
+    assert format_instruction({"answer_shape": "table"}) == ""
+    assert format_instruction({"formats": "v2", "answer_shape": "table"}) == ""
+    assert format_instruction({"formats": "v1", "answer_shape": "text"}) == ""
+    assert format_instruction({"formats": "v1"}) == ""
 
 
 def test_shape_then_variant_in_one_instruction():
-    assert af.format_instruction({"formats": "v1", "answer_shape": "steps"}) == af.SHAPE_TEXTS["steps"]
-    both = af.format_instruction({"formats": "v1", "answer_shape": "table", "variant": "english"})
-    assert both == af.SHAPE_TEXTS["table"] + "\n" + af.VARIANT_TEXTS["english"]
-    assert af.format_instruction({"formats": "v1", "answer_shape": "bogus", "variant": "bogus"}) == ""
+    assert format_instruction({"formats": "v1", "answer_shape": "steps"}) == SHAPES["steps"]
+    both = format_instruction({"formats": "v1", "answer_shape": "table", "variant": "english"})
+    assert both == SHAPES["table"] + "\n" + SHAPES["english"]
+    assert format_instruction({"formats": "v1", "answer_shape": "bogus", "variant": "bogus"}) == ""
 
 
 def test_language_follows_the_english_variant_only():
@@ -138,21 +173,19 @@ def test_with_instruction_appends_to_the_system_message_only():
 
 def test_shape_reminder_is_the_shape_line_then_a_length_line():
     for shape in af.SHAPE_VARIANTS:
-        assert af.shape_reminder({"formats": "v1", "answer_shape": shape}) == af.SHAPE_TEXTS[shape]
+        assert shape_reminder({"formats": "v1", "answer_shape": shape}) == SHAPES[shape]
         for variant in ("shorter", "longer"):
             assert (
-                af.shape_reminder({"formats": "v1", "answer_shape": shape, "variant": variant})
-                == af.SHAPE_TEXTS[shape] + "\n" + af.VARIANT_TEXTS[variant]
+                shape_reminder({"formats": "v1", "answer_shape": shape, "variant": variant})
+                == SHAPES[shape] + "\n" + SHAPES[variant]
             )
         # the simple and English lines are not repeated
         for variant in ("simple", "english"):
-            assert (
-                af.shape_reminder({"formats": "v1", "answer_shape": shape, "variant": variant}) == af.SHAPE_TEXTS[shape]
-            )
-    assert af.shape_reminder({"formats": "v1", "answer_shape": "text"}) == ""
-    assert af.shape_reminder({"formats": "v1", "variant": "shorter"}) == ""
+            assert shape_reminder({"formats": "v1", "answer_shape": shape, "variant": variant}) == SHAPES[shape]
+    assert shape_reminder({"formats": "v1", "answer_shape": "text"}) == ""
+    assert shape_reminder({"formats": "v1", "variant": "shorter"}) == ""
     for shape in af.SHAPE_VARIANTS:
-        assert af.shape_reminder({"answer_shape": shape}) == ""
+        assert shape_reminder({"answer_shape": shape}) == ""
 
 
 def sent_prompt(**state):
@@ -217,9 +250,9 @@ def sent_prompt(**state):
 def test_the_form_is_repeated_at_the_end_of_the_user_message():
     for shape in af.SHAPE_VARIANTS:
         system, user = sent_prompt(formats="v1", answer_shape=shape)
-        assert system.content.endswith("\n" + af.SHAPE_TEXTS[shape])  # the system copy stays
-        assert user.content.endswith("\n\n" + af.SHAPE_TEXTS[shape])
-        assert user.content.count(af.SHAPE_TEXTS[shape]) == 1
+        assert system.content.endswith("\n" + SHAPES[shape])  # the system copy stays
+        assert user.content.endswith("\n\n" + SHAPES[shape])
+        assert user.content.count(SHAPES[shape]) == 1
 
 
 def test_plain_text_and_no_formats_add_nothing_to_the_user_message():
@@ -231,18 +264,18 @@ def test_plain_text_and_no_formats_add_nothing_to_the_user_message():
 
 def test_the_english_variant_ends_with_the_form_line_then_the_english_reminder():
     system, user = sent_prompt(formats="v1", answer_shape="table", variant="english")
-    assert user.content.endswith("\n\n" + af.SHAPE_TEXTS["table"] + "\n\n" + af.ENGLISH_REMINDER)
-    assert user.content.count(af.SHAPE_TEXTS["table"]) == 1
-    assert system.content.endswith(af.VARIANT_TEXTS["english"])
+    assert user.content.endswith("\n\n" + SHAPES["table"] + "\n\n" + SHAPES["english_reminder"])
+    assert user.content.count(SHAPES["table"]) == 1
+    assert system.content.endswith(SHAPES["english"])
     # English with plain text: the reminder alone
     _, user = sent_prompt(formats="v1", answer_shape="text", variant="english")
-    assert user.content.endswith("Wie beantrage ich Urlaub?\n\n" + af.ENGLISH_REMINDER)
+    assert user.content.endswith("Wie beantrage ich Urlaub?\n\n" + SHAPES["english_reminder"])
 
 
 def test_a_length_variant_repeats_its_length_line_after_the_form_line():
     system, user = sent_prompt(formats="v1", answer_shape="steps", variant="longer")
-    assert user.content.endswith("\n\n" + af.SHAPE_TEXTS["steps"] + "\n" + af.VARIANT_TEXTS["longer"])
-    assert system.content.endswith(af.SHAPE_TEXTS["steps"] + "\n" + af.VARIANT_TEXTS["longer"])
+    assert user.content.endswith("\n\n" + SHAPES["steps"] + "\n" + SHAPES["longer"])
+    assert system.content.endswith(SHAPES["steps"] + "\n" + SHAPES["longer"])
     # plain text with a length variant: the system copy alone
     _, user = sent_prompt(formats="v1", answer_shape="text", variant="longer")
     assert user.content.endswith("Wie beantrage ich Urlaub?")
@@ -254,36 +287,36 @@ def test_a_length_variant_repeats_its_length_line_after_the_form_line():
 def test_steps_and_checklists_come_only_from_the_sources():
     # the grounding stays, the way out into sentences goes (it turned real procedures into prose)
     for name in ("steps", "checklist"):
-        text = af.SHAPE_TEXTS[name]
+        text = SHAPES[name]
         assert "die in den Quellen stehen" in text, name
         assert "Sätzen" not in text and "stattdessen" not in text, name
 
 
 def test_every_table_row_names_its_source():
-    assert "letzte Spalte Quelle" in af.SHAPE_TEXTS["table"]
+    assert "letzte Spalte Quelle" in SHAPES["table"]
 
 
 def test_a_chosen_form_gets_the_same_instruction_as_an_automatic_one():
     # the "does not fit" sentence never produced its explanation and gave the model a way out of the form
     assert not hasattr(af, "CHOSEN_FORM_TEXT")
     for shape in af.SHAPE_VARIANTS:
-        chosen = af.format_instruction({"formats": "v1", "answer_shape": shape, "variant": shape})
-        assert chosen == af.SHAPE_TEXTS[shape]
+        chosen = format_instruction({"formats": "v1", "answer_shape": shape, "variant": shape})
+        assert chosen == SHAPES[shape]
 
 
 def test_english_is_asked_for_in_so_many_words():
-    assert "vollständig auf Englisch" in af.VARIANT_TEXTS["english"]
-    assert af.language_reminder({"formats": "v1", "variant": "english"}) == af.ENGLISH_REMINDER
-    assert "English" in af.ENGLISH_REMINDER
-    assert af.language_reminder({"variant": "english"}) == ""
-    assert af.language_reminder({"formats": "v1", "variant": "simple"}) == ""
-    assert af.language_reminder({"formats": "v1"}) == ""
+    assert "vollständig auf Englisch" in SHAPES["english"]
+    assert language_reminder({"formats": "v1", "variant": "english"}) == SHAPES["english_reminder"]
+    assert "English" in SHAPES["english_reminder"]
+    assert language_reminder({"variant": "english"}) == ""
+    assert language_reminder({"formats": "v1", "variant": "simple"}) == ""
+    assert language_reminder({"formats": "v1"}) == ""
     # an English answer needs no formats: the analysis' language or an English-looking question is enough
-    assert af.language_reminder({"language": "en"}) == af.ENGLISH_REMINDER
+    assert language_reminder({"language": "en"}) == SHAPES["english_reminder"]
     english = {"messages": [SimpleNamespace(content="How do I apply for leave?")]}
-    assert af.language_reminder(english) == af.ENGLISH_REMINDER and af.answer_language(english) == "en"
+    assert language_reminder(english) == SHAPES["english_reminder"] and af.answer_language(english) == "en"
     german = {"messages": [SimpleNamespace(content="Wie beantrage ich Urlaub?")]}
-    assert af.language_reminder(german) == "" and af.answer_language(german) == "de"
+    assert language_reminder(german) == "" and af.answer_language(german) == "de"
     assert af.answer_language({**english, "language": "Französisch"}) == "en"
 
 

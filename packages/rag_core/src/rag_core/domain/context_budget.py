@@ -27,8 +27,7 @@ PAGE_MARKER = re.compile(r"\[Page (\d+)\]")
 CHARS_PER_TOKEN_FALLBACK = 2.0
 MESSAGE_OVERHEAD_TOKENS = 8
 SOURCE_OVERHEAD_TOKENS = 6  # "[nn] " in a source header and the blank line before it
-CONTEXT_LEAD_TOKENS = 12  # the lead line of join_sources ("Es liegen N Quellen vor:")
-NO_DOCS_TEXT = "Es wurden keine relevanten Informationen gefunden."
+CONTEXT_LEAD_TOKENS = 12  # the lead line of join_sources (labels.sources_lead)
 
 
 def format_source(doc: Doc, text: Optional[str] = None, page: Optional[int] = None, *, labels: SourceLabels) -> str:
@@ -43,8 +42,8 @@ def format_source(doc: Doc, text: Optional[str] = None, page: Optional[int] = No
     fields = [
         info["origin"],
         info["type"],
-        "Stand: " + info["date"] if info["date"] else "",
-        "Seite %d" % page if isinstance(page, int) and page > 0 else "",
+        f"{labels.date}: {info['date']}" if info["date"] else "",
+        f"{labels.page} {page}" if isinstance(page, int) and page > 0 else "",
     ]
     lines = ["### " + info["title"]]
     if any(fields):
@@ -52,15 +51,15 @@ def format_source(doc: Doc, text: Optional[str] = None, page: Optional[int] = No
     if labels.scope and metadata.get("scope"):
         lines.append(labels.scope + ": " + metadata["scope"])
     if info["url"]:
-        lines.append("Link: " + info["url"])
+        lines.append(f"{labels.link}: {info['url']}")
     return "\n".join(lines) + "\n\n" + strip_source_text(text)
 
 
-def join_sources(parts: Sequence[str]) -> str:
-    """The context string the prompt receives."""
+def join_sources(parts: Sequence[str], labels: SourceLabels) -> str:
+    """The context string the prompt receives, its framing words the labels'."""
     if not parts:
-        return NO_DOCS_TEXT
-    return f"Es liegen {len(parts)} Quellen vor:\n\n" + "\n\n".join(parts)
+        return labels.nothing_found
+    return labels.sources_lead.format(n=len(parts)) + "\n\n" + "\n\n".join(parts)
 
 
 def page_of_position(parent_text: str, pos: int, default: int = -1) -> int:
@@ -270,4 +269,4 @@ async def fit_context(
         remaining,
         counter.exact,
     )
-    return {"history": kept, "context": join_sources(parts), "report": report, "sources": sources}
+    return {"history": kept, "context": join_sources(parts, labels), "report": report, "sources": sources}

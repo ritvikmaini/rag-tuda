@@ -8,6 +8,11 @@ EXAMPLE = SourceLabels(
     source_types={"map": "Karte"},
     origins={"archive": "Archiv", "website": "example.org"},
     hosts={"docs.example.org": "Archiv", "example.org": "example.org", "www.example.org": "example.org"},
+    sources_lead="Es liegen {n} Quellen vor:",
+    nothing_found="Es wurden keine relevanten Informationen gefunden.",
+    date="Stand",
+    page="Seite",
+    link="Link",
 )
 CASES = [  # (metadata, the expected origin label)
     ({"source_type": "map", "origin": "website", "url": "https://map.example.org/#uid=1"}, "Karte"),
@@ -29,7 +34,9 @@ def test_the_example_labels_give_what_the_code_gave(meta, origin):
 
 
 def test_another_profile_names_its_own_origin():
-    labels = SourceLabels(source_types={}, origins={"website": "Gesetze im Internet"}, hosts={})
+    labels = SourceLabels(
+        **{**EXAMPLE.__dict__, "source_types": {}, "origins": {"website": "Gesetze im Internet"}, "hosts": {}}
+    )
     assert describe_source({"origin": "website", "url": "https://www.gesetze-im-internet.de/burlg/"}, labels)[
         "origin"
     ] == ("Gesetze im Internet")

@@ -12,6 +12,11 @@ EXAMPLE = SourceLabels(  # the literal of tests/rag_core/domain/test_source_labe
     source_types={"map": "Karte"},
     origins={"archive": "Archiv", "website": "example.org"},
     hosts={"docs.example.org": "Archiv", "example.org": "example.org", "www.example.org": "example.org"},
+    sources_lead="Es liegen {n} Quellen vor:",
+    nothing_found="Es wurden keine relevanten Informationen gefunden.",
+    date="Stand",
+    page="Seite",
+    link="Link",
 )
 
 
@@ -106,3 +111,23 @@ def test_the_scope_line_sits_between_the_fields_and_the_link():
     out = asyncio.run(cb.fit_context(BUDGET, FakeCounter(), fixed, [], [doc], labels=labels))
     assert "Geltungsbereich laut Dokument: An alle Beamtinnen und Beamten der Referate\n" in out["context"]
     assert "scope" not in out["sources"][0]  # the page's sources are unchanged
+
+
+def test_the_words_around_the_sources_are_the_profiles_in_the_answers_language():
+    english = SourceLabels(
+        **{
+            **EXAMPLE.__dict__,
+            "sources_lead": "There are {n} sources:",
+            "nothing_found": "No relevant information was found.",
+            "date": "As of",
+            "page": "Page",
+        }
+    )
+    docs = [_doc("Hundesteuersatzung", 0.9, "Text zur Steuer. " * 30), _doc("Gebühren", 0.5, "Text zur Gebühr. " * 30)]
+    fixed = [SystemMessage(content="system"), HumanMessage(content="frage")]
+    out = asyncio.run(cb.fit_context(BUDGET, FakeCounter(), fixed, [], docs, labels=english))
+    assert out["context"].startswith("There are 2 sources:\n\n### [1] Hundesteuersatzung\n")
+    assert "example.org | Satzung/Verordnung | As of: 2021 | Page 4\nLink: https://example.org/" in out["context"]
+    assert "Es liegen" not in out["context"] and "Stand" not in out["context"] and "Seite" not in out["context"]
+    assert cb.join_sources([], english) == "No relevant information was found."
+    assert cb.join_sources([], EXAMPLE) == "Es wurden keine relevanten Informationen gefunden."

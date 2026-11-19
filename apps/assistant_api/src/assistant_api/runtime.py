@@ -81,7 +81,7 @@ class Runtime:
         """The profile's messages for a language as a flat mapping ("guard.busy", …): the form the guard's code table reads."""
         return {
             f"{group}.{key}": text
-            for group, texts in self.settings.messages_for(language).model_dump(exclude={"labels"}).items()
+            for group, texts in self.settings.messages_for(language).model_dump(exclude={"labels", "shapes"}).items()
             for key, text in texts.items()
         }
 

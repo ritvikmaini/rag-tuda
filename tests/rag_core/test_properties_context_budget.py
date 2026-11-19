@@ -12,7 +12,16 @@ from langchain_core.messages import SystemMessage
 from rag_core.domain import context_budget as cb
 from rag_core.domain.source_meta import SourceLabels
 
-LABELS = SourceLabels(source_types={}, origins={"archive": "Archiv"}, hosts={})
+LABELS = SourceLabels(
+    source_types={},
+    origins={"archive": "Archiv"},
+    hosts={},
+    sources_lead="Es liegen {n} Quellen vor:",
+    nothing_found="Es wurden keine relevanten Informationen gefunden.",
+    date="Stand",
+    page="Seite",
+    link="Link",
+)
 SENTENCE = "Die Steuer beträgt 90 Euro im Jahr. "
 FIXED = [SystemMessage(content="s")]
 

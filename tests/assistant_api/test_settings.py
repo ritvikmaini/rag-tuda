@@ -241,6 +241,11 @@ def test_the_example_messages_carry_the_labels(secrets: Path) -> None:
         origins={"website": "Gesetze im Internet"},
         hosts={},
         scope="Geltungsbereich laut Dokument",
+        sources_lead="Es liegen {n} Quellen vor:",
+        nothing_found="Es wurden keine relevanten Informationen gefunden.",
+        date="Stand",
+        page="Seite",
+        link="Link",
     )
 
 

@@ -126,7 +126,6 @@ def make_generate(deps: GraphDeps):
         window_chars=profile.guard.source_window_chars,
         full_sources=deps.card.budget.full_sources,
     )
-    labels = deps.messages.labels.source_labels()
     answer_texts = line_texts(deps)
     table = {key: StatusGroup.model_validate(group) for key, group in ((deps.roles or {}).get("groups") or {}).items()}
 
@@ -167,7 +166,9 @@ def make_generate(deps: GraphDeps):
             f"[History] completed_fresh={len(prior)} kept={len(chosen)} stored_messages={len(state['messages'])}"
         )
         language = answer_language(state)
-        catalog = messages_for(deps, language)  # the lines and fallback texts are in the answer's language
+        catalog = messages_for(deps, language)  # the texts the code adds are in the answer's language
+        labels = catalog.labels.source_labels()
+        shapes = catalog.shapes.model_dump()
         variables = {
             "question": state.get("standalone_question") or current.content,
             "context": state.get("formatted_docs", ""),
@@ -175,9 +176,9 @@ def make_generate(deps: GraphDeps):
             "current_date": format_date(datetime.now(), profile.identity.date_format, profile.identity.day_names),
             "bot_name": profile.identity.bot_name,
             "intent": intent,
-            "format_instruction": format_instruction(state),
-            "language_reminder": language_reminder(state),
-            "shape_reminder": shape_reminder(state),
+            "format_instruction": format_instruction(state, shapes),
+            "language_reminder": language_reminder(state, shapes),
+            "shape_reminder": shape_reminder(state, shapes),
         }
         english = language == "en"
         sources: list[Any] = []

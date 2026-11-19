@@ -838,7 +838,7 @@ def answered(question: str, intent: str, *titles: str, **quirks: Any) -> tuple[A
 
 
 def test_the_english_reminder_ends_the_message_on_the_documents_no_documents_and_direct_reply_paths() -> None:
-    from rag_core.domain.answer_shapes import ENGLISH_REMINDER
+    ENGLISH_REMINDER = load_messages().shapes.english_reminder
 
     for intent, titles in (("lookup", ("Urlaub",)), ("lookup", ()), ("conversation", ())):
         prompt, _ = answered(ENGLISH_QUESTION, intent, *titles)

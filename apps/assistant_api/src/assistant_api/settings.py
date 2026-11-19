@@ -98,16 +98,46 @@ class DocsMessages(_Texts):
 
 
 class Labels(BaseModel):
-    """messages.<language>.yaml labels: where a source comes from."""
+    """messages.<language>.yaml labels: where a source comes from, and the words that frame the sources in the prompt."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     source_types: dict[str, str]
     origins: dict[str, str]
     hosts: dict[str, str]
     scope: str  # the source header's Geltungsbereich line
+    sources_lead: str  # {n}: the number of sources
+    nothing_found: str
+    date: str
+    page: str
+    link: str
 
     def source_labels(self) -> SourceLabels:
-        return SourceLabels(self.source_types, self.origins, self.hosts, self.scope)
+        return SourceLabels(
+            self.source_types,
+            self.origins,
+            self.hosts,
+            self.scope,
+            sources_lead=self.sources_lead,
+            nothing_found=self.nothing_found,
+            date=self.date,
+            page=self.page,
+            link=self.link,
+        )
+
+
+class ShapeMessages(_Texts):
+    """messages.<language>.yaml shapes: the instruction line of each answer form and of the length and language variants
+    (rag_core.domain.answer_shapes names which one a generation needs), and the reminder that ends an English answer's question."""
+
+    table: str
+    checklist: str
+    steps: str
+    mindmap: str
+    shorter: str
+    longer: str
+    simple: str
+    english: str
+    english_reminder: str
 
 
 class Messages(_Texts):
@@ -117,6 +147,7 @@ class Messages(_Texts):
     answer: AnswerMessages
     docs: DocsMessages
     labels: Labels
+    shapes: ShapeMessages
 
 
 @dataclass(frozen=True)
