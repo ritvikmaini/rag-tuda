@@ -5,6 +5,11 @@ import { h, icon } from "./dom.js";
 
 // ---- sources
 
+// The PO years of a source card as "PO 2023" (several: "PO 2023, 2015"); "" for a source that applies to all.
+export function poLabel(card) {
+    return Array.isArray(card.poVersion) && card.poVersion.length ? fill(TEXT.poVersion, { years: card.poVersion.join(", ") }) : "";
+}
+
 export function sourceElement(card) {
     const pages = cardPages(card);
     const href = citationHref(card.url, cardLinkPage(card));
@@ -13,12 +18,15 @@ export function sourceElement(card) {
         h("a", { class: "source-title", href, target: "_blank", rel: "noopener noreferrer", text: card.title }),
         h("div", { class: "source-meta" },
             h("span", { class: "chip", text: card.type }),
+            poLabel(card) ? h("span", { class: "chip chip-po", text: poLabel(card) }) : null,
             facts ? h("span", { class: "source-facts", text: facts }) : null,
             card.old ? h("span", { class: "chip chip-old", text: TEXT.oldDoc }) : null));
     return h("li", { class: "source", "data-ns": card.ns.join(" ") },
         card.ns.length ? h("span", { class: "source-num", text: card.ns.join(", ") }) : null,
         body,
         card.isForm ? h("a", { class: "source-form", href, target: "_blank", rel: "noopener noreferrer", text: TEXT.openForm }) : null,
+        card.officialUrl ? h("a", { class: "source-form source-official", href: card.officialUrl, target: "_blank", rel: "noopener noreferrer",
+            text: TEXT.official }) : null,
         icon("external", "ext"));
 }
 

@@ -53,6 +53,17 @@ export function titleFor(url, meta) {
     return readableSlug(url);
 }
 
+// The PO years a document applies to (metadata.po_version, a list of years; none = applies to all).
+export function poVersions(value) {
+    return (Array.isArray(value) ? value : []).filter(year => Number.isInteger(year));
+}
+
+// The official publication of a PO (metadata.official_url): http(s) links only, "" without one.
+export function officialLink(value) {
+    const url = typeof value === "string" ? value.trim() : "";
+    return /^https?:\/\//i.test(url) ? url : "";
+}
+
 export function isOld(year, nowYear) {
     return year !== null && year <= nowYear - OLD_AFTER_YEARS;
 }
@@ -82,6 +93,8 @@ export function sourceCards(docs, nowYear) {
                 ns: [],
                 old: isOld(year, nowYear),
                 isForm: type === FORM_TYPE,
+                poVersion: poVersions(meta.po_version),
+                officialUrl: officialLink(meta.official_url),
             };
             byUrl.set(url, card);
             cards.push(card);

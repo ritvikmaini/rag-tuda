@@ -12,6 +12,8 @@ import { readFileSync } from "node:fs";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { recordStatus } from "../model/turns.js";
+import { sourceCards } from "../model/sources.js";
+import { sourceElement } from "../render/sources.js";
 
 const plain = value => JSON.parse(JSON.stringify(value));
 
@@ -186,4 +188,44 @@ test("the footer says it is no official service and no legal advice, and names a
     assert.match(html, /data-i18n="headerSub"/);
     assert.match(html, /id="provider-line"/);
     assert.match(html, /rag-<span class="brand-hl">tuda<\/span>/);
+});
+
+// ---- source cards and contact links
+
+const PO = "https://www.informatik.example.org/studium/po-2023.pdf";
+const ISSUE = "https://www.example.org/satzungsbeilage/2023-14.pdf";
+const poDoc = extra => ({ page_content: "x", metadata: Object.assign({ download_url: PO, page_number: 3, title: "PO B.Sc.",
+    doc_type: "Prüfungsordnung", regulation: "po", po_version: [2023], official_url: ISSUE }, extra || {}) });
+
+// the few things of a DOM that the element builder and the source card use
+function fakeDocument() {
+    const element = tag => ({ tag, className: "", textContent: "", attrs: {}, children: [],
+        setAttribute(name, value) { this.attrs[name] = value; }, addEventListener() {},
+        append(...items) { this.children.push(...items); }, set innerHTML(value) { this.html = value; }, nodeType: 1 });
+    globalThis.document = { createElement: element };
+}
+const texts = el => [el.textContent, ...el.children.map(child => (typeof child === "string" ? child : texts(child)))].flat().filter(Boolean);
+const links = el => [el.tag === "a" ? el : null, ...el.children.filter(child => typeof child !== "string").map(links)].flat().filter(Boolean);
+
+test("a PO source card shows the PO version and links the official publication (test_source_card_po_and_official_link)", t => {
+    fakeDocument();
+    t.after(() => { delete globalThis.document; setLang("de"); });
+    const [card] = sourceCards([poDoc(), poDoc({ page_number: 5 })], 2026);
+    assert.deepEqual([card.poVersion, card.officialUrl], [[2023], ISSUE]);
+    const li = sourceElement(Object.assign({ ns: [1], pages: [3], linkPage: 3 }, card));
+    assert.ok(texts(li).includes("PO 2023"));
+    const official = links(li).find(a => a.attrs.href === ISSUE);
+    assert.equal(official.textContent, "Amtlich veröffentlicht");
+    assert.equal(official.attrs.rel, "noopener noreferrer");
+    assert.ok(texts(li).some(text => text.endsWith("S. 3")));
+    setLang("en");
+    const english = sourceElement(Object.assign({ ns: [1], pages: [3], linkPage: 3 }, card));
+    assert.equal(links(english).find(a => a.attrs.href === ISSUE).textContent, "Officially published");
+    assert.ok(texts(english).some(text => text.endsWith("p. 3")));
+    // a source without a PO version or a publication, or with an unsafe link, shows neither
+    const [other] = sourceCards([poDoc({ po_version: null, official_url: "javascript:alert(1)", regulation: "info" })], 2026);
+    assert.deepEqual([other.poVersion, other.officialUrl], [[], ""]);
+    const quiet = sourceElement(Object.assign({ ns: [], pages: [], linkPage: null }, other));
+    assert.ok(!texts(quiet).includes("PO 2023"));
+    assert.ok(!links(quiet).some(a => a.attrs.href === ISSUE || /^javascript/.test(a.attrs.href || "")));
 });
