@@ -40,7 +40,7 @@ def build_graph(deps: GraphDeps) -> Any:
     )
     workflow.add_conditional_edges(
         "get_docs",
-        make_docs_route(iterative),
+        make_docs_route(iterative, deps.card.timeouts.analysis_s),
         {
             "relevant_docs_found": "format_docs",
             "no_relevant_docs_found": "generate",

@@ -4,6 +4,7 @@ search that follows covers the round-one queries and the new ones together."""
 
 import asyncio
 import json
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,7 @@ from assistant_api.graph import streaming as ss
 from assistant_api.graph.build import NODES, build_graph
 from assistant_api.graph.history import question_message
 from assistant_api.graph.nodes.follow_up import make_follow_up
+from assistant_api.graph.routes import FOLLOW_UP_MARGIN_S
 from assistant_api.graph.state import GraphDeps
 from assistant_api.settings import Messages
 from rag_core.domain.filters import Filter
@@ -141,8 +143,9 @@ def inputs() -> dict:
     }
 
 
-def run(d: GraphDeps) -> dict:
-    return asyncio.run(build_graph(d).ainvoke(inputs(), config={"configurable": {"thread_id": "t"}}))
+def run(d: GraphDeps, deadline_at: float | None = None) -> dict:
+    config = {"configurable": {"thread_id": "t", "deadline_at": deadline_at}}
+    return asyncio.run(build_graph(d).ainvoke(inputs(), config=config))
 
 
 def events(d: GraphDeps) -> list[dict]:
@@ -184,6 +187,18 @@ def test_round_runs_only_when_needs_more_and_gated() -> None:
     retrieval = Retrieval()
     run(deps(follow_up=None, retrieval=retrieval))
     assert len(retrieval.calls) == 1
+
+
+def test_round_skipped_when_the_deadline_is_near() -> None:
+    # the card's analysis_s (20 s) plus the margin must still fit in the request's remaining time; otherwise round one's
+    # documents answer and no follow-up call or search is made
+    assert FOLLOW_UP_MARGIN_S == 30
+    for left, runs in ((200.0, True), (60.0, True), (45.0, False), (-1.0, False), (None, True)):
+        follow_up, retrieval = FollowUp(asked(["Prüfungsordnung Frist"])), Retrieval()
+        deadline_at = None if left is None else time.monotonic() + left
+        out = run(deps(follow_up=follow_up, retrieval=retrieval), deadline_at)
+        assert (len(follow_up.calls), len(retrieval.calls)) == ((1, 2) if runs else (0, 1)), left
+        assert out["generation"] and bool(out.get("follow_up_queries")) is runs, left
 
 
 def test_one_extra_round_max() -> None:
