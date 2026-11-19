@@ -162,7 +162,7 @@ def test_every_line_of_a_question_carries_its_ref(monkeypatch) -> None:
         ),
         handler=None,
         turns=None,
-        messages={"guard.error": "Fehler"},
+        messages_for=lambda lang: {"guard.error": "Fehler"},
     )
     client = TestClient(app)  # without `with`: no lifespan
     handler, undo = collecting()

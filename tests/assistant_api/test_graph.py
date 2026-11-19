@@ -191,15 +191,17 @@ class Raising:
         )
 
 
-def failed_run(llm, deadline_in: float | None = 60.0, card_update: dict | None = None) -> dict:
+def failed_run(
+    llm, deadline_in: float | None = 60.0, card_update: dict | None = None, question: str = "Frage?"
+) -> dict:
     import dataclasses
     import time
 
     base = deps("lookup")
     card = base.card.model_copy(update=card_update or {})
-    graph = build_graph(dataclasses.replace(base, answer_llm=llm, card=card))
+    graph = build_graph(dataclasses.replace(base, answer_llm=llm, card=card, messages_en=english_messages()))
     inputs = {
-        "messages": [question_message("Frage?", None, datetime.now(timezone.utc))],
+        "messages": [question_message(question, None, datetime.now(timezone.utc))],
         "variant": None,
         "formats": "",
     }
@@ -225,6 +227,25 @@ def test_context_length_error_maps_to_trim(caplog) -> None:
         failed_run(Raising(provider_error(400)), card_update={"answer": groq})
     assert "[ContextBudget] request rejected as too long: code=context_length_exceeded type=None" in caplog.text
     assert "exceeded the context window" not in caplog.text
+
+
+def english_messages() -> Messages:
+    english = PROFILE.parents[1] / "tu-informatik" / "messages.en.yaml"
+    return Messages.model_validate(yaml.safe_load(english.read_text(encoding="utf-8")))
+
+
+def test_the_failure_texts_follow_the_questions_language() -> None:
+    import httpx
+    import openai
+
+    english, german = english_messages(), load_messages()
+    asked = "How do I apply for leave?"  # the analysis names no language: the detector reads the question
+    assert english.guard.busy != german.guard.busy
+    assert failed_run(Raising(provider_error(413)), question=asked)["generation"] == english.answer.context_too_long
+    assert failed_run(Raising(provider_error(429)), question=asked)["generation"] == english.guard.busy
+    timeout = openai.APITimeoutError(request=httpx.Request("POST", "http://llm.test/v1"))
+    assert failed_run(Raising(timeout), question=asked)["generation"] == english.guard.timeout
+    assert failed_run(Raising(timeout), question="Wie beantrage ich Urlaub?")["generation"] == german.guard.timeout
 
 
 def test_errors_map_to_the_busy_and_timeout_messages_and_others_are_raised() -> None:
@@ -493,7 +514,9 @@ def test_variant_inputs_hold_what_generate_read_from_the_checkpoint() -> None:
 def runtime() -> types.SimpleNamespace:
     d = deps("lookup")
     overlay = types.SimpleNamespace(compute=types.SimpleNamespace(slot_wait_s=0.2))
-    settings = types.SimpleNamespace(profile=d.profile, card=d.card, messages=d.messages, overlay=overlay)
+    settings = types.SimpleNamespace(
+        profile=d.profile, card=d.card, messages=d.messages, messages_for=lambda lang: d.messages, overlay=overlay
+    )
     return types.SimpleNamespace(
         chain=build_graph(d),
         settings=settings,
@@ -544,7 +567,7 @@ def test_a_question_over_the_limit_is_answered_without_the_model() -> None:
 
 def test_a_busy_slot_ends_with_the_busy_error() -> None:
     out, _ = frames(question="Frage?", busy=True)
-    assert out == [("error", "Service is currently busy. Please try again shortly.")]
+    assert out == [("error", load_messages().guard.busy)]
 
 
 def test_a_caller_with_only_a_turn_id_runs_its_question_under_it() -> None:

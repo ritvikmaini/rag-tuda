@@ -1,16 +1,16 @@
 """
 Request guard: runs the answer pipeline as its own task and streams its SSE frames, so that every request ends in bounded
-time with an answer or a German message. The page ignores `error` events, so every failure is also sent as a
+time with an answer or a message in the page's language. The page ignores `error` events, so every failure is also sent as a
 `chunk` the page shows.
 
 - total deadline and maximum silence between two frames; on expiry the pipeline
   task is cancelled (which closes the model stream and frees the concurrency slot)
-- an `error` frame from the pipeline is followed by the German message, chosen by its code
+- an `error` frame from the pipeline is followed by the message of its code, in the page's language (`messages`)
 - an exception in the pipeline, or an answer without any text, ends with the error message
 - a `variant` frame (a version switch or the end of a variant) counts as an answer
 - a client that disconnects cancels the pipeline
-- stream format 1: `meta` first, `done` last except after a client stop, `code` on the guard's own errors, the German text
-  chosen by code
+- stream format 1: `meta` first, `done` last except after a client stop, `code` on the guard's own errors, the text chosen
+  by code
 - `on_end` receives the turn's outcome once, `stopped` after a client stop, and the first error the guard sent (`timeout`,
   `empty_answer`, `exception:<Class>`, a pipeline `Error` frame's code; None for completed and stopped), which becomes
   chat.turns.error and the `[Turn]` line's code
@@ -36,7 +36,7 @@ _DONE = object()
 # thinking): it counts as activity for the silence limit and is never forwarded to the page.
 PROGRESS = ": progress"
 CANCEL_WAIT_S = 5.0  # how long the guard waits for the cancelled pipeline to clean up
-GERMAN = {
+TEXT_KEYS = {
     "busy": "guard.busy",
     "not_ready": "guard.not_ready",
     "timeout": "guard.timeout",
@@ -62,7 +62,7 @@ async def guard(
     deadline_s: float,
     idle_s: float,
     meta: fr.Meta,
-    messages: Mapping[str, str],
+    messages: Mapping[str, str],  # the profile's texts in the page's language, flat ("guard.busy")
     on_end: Callable[[str, str | None], Awaitable[None]] | None = None,
     run_info: Callable[[], Mapping[str, Any]] | None = None,
     scope_fallback: Callable[[], bool] | None = None,
@@ -80,8 +80,8 @@ async def guard(
         fallback = True if scope_fallback is not None and scope_fallback() else None
         return fr.encode(fr.done(outcome, run.get("index_generation"), run.get("prompts") or None, fallback))
 
-    def german(code: str, after_text: bool) -> fr.Chunk:
-        return fr.Chunk(content=("\n\n" if after_text else "") + messages[GERMAN.get(code, "guard.error")])
+    def message(code: str, after_text: bool) -> fr.Chunk:
+        return fr.Chunk(content=("\n\n" if after_text else "") + messages[TEXT_KEYS.get(code, "guard.error")])
 
     async def produce() -> None:
         try:
@@ -114,7 +114,7 @@ async def guard(
                 )
                 error = error or "timeout"
                 yield fr.encode(fr.Error(content="timeout", code="timeout"))
-                yield fr.encode(german("timeout", text_sent))
+                yield fr.encode(message("timeout", text_sent))
                 final = "failed"
                 yield done(final)
                 return
@@ -123,7 +123,7 @@ async def guard(
                     logger.warning("[RequestGuard] the pipeline ended without any answer text")
                     error = error or "empty_answer"
                     yield fr.encode(fr.Error(content="empty answer", code="empty_answer"))
-                    yield fr.encode(german("empty_answer", False))
+                    yield fr.encode(message("empty_answer", False))
                     final = "failed"
                     yield done(final)
                     return
@@ -133,7 +133,7 @@ async def guard(
             if isinstance(item, BaseException):
                 error = error or "exception:" + type(item).__name__
                 yield fr.encode(fr.Error(content=type(item).__name__, code="exception"))
-                yield fr.encode(german("exception", text_sent))
+                yield fr.encode(message("exception", text_sent))
                 final = "failed"
                 yield done(final)
                 return
@@ -149,7 +149,7 @@ async def guard(
                 text_sent = True
             elif isinstance(item, fr.Error):
                 error = error or item.code
-                yield fr.encode(german(item.code, text_sent))
+                yield fr.encode(message(item.code, text_sent))
                 text_sent, failed = True, True
     finally:
         if not task.done():

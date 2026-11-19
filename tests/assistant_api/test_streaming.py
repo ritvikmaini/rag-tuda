@@ -211,7 +211,7 @@ def chunk_frames(content, strip_cjk=True):
             formats_on=False,
             variant=None,
             sources_mode="before",
-            none_text="",
+            none_text=lambda language: "",
             result=ss.StreamResult(),
             user="u",
             strip_cjk=strip_cjk,
@@ -240,6 +240,42 @@ def test_a_chunk_of_content_blocks_is_sent_as_its_text():
     assert chunk_frames([{"type": "reasoning", "reasoning": "nur Denken"}]) == []  # no text: no frame
 
 
+def test_the_no_sources_note_is_in_the_language_of_the_question():
+    def note(state):
+        event = {
+            "event": "on_chain_end",
+            "name": "format_docs",
+            "metadata": {"langgraph_node": "format_docs"},
+            "data": {"input": {"raw_docs": [], **state}, "output": {"grouped_raw_docs": []}},
+        }
+
+        class Chain:
+            async def astream_events(self, *args, **kwargs):
+                yield event
+
+        async def collect():
+            stream = ss.run_stream(
+                Chain(),
+                {},
+                {},
+                formats_on=False,
+                variant=None,
+                sources_mode="before",
+                none_text={"de": "keine", "en": "none"}.__getitem__,
+                result=ss.StreamResult(),
+                user="u",
+                strip_cjk=True,
+            )
+            return [f for f in [x async for x in stream] if isinstance(f, fr.Docs)]
+
+        return asyncio.run(collect())[0].content[0]["page_content"]
+
+    assert note({"language": "en"}) == "none"
+    assert note({"language": "de"}) == "keine"
+    assert note({"messages": [SimpleNamespace(content="How do I apply for leave?")]}) == "none"
+    assert note({}) == "keine"
+
+
 def test_run_stream_takes_the_scope_fallback_from_the_search_node():
     def run(output):
         event = {"event": "on_chain_end", "name": "get_docs", "metadata": {}, "data": {"output": output}}
@@ -258,7 +294,7 @@ def test_run_stream_takes_the_scope_fallback_from_the_search_node():
                 formats_on=False,
                 variant=None,
                 sources_mode="none",
-                none_text="",
+                none_text=lambda language: "",
                 result=result,
                 user="u",
                 strip_cjk=True,
@@ -333,7 +369,7 @@ def test_run_stream_records_the_turns_results():
                 formats_on=True,
                 variant=None,
                 sources_mode="none",
-                none_text="keine",
+                none_text=lambda language: "keine",
                 result=result,
                 user="u",
                 strip_cjk=True,
@@ -384,7 +420,7 @@ def test_text_the_node_appended_after_the_stream_is_sent_as_one_more_chunk():
                 formats_on=False,
                 variant=None,
                 sources_mode="before",
-                none_text="",
+                none_text=lambda language: "",
                 result=ss.StreamResult(),
                 user="u",
                 strip_cjk=True,
@@ -430,7 +466,7 @@ def test_foreign_script_characters_are_dropped_from_the_chunks_and_the_stored_an
             formats_on=False,
             variant=None,
             sources_mode="before",
-            none_text="",
+            none_text=lambda language: "",
             result=result,
             user="u",
             strip_cjk=True,
@@ -464,7 +500,7 @@ def test_any_chunk_resets_idle_timer():
                 formats_on=False,
                 variant=None,
                 sources_mode="before",
-                none_text="",
+                none_text=lambda language: "",
                 result=ss.StreamResult(),
                 user="u",
                 strip_cjk=True,
@@ -511,7 +547,7 @@ def test_a_failure_after_part_of_the_answer_follows_the_part_with_the_fallback_t
                 formats_on=False,
                 variant=None,
                 sources_mode="none",
-                none_text="",
+                none_text=lambda language: "",
                 result=ss.StreamResult(),
                 user="u",
                 strip_cjk=True,

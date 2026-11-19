@@ -42,8 +42,8 @@ TOO_LONG = (
     "Wesentliche oder stellen Sie mehrere kürzere Fragen nacheinander, dann helfe ich Ihnen gern weiter."
 )
 REFUSED = "Diese Umwandlung ist nur für die letzte Antwort mit Quellen möglich."
-BUSY_ERROR = "Service is currently busy. Please try again shortly."
-NOT_READY_ERROR = "No index has been built yet. Build it first with `indexer build`."
+BUSY_ERROR = MSG_BUSY  # the error frame carries the text the chunk after it shows
+NOT_READY_ERROR = MSG_NOT_READY
 ENGLISH_REMINDER = "Answer in English only: the whole answer, although the question and the sources are German."
 NO_TURNS = "Vor der aktuellen Nachricht gibt es keine früheren Fragen und Antworten."
 ONE_TURN = "Vor der aktuellen Nachricht steht eine frühere Frage mit Antwort."

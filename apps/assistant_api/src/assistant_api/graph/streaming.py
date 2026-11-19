@@ -13,11 +13,11 @@ answer context), writing (the answer starts)."""
 
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from rag_core.domain.answer_shapes import shape_log_line
+from rag_core.domain.answer_shapes import answer_language, shape_log_line
 from rag_core.domain.filters import Filter
 from rag_core.domain.language import strip_foreign
 from rag_core.domain.source_meta import select_sources_for_display
@@ -119,12 +119,13 @@ async def run_stream(
     formats_on: bool,
     variant: str | None,
     sources_mode: str,
-    none_text: str,
+    none_text: Callable[[str], str],
     result: StreamResult,
     user: str,
     strip_cjk: bool,
 ) -> AsyncIterator[Any]:
-    """LangGraph's v2 events as frame models; PROGRESS for every other step (the guard's activity signal)."""
+    """LangGraph's v2 events as frame models; PROGRESS for every other step (the guard's activity signal). none_text(language)
+    is the note of a docs frame without sources, in the answer's language."""
     streamed_any = False
     streamed = ""  # the text sent as chunks so far
     held = False
@@ -165,7 +166,7 @@ async def run_stream(
                 (event["data"].get("output") or {}).get("grouped_raw_docs") or result.retrieved_docs
             )
             if sources_mode == "before":
-                yield docs_frame(result.retrieved_docs, none_text)
+                yield docs_frame(result.retrieved_docs, none_text(answer_language(event["data"].get("input") or {})))
         elif event["event"] == "on_chain_end" and event.get("name") == "rewrite_follow_up_question":
             result.analysis = dict(event["data"].get("output") or {})
             result.requested_shape = (event["data"].get("output") or {}).get("answer_shape") or "text"
@@ -212,7 +213,7 @@ async def run_stream(
                 by_section = {(d.metadata or {}).get("section_id"): d for d in result.retrieved_docs}
                 docs = [by_section[s["section_id"]] for s in shown if s.get("section_id") in by_section]
                 if docs:
-                    yield docs_frame(docs, none_text)
+                    yield docs_frame(docs, none_text(answer_language(event["data"].get("input") or {})))
         else:
             # every other pipeline step counts as activity for the guard
             yield PROGRESS

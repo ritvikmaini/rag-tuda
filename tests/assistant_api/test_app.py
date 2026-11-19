@@ -87,6 +87,7 @@ def test_the_chat_route_keeps_its_parameters() -> None:
         "degree",
         "programme",
         "po",
+        "lang",
     ]
 
 
@@ -116,7 +117,7 @@ def test_the_chat_route_makes_a_turn_record_for_a_question_and_ends_it_through_t
 
     monkeypatch.setattr(chat_route, "pipeline", pipeline)
     client, rt = app_with()
-    rt.turns, rt.handler, rt.messages = Turns(), None, {"guard.error": "Fehler"}
+    rt.turns, rt.handler, rt.messages_for = Turns(), None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
     rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
     ask = {"conversation_id": "c-1"}
@@ -145,7 +146,7 @@ def chat_client(monkeypatch):
 
     monkeypatch.setattr(chat_route, "pipeline", pipeline)
     client, rt = app_with()
-    rt.turns, rt.handler, rt.messages = Turns(), None, {"guard.error": "Fehler"}
+    rt.turns, rt.handler, rt.messages_for = Turns(), None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
     rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
     return client
@@ -227,12 +228,38 @@ def test_the_route_s_principal_reaches_the_turn_record_and_the_service(monkeypat
     monkeypatch.setattr(chat_route, "pipeline", pipeline)
     monkeypatch.setattr(chat_route, "ANONYMOUS", principal)
     client, rt = app_with()
-    rt.turns, rt.handler, rt.messages = None, None, {"guard.error": "Fehler"}
+    rt.turns, rt.handler, rt.messages_for = None, None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
     rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
     params = {"question": "Frage", "conversation_id": "c-2"}
     assert client.get("/api/chat", params=params, headers={"Authorization": "Bearer t0k"}).status_code == 200
     assert seen[0][0] is principal and seen[0][1].principal == "amt-32"
+
+
+def test_the_page_lang_reaches_the_service_and_chooses_the_guard_s_texts(monkeypatch) -> None:
+    seen, asked = [], []
+
+    async def pipeline(rt, **kwargs):
+        seen.append(kwargs["lang"])
+        yield fr.Error(content="busy", code="busy")
+
+    monkeypatch.setattr(chat_route, "pipeline", pipeline)
+    client, rt = app_with()
+    rt.turns, rt.handler = None, None
+    rt.messages_for = lambda lang: (
+        asked.append(lang) or {"guard.busy": {"de": "Beschäftigt", "en": "Busy"}[lang or "de"]}
+    )
+    rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
+    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+    base = {"question": "Frage", "conversation_id": "c-3"}
+    got = {}
+    for lang in ("en", "de", "fr", None):
+        params = {**base, **({"lang": lang} if lang else {})}
+        reply = client.get("/api/chat", params=params, headers={"Authorization": "Bearer t0k"})
+        assert reply.status_code == 200
+        got[lang] = [json.loads(x[6:]) for x in reply.text.split("\n") if x.startswith("data: ")][2]["content"]
+    assert got == {"en": "Busy", "de": "Beschäftigt", "fr": "Beschäftigt", None: "Beschäftigt"}
+    assert seen == ["en", "de", None, None] and asked == ["en", "de", None, None]  # a language the page lacks is none
 
 
 def test_the_lifespan_starts_the_heal_task_after_a_failed_load_and_cancels_it_before_the_dispose(monkeypatch) -> None:
@@ -288,7 +315,7 @@ def chip_client(monkeypatch, roles):
 
     monkeypatch.setattr(chat_route, "pipeline", pipeline)
     client, rt = app_with()
-    rt.turns, rt.handler, rt.messages = Turns(), None, {"guard.error": "Fehler"}
+    rt.turns, rt.handler, rt.messages_for = Turns(), None, lambda lang: {"guard.error": "Fehler"}
     rt.settings.roles = roles
     rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
     rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))

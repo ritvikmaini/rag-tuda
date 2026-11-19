@@ -247,8 +247,23 @@ def test_the_example_messages_carry_the_labels(secrets: Path) -> None:
 def test_the_runtime_flattens_the_texts_and_leaves_the_labels_out(secrets: Path) -> None:
     rt = Runtime.__new__(Runtime)  # only the settings property reads are needed
     rt.settings = load_settings(environment(), secrets_dir=secrets)
-    assert MESSAGES.items() <= rt.messages.items()  # the runtime's table keeps its dict[str, str]
-    assert all(isinstance(text, str) and not key.startswith("labels.") for key, text in rt.messages.items())
+    assert MESSAGES.items() <= rt.messages_for(None).items()  # the runtime's table keeps its dict[str, str]
+    assert all(isinstance(text, str) and not key.startswith("labels.") for key, text in rt.messages_for("de").items())
+
+
+def test_messages_come_per_language_and_a_profile_without_english_reads_german(secrets: Path) -> None:
+    example = load_settings(environment(), secrets_dir=secrets)  # messages.de.yaml only
+    assert example.messages_en is None
+    assert example.messages_for("en") is example.messages_for("de") is example.messages_for(None) is example.messages
+    tu = load_settings(
+        environment(RAG_PROFILE=str(ROOT / "profiles" / "tu-informatik" / "profile.yaml")), secrets_dir=secrets
+    )
+    assert tu.messages_en is not None
+    assert tu.messages_for("en") is tu.messages_en and tu.messages_for("de") is tu.messages is tu.messages_for(None)
+    assert "Many requests" in tu.messages_for("en").guard.busy and "Gerade sind" in tu.messages_for("de").guard.busy
+    rt = Runtime.__new__(Runtime)
+    rt.settings = tu
+    assert rt.messages_for("en")["guard.busy"] == tu.messages_en.guard.busy
 
 
 def test_the_card_comes_from_a_name_or_a_file(secrets: Path) -> None:

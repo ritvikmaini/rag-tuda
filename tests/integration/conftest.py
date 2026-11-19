@@ -22,7 +22,7 @@ GEN = Path(__file__).resolve().parents[2] / "deploy" / "ci" / ".generated"
 # the example leg runs this folder's tests but the TU ones, the TU leg its own tests (tu/), test_index_ids.py, which holds for
 # any profile, and the TU-only tests here
 PROFILE = os.environ.get("RAG_CI_PROFILE")
-TU_ONLY = {"test_filter_carry_over.py"}
+TU_ONLY = {"test_filter_carry_over.py", "test_languages.py"}
 if not (GEN / "ci.env").exists() or PROFILE not in ("example", "tu"):
     collect_ignore_glob = ["test_*.py"]
 elif PROFILE == "tu":

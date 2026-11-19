@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from rag_core.domain.access import ANONYMOUS
 from rag_core.domain.filters import Chips, check_chips
 from rag_core.domain.history import valid_turn_id
+from rag_core.domain.language import LANGUAGES
 
 from assistant_api.api.deps import limiter, verify_token
 from assistant_api.chat.guard import guard
@@ -38,9 +39,11 @@ async def main(
     degree: Optional[str] = None,
     programme: Optional[str] = None,
     po: Optional[int] = None,
+    lang: Optional[str] = None,
     token: None = Depends(verify_token),
 ) -> StreamingResponse:
     rt = request.app.state.runtime
+    lang = lang if lang in LANGUAGES else None  # the page's language: the texts that fire before the question is read
     chips = Chips(degree or None, programme or None, po)
     if chips != Chips():  # an empty selector is "not chosen"; a value the roles do not know is refused, never ignored
         roles = rt.settings.roles.model_dump() if rt.settings.roles else {}
@@ -64,7 +67,7 @@ async def main(
     on_end = partial(
         end_turn, rt.turns, record
     )  # the [Turn] line for every request; the store's finish where both exist
-    # every request ends within the deadline with an answer or a German message
+    # every request ends within the deadline with an answer or a message in the page's language
     deadline_at = time.monotonic() + timeouts.deadline_s
     return StreamingResponse(
         guard(
@@ -85,11 +88,12 @@ async def main(
                 record=record,
                 deadline_at=deadline_at,
                 chips=chips,
+                lang=lang,
             ),
             deadline_s=timeouts.deadline_s,
             idle_s=timeouts.idle_s,
             meta=frames.meta(turn, trace),
-            messages=rt.messages,
+            messages=rt.messages_for(lang),
             on_end=on_end,
             run_info=(lambda: record.run) if record is not None else None,
             scope_fallback=(lambda: getattr(record.result, "scope_fallback", False) is True)

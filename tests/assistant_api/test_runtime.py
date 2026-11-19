@@ -333,7 +333,7 @@ def test_timeouts_come_from_card(tmp_path, monkeypatch) -> None:
     app = create_app()
     app.dependency_overrides[chat_route.verify_token] = lambda: None
     rt.settings = types.SimpleNamespace(
-        card=short, profile=settings.profile, overlay=settings.overlay, messages=settings.messages
+        card=short, profile=settings.profile, overlay=settings.overlay, messages_for=settings.messages_for
     )
     rt.handler, rt.turns = None, None
     app.state.runtime = rt

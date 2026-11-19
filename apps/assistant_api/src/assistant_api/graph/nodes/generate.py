@@ -35,7 +35,7 @@ from rag_core.settings.profile import StatusGroup
 
 from assistant_api.graph.filter_line import no_match_line
 from assistant_api.graph.history import as_messages, insert_history, line_texts, to_messages, without_lines
-from assistant_api.graph.state import AgentState, GraphDeps
+from assistant_api.graph.state import AgentState, GraphDeps, messages_for
 
 logger = logging.getLogger(__name__)
 CITATION = re.compile(r"\[(\d+)\]")
@@ -166,10 +166,12 @@ def make_generate(deps: GraphDeps):
         logger.info(
             f"[History] completed_fresh={len(prior)} kept={len(chosen)} stored_messages={len(state['messages'])}"
         )
+        language = answer_language(state)
+        catalog = messages_for(deps, language)  # the lines and fallback texts are in the answer's language
         variables = {
             "question": state.get("standalone_question") or current.content,
             "context": state.get("formatted_docs", ""),
-            "language": PROMPT_NAMES[answer_language(state)],
+            "language": PROMPT_NAMES[language],
             "current_date": format_date(datetime.now(), profile.identity.date_format, profile.identity.day_names),
             "bot_name": profile.identity.bot_name,
             "intent": intent,
@@ -177,7 +179,7 @@ def make_generate(deps: GraphDeps):
             "language_reminder": language_reminder(state),
             "shape_reminder": shape_reminder(state),
         }
-        english = answer_language(state) == "en"
+        english = language == "en"
         sources: list[Any] = []
         shown: list[Any] = []  # the metadata of each source in the context
         no_match = ""  # the closing line of an answer to an empty search under a filter
@@ -236,7 +238,7 @@ def make_generate(deps: GraphDeps):
                         (applied.po_version or ()) if applied else (),
                         top,
                         shown,
-                        (deps.messages_en if english and deps.messages_en else deps.messages).answer,
+                        catalog.answer,
                         compare=groups.compare,
                         differ=groups.reminder == "differ",
                         version_table=deps.card.gated.version_table,
@@ -254,13 +256,13 @@ def make_generate(deps: GraphDeps):
             no_match = no_match_line(
                 state.get("filter"),
                 deps.roles,
-                (deps.messages_en if english and deps.messages_en else deps.messages).answer,
+                catalog.answer,
                 english,
             )
             prompt = await asyncio.to_thread(answer_prompt, "no-docs-found", history, variables, position)
         try:
             llm = deps.answer_llm
-            if answer_language(state) == "de":
+            if language == "de":  # the card's token biases and bans are for German text
                 llm = with_decoding_limits(llm, deps.card.quirks, deps.card.answer.provider)
             response = await ainvoke_waiting(
                 llm,
@@ -275,7 +277,7 @@ def make_generate(deps: GraphDeps):
             elif holds_answer(state):
                 try:
                     reply = past_event_reply(
-                        str(response.content), variables["context"], datetime.now().date(), deps.messages.answer
+                        str(response.content), variables["context"], datetime.now().date(), catalog.answer
                     )
                 except Exception as exc:  # the check never costs an answer: the model's is sent
                     logger.warning(f"[PastEvent] held check_failed={type(exc).__name__}")
@@ -289,7 +291,7 @@ def make_generate(deps: GraphDeps):
                 and table
                 and state.get("raw_docs")
                 and sources
-                and answer_language(state) == "de"
+                and language == "de"
                 and shape_of(state.get("answer_shape")) == "text"
             ):
                 try:
@@ -302,7 +304,7 @@ def make_generate(deps: GraphDeps):
                         f"contact={scope.contact} note={note.kind if note else None}"
                     )
                     if note:
-                        texts = deps.messages.answer
+                        texts = catalog.answer
                         text = (
                             texts.scope_note_other.format(group=note.group, asked=note.other)
                             if note.kind == "other"
@@ -319,7 +321,7 @@ def make_generate(deps: GraphDeps):
                     lines = appended_lines(
                         [m for s, m in zip(sources, shown) if s["n"] in numbers],
                         (deps.roles or {}).get("programmes") or {},
-                        (deps.messages_en if english and deps.messages_en else deps.messages).answer,
+                        catalog.answer,
                         english=english,
                         term=bool(applied and applied.po_source == "term"),
                         answer=answer,
@@ -334,9 +336,9 @@ def make_generate(deps: GraphDeps):
             logger.error(f"Error during LLM invocation: {type(e).__name__}" + (f" status={status}" if status else ""))
             failure = failure_of(e, deps.card.answer.provider)
             texts = {
-                TOO_LONG: deps.messages.answer.context_too_long,  # the trim path: the user is asked to shorten the question
-                BUSY: deps.messages.guard.busy,
-                TIMEOUT: deps.messages.guard.timeout,
+                TOO_LONG: catalog.answer.context_too_long,  # the trim path: the user is asked to shorten the question
+                BUSY: catalog.guard.busy,
+                TIMEOUT: catalog.guard.timeout,
             }
             if failure is None:
                 raise

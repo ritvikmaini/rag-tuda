@@ -76,7 +76,12 @@ class GraphDeps:
     roles: Optional[dict[str, Any]] = (
         None  # the dump of roles.yaml (plain data for the filter readers); None without the file
     )
-    messages_en: Optional[Messages] = (
-        None  # the profile's English texts, for the lines code appends to an English answer
-    )
+    messages_en: Optional[Messages] = None  # the profile's English texts (messages.en.yaml); None = German only
     follow_up: Optional[ChatModel] = None  # the analysis client with the follow-up schema; None = no iterative round
+
+
+def messages_for(deps: Any, language: str | None) -> Messages:
+    """The graph's texts for a language, "de" or "en": the deps' English texts for "en" when the profile has them, else the German
+    ones (the nodes read stand-ins of GraphDeps in the tests, so this takes any object with these attributes)."""
+    english = getattr(deps, "messages_en", None)
+    return english if language == "en" and english else deps.messages

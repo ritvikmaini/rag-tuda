@@ -51,24 +51,25 @@ async def pipeline(
     record: TurnRecord | None = None,
     deadline_at: float | None = None,
     chips: Chips | None = None,
+    lang: str | None = None,
 ) -> AsyncIterator[Any]:
     """
     RAG pipeline with concurrency control. `turn` is the turn id the route sent in `meta` (the stored question takes it) and
     `trace_id` the Langfuse trace id it sent (None: untraced). `record` is the question's turn (None for a variant or a switch):
     the store gets its row before the early exits and the run fills it, the guard's end writes it. `deadline_at` is the guard's
     deadline as a time.monotonic() value: the answer step waits out a rate limit only within it. `chips` are the page's degree,
-    programme and PO selectors of this request (already checked against the roles).
+    programme and PO selectors of this request (already checked against the roles). `lang` is the page's language ("de", "en"
+    or None): the texts that fire before the question is read (refused variant, too long, busy, not ready) and the stream's
+    "no sources" note read the profile's messages for it, the answer and its lines the question's own language.
 
     Uses a semaphore to limit concurrent executions and prevent resource exhaustion
     under high load. Excess requests will wait for a slot to become available.
     """
+    texts = rt.settings.messages_for(lang)
     # Check if data has been ingested yet; a worker whose start-up load failed tries to
     # heal itself first
     if rt.chain is None and not await try_reload(rt):
-        yield fr.Error(
-            content="No index has been built yet. Build it first with `indexer build`.",
-            code="not_ready",
-        )
+        yield fr.Error(content=texts.guard.not_ready, code="not_ready")
         return
 
     # Response formats v1: a version switch needs no model and no slot; a variant is checked before it waits for the slot,
@@ -88,7 +89,7 @@ async def pipeline(
             problem = await rt.turns.variant_problem(user, variant, clean_variant_of)
         if problem:
             logging.info(f"[Variant] refused name={variant!r} reason={problem} (user: {user})")
-            yield fr.Chunk(content=rt.settings.messages.variant.refused)
+            yield fr.Chunk(content=texts.variant.refused)
             yield fr.variant(variant, False, VARIANT_CODES[problem])
             yield fr.Declared("refused")
             return
@@ -113,7 +114,7 @@ async def pipeline(
     max_chars = rt.settings.profile.guard.max_question_chars
     if len(question) > max_chars:
         limit_text = f"{max_chars:,}".replace(",", ".")
-        yield fr.Chunk(content=rt.settings.messages.question.too_long.format(limit=limit_text))
+        yield fr.Chunk(content=texts.question.too_long.format(limit=limit_text))
         yield fr.Declared("too_long")
         return
 
@@ -125,7 +126,7 @@ async def pipeline(
         )
     except asyncio.TimeoutError:
         logging.warning(f"RAG pipeline timeout waiting for slot (user: {user})")
-        yield fr.Error(content="Service is currently busy. Please try again shortly.", code="busy")
+        yield fr.Error(content=texts.guard.busy, code="busy")
         yield fr.Declared("busy")
         return
 
@@ -150,7 +151,7 @@ async def pipeline(
             # the stored context of the turn: the run changes nothing until its version is kept below
             taken = await rt.turns.variant_input(user, variant, clean_variant_of)
             if isinstance(taken, str):  # the reason it was refused
-                yield fr.Chunk(content=rt.settings.messages.variant.refused)
+                yield fr.Chunk(content=texts.variant.refused)
                 yield fr.variant(variant, False, VARIANT_CODES[taken])
                 yield fr.Declared("refused")
                 return
@@ -176,7 +177,7 @@ async def pipeline(
                 formats_on=formats_on,
                 variant=variant,
                 sources_mode=rt.settings.profile.formats.sources_event,
-                none_text=rt.settings.messages.docs.none,
+                none_text=lambda language: rt.settings.messages_for(language).docs.none,
                 result=result,
                 user=user,
                 strip_cjk=rt.settings.card.quirks.strip_cjk,
@@ -192,7 +193,7 @@ async def pipeline(
             )
             if record is not None:
                 record.error = "pipeline_error:" + type(e).__name__
-            yield fr.Error(content="An error occurred processing your request.", code="pipeline_error")
+            yield fr.Error(content=texts.guard.error, code="pipeline_error")
         if variant is not None:
             # a variant without an answer (a stop, a failed run) keeps nothing: the turn stays as it was
             ok = result.answer is not None and await rt.turns.keep_version(

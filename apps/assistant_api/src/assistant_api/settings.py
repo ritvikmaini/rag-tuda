@@ -135,6 +135,17 @@ class AssistantSettings:
     def guard(self) -> Guard:
         return self.profile.guard
 
+    def messages_for(self, language: str | None) -> Messages:
+        """The texts for a language, "de" or "en": the profile's messages.<language>.yaml. A language the profile has no file
+        for (English on a profile with German texts only), and none, read the German texts."""
+        return self.messages_en if language == "en" and self.messages_en else self.messages
+
+
+def _messages(directory: Path, language: str) -> Messages | None:
+    """messages.<language>.yaml beside the profile; None when the profile has no such file."""
+    file = directory / f"messages.{language}.yaml"
+    return Messages.model_validate(yaml.safe_load(file.read_text(encoding="utf-8"))) if file.exists() else None
+
 
 def _card(environ: Mapping[str, str]) -> Card:
     """The model card: RAG__CARD names a shipped card (in RAG_CARDS_DIR, the image's /app/cards), RAG__CARD_FILE a card file.
@@ -174,18 +185,22 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Pa
             f"compute.slot_wait_s < timeouts.idle_s <= timeouts.deadline_s (the card {card.name}'s): the guard's "
             "silence limit must not end a request that waits for the slot"
         )
-    texts = yaml.safe_load((profile_file.parent / "messages.de.yaml").read_text(encoding="utf-8"))
+    messages = _messages(profile_file.parent, "de")
+    if messages is None:
+        raise SettingsError(f"messages.de.yaml: missing beside {profile_file} (the German texts every profile has)")
     prompts = load_profile_prompts(profile_file.parent / "prompts")
     roles_file = profile_file.parent / "roles.yaml"
     roles = load_profile(Roles, roles_file) if roles_file.exists() else None
     acronyms_file = profile_file.parent / "acronyms.yaml"
     acronyms = load_profile(Acronyms, acronyms_file) if acronyms_file.exists() else None
-    english_file = profile_file.parent / "messages.en.yaml"
-    english = (
-        Messages.model_validate(yaml.safe_load(english_file.read_text(encoding="utf-8")))
-        if english_file.exists()
-        else None
-    )
     return AssistantSettings(
-        profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent, roles, english, acronyms
+        profile,
+        card,
+        overlay,
+        messages,
+        prompts,
+        profile_file.parent,
+        roles,
+        _messages(profile_file.parent, "en"),
+        acronyms,
     )

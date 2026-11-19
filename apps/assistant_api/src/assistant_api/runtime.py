@@ -77,12 +77,11 @@ class Runtime:
             "prompts": self.prompts.versions(),
         }
 
-    @property
-    def messages(self) -> dict[str, str]:
-        """The profile's messages as a flat mapping ("guard.busy", …): the form the guard's code table reads."""
+    def messages_for(self, language: str | None) -> dict[str, str]:
+        """The profile's messages for a language as a flat mapping ("guard.busy", …): the form the guard's code table reads."""
         return {
             f"{group}.{key}": text
-            for group, texts in self.settings.messages.model_dump(exclude={"labels"}).items()
+            for group, texts in self.settings.messages_for(language).model_dump(exclude={"labels"}).items()
             for key, text in texts.items()
         }
 

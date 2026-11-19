@@ -65,6 +65,18 @@ def fake_stream(answer):
     return run_stream
 
 
+TEXTS = {
+    lang: SimpleNamespace(
+        question=SimpleNamespace(too_long=too_long + " {limit}"),
+        docs=SimpleNamespace(none=none),
+        variant=SimpleNamespace(refused=refused),
+        guard=SimpleNamespace(busy=busy, not_ready=not_ready, error=error),
+    )
+    for lang, (too_long, none, refused, busy, not_ready, error) in {
+        "de": ("zu lang", "keine", "abgelehnt", "beschäftigt", "nicht bereit", "Fehler"),
+        "en": ("too long", "none", "refused", "busy", "not ready", "error"),
+    }.items()
+}
 store = Store()
 rt = SimpleNamespace()  # filled per test from the attributes the landed service reads
 
@@ -79,7 +91,6 @@ def runtime(problem=""):
         handler=None,
         langfuse=None,
         collection="example",
-        messages={"variant.refused": "abgelehnt"},
         run_info=lambda: {"collection": "example"},
         settings=SimpleNamespace(
             guard=SimpleNamespace(max_question_chars=20),
@@ -88,11 +99,7 @@ def runtime(problem=""):
                 guard=SimpleNamespace(max_question_chars=20), formats=SimpleNamespace(sources_event="before")
             ),
             overlay=SimpleNamespace(compute=SimpleNamespace(slot_wait_s=0.1)),
-            messages=SimpleNamespace(
-                question=SimpleNamespace(too_long="zu lang {limit}"),
-                docs=SimpleNamespace(none="keine"),
-                variant=SimpleNamespace(refused="abgelehnt"),
-            ),
+            messages_for=lambda lang: TEXTS[lang or "de"],
         ),
     )
     return rt
@@ -241,3 +248,34 @@ def test_a_pipeline_exception_names_its_class_on_the_record(monkeypatch, caplog)
     assert [f.code for f in out if isinstance(f, fr.Error)] == ["pipeline_error"]
     lines = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
     assert lines == ["Error in RAG pipeline (user: c-1): ValueError"]
+
+
+def test_the_texts_that_fire_before_the_question_is_read_follow_the_page_lang(monkeypatch):
+    runtime()
+    for lang, too_long in (("en", "too long 20"), ("de", "zu lang 20"), (None, "zu lang 20")):
+        out = collect(monkeypatch, question="x" * 30, lang=lang)
+        assert [f.content for f in out if isinstance(f, fr.Chunk)] == [too_long], lang
+    runtime(problem="no sources")
+    refused = {
+        lang: collect(monkeypatch, question="Frage", variant="shorter", variant_of=T1, formats="v1", lang=lang)
+        for lang in ("en", "de")
+    }
+    assert {lang: out[0].content for lang, out in refused.items()} == {"en": "refused", "de": "abgelehnt"}
+
+
+def test_the_busy_and_the_not_ready_errors_are_the_texts_of_the_page_lang(monkeypatch):
+    runtime()
+    rt.settings.overlay.compute.slot_wait_s = 0.01
+    busy = {}
+    for lang in ("en", "de"):
+        rt.slot = asyncio.Semaphore(0)  # the one slot is held (a semaphore belongs to the loop that first waits on it)
+        busy[lang] = collect(monkeypatch, question="Frage", lang=lang)[0]
+    assert [(f.code, f.content) for f in busy.values()] == [("busy", "busy"), ("busy", "beschäftigt")]
+    rt.chain = None
+
+    async def no_reload(rt):
+        return False
+
+    monkeypatch.setattr(service, "try_reload", no_reload)
+    not_ready = [collect(monkeypatch, question="Frage", lang=lang)[0] for lang in ("en", "de")]
+    assert [(f.code, f.content) for f in not_ready] == [("not_ready", "not ready"), ("not_ready", "nicht bereit")]
