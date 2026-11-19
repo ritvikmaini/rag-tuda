@@ -38,7 +38,9 @@ class Retrieval:
     def __init__(self):
         self.calls = []
 
-    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(
+        self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None, language=None
+    ):
         self.calls.append((list(queries), question))
         text = " ".join(queries) + question
         if "Fehlerwurm" in text:

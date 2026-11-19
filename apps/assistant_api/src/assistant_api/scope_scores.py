@@ -24,6 +24,7 @@ import yaml
 from rag_core.adapters.http import close_http_client
 from rag_core.adapters.pg_index import open_index
 from rag_core.domain.access import ANONYMOUS
+from rag_core.domain.answer_shapes import answer_language
 from rag_core.domain.doc_scores import sort_score
 from rag_core.domain.resilience import dispose_engines
 from rag_core.settings import SettingsError
@@ -68,6 +69,7 @@ async def score_one(deps: GraphDeps, analyse: Any, question: str) -> dict[str, A
             date_from=state["date_from"],
             date_to=state["date_to"],
             principal=ANONYMOUS,
+            language=answer_language(state),
         )
     except Exception as exc:
         row["error"] = type(exc).__name__

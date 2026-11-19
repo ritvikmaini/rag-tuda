@@ -138,9 +138,11 @@ class RetrievalService:
         date_to: str | None = None,
         principal: Principal = ANONYMOUS,
         today: date | None = None,
+        language: str | None = None,
     ) -> list[Hit]:
         """The ranked hits for the queries. The filter (None: none) narrows both legs and both section lookups; a filter
-        that keeps nothing gives no hits, the search is never repeated without it."""
+        that keeps nothing gives no hits, the search is never repeated without it. `language` ("de" or "en", the answer's)
+        decides which twin of a non-binding page stays; without it the detector reads the question."""
         logger.info(f"[DocumentRetriever] using {len(queries)} retrieval queries")
         tasks = [self._search(query, filter) for query in queries]
         # each query bounded; failed queries are skipped, and if every query failed the request ends with the German
@@ -213,7 +215,7 @@ class RetrievalService:
         if self.retrieval.switches.reference_hop and standalone:
             parent_docs = [*parent_docs, *await self._hop(parent_docs, standalone, filter, principal)]
 
-        final_docs = collapse_twins(deduplicate(parent_docs), detect(question or " ".join(queries)))
+        final_docs = collapse_twins(deduplicate(parent_docs), language or detect(question or " ".join(queries)))
         # Always sort by score before the cut: otherwise the list is in database order and the cut could drop the best.
         final_docs.sort(key=lambda d: sort_score(d.metadata), reverse=True)
 

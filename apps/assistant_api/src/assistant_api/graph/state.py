@@ -60,6 +60,7 @@ class Retriever(Protocol):
         date_from: str | None = None,
         date_to: str | None = None,
         principal: Principal = ANONYMOUS,
+        language: str | None = None,
     ) -> list[Any]: ...
 
 

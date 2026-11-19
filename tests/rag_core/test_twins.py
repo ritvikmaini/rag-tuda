@@ -77,13 +77,16 @@ def test_collapse_keeps_the_twins_there_are_when_the_wanted_language_is_not_amon
 
 
 class Index:
-    """Both legs and the reranker over two twin sections and one plain section."""
+    """Both legs and the reranker over two twin sections (of `regulation`) and one plain section."""
+
+    def __init__(self, regulation: str = "apb") -> None:
+        self.regulation = regulation
 
     async def search(self, *args, **kwargs):
         return [Hit(page_content=f"child {i}", metadata={"section_id": f"s{i}"}) for i in ("de", "en", "info")]
 
     async def get_many(self, section_ids, filter=None):
-        meta = {"regulation": "apb", "twin_key": "apb-twin"}
+        meta = {"regulation": self.regulation, "twin_key": "apb-twin"}
         sections = {
             "sde": Section("sde", "Parent de", {**meta, "lang": "de", "filename": "apb.de.pdf"}),
             "sen": Section("sen", "Parent en", {**meta, "lang": "en", "filename": "apb.en.pdf"}),
@@ -101,9 +104,9 @@ class Index:
         return [(0.9, t) for t in sorted(set(texts))]
 
 
-def retrieve(question: str) -> list[Hit]:
+def retrieve(question: str, language: str | None = None, regulation: str = "apb") -> list[Hit]:
     profile = load_profile(Profile, PROFILE)
-    index = Index()
+    index = Index(regulation)
     timeouts = Timeouts(retrieval_s=10, parent_lookup_s=5, reranker_s=15)
     service = RetrievalService(
         None,
@@ -119,10 +122,18 @@ def retrieve(question: str) -> list[Hit]:
         1,  # type: ignore[arg-type]
         chars_per_token=3.3,
     )
-    return asyncio.run(service.retrieve([question], question=question))
+    return asyncio.run(service.retrieve([question], question=question, language=language))
 
 
 def test_twins_collapse_german_wins_for_regulations() -> None:
     for question in ("What does the APB say about repeating an exam?", "Wie oft darf ich eine Prüfung wiederholen?"):
         docs = retrieve(question)
         assert sorted(d.page_content for d in docs) == ["Parent de", "Parent info"], question
+
+
+def test_twins_collapse_on_the_language_the_analysis_gave_not_on_the_detector() -> None:
+    # no stopword: the detector says German, the analysis knows the question is English
+    question = "Housing deadline?"
+    assert sorted(d.page_content for d in retrieve(question, regulation="info")) == ["Parent de", "Parent info"]
+    assert sorted(d.page_content for d in retrieve(question, "en", "info")) == ["Parent en", "Parent info"]
+    assert sorted(d.page_content for d in retrieve("Wann ist die Frist?", "en", "info")) == ["Parent en", "Parent info"]

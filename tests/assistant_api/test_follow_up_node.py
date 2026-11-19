@@ -94,7 +94,9 @@ class Retrieval:
     def __init__(self, fail_second: bool = False) -> None:
         self.calls, self.fail_second = [], fail_second
 
-    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(
+        self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None, language=None
+    ):
         self.calls.append({"queries": list(queries), "filter": filter, "question": question})
         if len(self.calls) == 1:
             return [source("a", 0.7)]

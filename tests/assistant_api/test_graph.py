@@ -58,7 +58,9 @@ FILTERS: list[Any] = []  # the filters it was asked for
 
 
 class Retrieval:
-    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(
+        self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None, language=None
+    ):
         SEEN.append(principal)
         FILTERS.append(filter)
         return [
@@ -300,7 +302,9 @@ class Scored:
     def __init__(self, *scores: float | None) -> None:
         self.scores, self.calls = scores, []
 
-    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(
+        self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None, language=None
+    ):
         self.calls.append(list(queries))
         return [
             Document(
@@ -639,7 +643,9 @@ class Dated:
     def __init__(self, text: str) -> None:
         self.text = text
 
-    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(
+        self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None, language=None
+    ):
         meta = {"filename": "a.pdf", "section_id": "p1", "cross_encoder_score": 0.9, "url": "https://x/a.pdf"}
         return [Document(page_content=self.text, metadata=meta)]
 
@@ -783,7 +789,9 @@ class Titled:
     def __init__(self, *titles: str) -> None:
         self.titles = titles
 
-    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(
+        self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None, language=None
+    ):
         return [
             Document(
                 page_content="Regel %d" % i,
@@ -945,3 +953,27 @@ def test_an_empty_result_without_a_named_filter_gets_no_line() -> None:
 
     for text in (no_docs_text("Wann?", Chips()), no_docs_text("Wann?", roles=False)):
         assert text == "Dazu steht nichts in den Dokumenten."
+
+
+def test_the_retrieve_node_hands_the_answer_language_to_the_search() -> None:
+    from types import SimpleNamespace
+
+    from assistant_api.graph.nodes.retrieve import make_retrieve
+    from langchain_core.messages import HumanMessage
+
+    asked: list[Any] = []
+
+    class Recording:
+        async def retrieve(self, queries, filter=None, *, language=None, **_):
+            asked.append(language)
+            return []
+
+    node = make_retrieve(
+        SimpleNamespace(
+            retrieval=Recording(),
+            profile=SimpleNamespace(retrieval=SimpleNamespace(rerank=SimpleNamespace(scope_fallback_min=None))),
+        )  # type: ignore[arg-type]
+    )
+    for language in ("en", "de"):
+        asyncio.run(node({"messages": [HumanMessage("Housing deadline?")], "language": language}, {}))  # type: ignore[arg-type]
+    assert asked == ["en", "de"]

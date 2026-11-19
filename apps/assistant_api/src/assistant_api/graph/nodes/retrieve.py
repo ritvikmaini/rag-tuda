@@ -6,6 +6,7 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig
 from rag_core.domain.access import ANONYMOUS
+from rag_core.domain.answer_shapes import answer_language
 from rag_core.domain.doc_scores import sort_score
 
 from assistant_api.graph.state import AgentState, GraphDeps
@@ -29,6 +30,7 @@ def make_retrieve(deps: GraphDeps):
             date_from=state.get("date_from"),
             date_to=state.get("date_to"),
             principal=principal,
+            language=answer_language(state),
         )
         # LangChain Documents inside the graph
         docs = [Document(page_content=h.page_content, metadata=h.metadata) for h in hits]

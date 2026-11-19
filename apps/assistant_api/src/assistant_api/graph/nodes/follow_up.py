@@ -9,6 +9,7 @@ from typing import Any
 from langchain_core.documents import Document
 from langchain_core.runnables import RunnableConfig
 from rag_core.domain.access import ANONYMOUS
+from rag_core.domain.answer_shapes import answer_language
 from rag_core.domain.follow_up import DIGEST_TOKENS, sections_digest
 from rag_core.services.follow_up import follow_up_queries
 
@@ -47,6 +48,7 @@ def make_follow_up(deps: GraphDeps):
                 date_from=state.get("date_from"),
                 date_to=state.get("date_to"),
                 principal=principal,
+                language=answer_language(state),
             )
         except Exception as e:
             logger.error(f"[FollowUp] extra search failed, keeping the first search: {type(e).__name__}")
