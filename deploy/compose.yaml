@@ -209,6 +209,9 @@ services:
     logging: *default-logging
     volumes:
       - ../data:/app/data
+      # the crawl and its snapshots live in .rag/ like the native stack's, where `rag down --purge` deletes them
+      - ../.rag/crawl:/app/data/crawl
+      - ../.rag/snapshots:/app/data/snapshots
       - ../logs:/app/logs
       - ~/.cache/huggingface:/root/.cache/huggingface
       - ~/.cache/docling:/root/.cache/docling
@@ -221,6 +224,9 @@ services:
       - TZ=Europe/Berlin
       - HF_HUB_DISABLE_XET=1
       - RAG_OVERLAY=/app/overlay.yaml
+      # the crawled PDFs and the text extracted from them sit in the crawl folder
+      - RAG__PATHS__PDF_DIR=/app/data/crawl/pdfs
+      - RAG__PATHS__EXTRACTED_DIR=/app/data/crawl/extracted
       # the user's own crawl contact for the user agent: passed through when the shell that runs compose has it
       - RAG__CRAWL__CONTACT
     secrets:

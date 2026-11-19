@@ -132,6 +132,18 @@ def test_the_indexer_reads_its_profile_and_overlay_and_the_images_are_built_with
     assert indexer["build"]["args"]["PROFILE"] == rendered["backend"]["build"]["args"]["PROFILE"] == "other"
 
 
+def test_the_compose_indexer_keeps_the_crawl_under_the_rag_folder_that_down_purge_deletes():
+    # the same folders as the native stack (runtime.indexer_paths): pages, PDFs, extracted text and snapshots in .rag/
+    from indexer.settings import PathsSection
+
+    indexer = services(BASE)["indexer"]
+    mounts = dict(v.split(":")[::-1][:2][::-1] for v in indexer["volumes"] if v.startswith("../.rag/"))
+    crawl = PathsSection().crawl_dir
+    assert mounts == {"../.rag/crawl": crawl, "../.rag/snapshots": os.path.join(os.path.dirname(crawl), "snapshots")}
+    env = dict(e.split("=", 1) for e in indexer["environment"] if "=" in e)
+    assert env["RAG__PATHS__PDF_DIR"] == f"{crawl}/pdfs" and env["RAG__PATHS__EXTRACTED_DIR"] == f"{crawl}/extracted"
+
+
 def test_the_default_overlay_names_the_example_profiles_law_texts():
     with open(os.path.join(ROOT, "deploy/env/compose-indexer.yaml"), encoding="utf-8") as fh:
         overlay = yaml.safe_load(fh)
