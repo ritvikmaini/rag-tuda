@@ -7,7 +7,8 @@ the steps in German; the backend only sends the step and its facts. The facts ar
 already logs (the [QueryAnalysis] line) and traces in Langfuse, so every step a user sees can be traced there.
 
 Steps: analysing (query analysis starts), understood (standalone question, intent and the applied hard filter), searching (the
-document search starts, with its search terms; only document intents reach it), found (documents in the
+document search starts, with its search terms; only document intents reach it), searching_more (the iterative round's
+follow-up search starts; only a question the analysis marked as needing more documents reaches it), found (documents in the
 answer context), writing (the answer starts)."""
 
 import logging
@@ -29,7 +30,7 @@ from assistant_api.sse.events import citations_frame, docs_frame, shape_frame
 
 logger = logging.getLogger(__name__)
 
-REWRITE_NODE, SEARCH_NODE, FORMAT_NODE, GENERATE_NODE = NODES
+REWRITE_NODE, SEARCH_NODE, FOLLOW_UP_NODE, FORMAT_NODE, GENERATE_NODE = NODES
 
 
 def _source_url(doc):
@@ -67,6 +68,8 @@ def _status(event):
             if query and query != question and query not in queries:
                 queries.append(query)
         return {"step": "searching", "queries": queries}
+    if name == FOLLOW_UP_NODE and kind == "on_chain_start":
+        return {"step": "searching_more"}
     if name == FORMAT_NODE and kind == "on_chain_end":
         state = data.get("input")
         raw_docs = (state.get("raw_docs") if isinstance(state, dict) else None) or []

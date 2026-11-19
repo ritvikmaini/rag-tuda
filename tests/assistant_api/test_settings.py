@@ -61,6 +61,7 @@ NAMED = {
     "retrieval.switches.fusion_cut": True,
     "retrieval.switches.whole_parents": True,
     "retrieval.switches.reference_hop": True,
+    "retrieval.switches.iterative_round": True,
     "retrieval.fusion_weight": 0.5,
 }
 # the stack's technical values (deploy/compose.yaml's backend environment; a repo test holds the file to them)

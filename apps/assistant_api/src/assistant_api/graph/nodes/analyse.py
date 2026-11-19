@@ -42,6 +42,8 @@ def make_analyse(deps: GraphDeps):
             "intent": analysis.intent,
             "standalone_question": analysis.standalone_question,
             "retrieval_queries": queries,
+            "needs_more": analysis.needs_more,
+            "follow_up_queries": [],
             "date_from": analysis.date_from,
             "date_to": analysis.date_to,
             # the readers run on the user's own words, so they also work when the analysis fell back; the state's filter, if

@@ -15,6 +15,9 @@ from evals.runner import ask, run_conversation, run_stamp
 from evals.settings import load_settings
 
 STEPS = ("analysing", "understood", "searching", "found", "writing")  # a lookup's status steps, in order
+OPTIONAL_STEPS = (
+    "searching_more",
+)  # the iterative round's step: it appears, after "searching", only for a question that needs more
 NEW_TYPES = ("meta", "done")  # stream format 1: the smoke judges the frames an old reader sees
 
 
@@ -28,7 +31,7 @@ def structural(kind, last, row, steps, max_ttft):
     if answered and (row["first_token_s"] is None or row["first_token_s"] >= max_ttft):
         problems.append("ttft")
     if last and kind == "lookup":
-        if list(steps) != list(STEPS):
+        if [step for step in steps if step not in OPTIONAL_STEPS] != list(STEPS):
             problems.append("status steps")
         problems += ["no " + frame for frame in ("docs", "chunk", "citations") if frame not in types]
     elif last and kind == "direct":

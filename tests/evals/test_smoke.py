@@ -45,6 +45,8 @@ def test_the_structural_rules_per_kind():
         "lookup", True, dict(LOOKUP_ROW, event_types=["status"] * 5 + ["docs", "chunk"]), steps, 20
     ) == ["no citations"]
     assert smoke.structural("lookup", True, LOOKUP_ROW, steps[:4], 20) == ["status steps"]
+    more = [*steps[:3], "searching_more", *steps[3:]]  # the iterative round's step may follow "searching"
+    assert smoke.structural("lookup", True, LOOKUP_ROW, more, 20) == []
     assert smoke.structural("direct", True, LOOKUP_ROW, steps, 20) == ["docs"]
     assert smoke.structural("too_long", True, dict(LOOKUP_ROW, event_types=["status", "chunk"]), [], 20) == [
         "frames status,chunk"

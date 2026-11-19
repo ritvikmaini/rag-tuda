@@ -18,9 +18,10 @@ from rag_core.adapters.reranker_http import RerankerHttp
 from rag_core.adapters.vllm_tokenize import token_counter
 from rag_core.domain.access import AllowAll
 from rag_core.domain.context_budget import TokenCounter
+from rag_core.domain.follow_up import follow_up_schema
 from rag_core.domain.query_analysis import analysis_schema
 from rag_core.domain.resilience import dispose_engines
-from rag_core.services.prompts import PromptService
+from rag_core.services.prompts import FOLLOW_UP_PROMPT, PromptService
 from rag_core.services.retrieval import RetrievalService
 from rag_core.settings.card import REMOTE_PROVIDERS, Endpoint
 
@@ -44,6 +45,9 @@ class Runtime:
     counter: TokenCounter
     embedder: EmbeddingClient
     slot: asyncio.Semaphore
+    follow_up: ChatOpenAIModel | None = (
+        None  # the analysis client with the follow-up schema (the profile ships its prompt)
+    )
     turns: Any = None  # the TurnStore the lifespan sets (Any: no chat import here, no None check per use)
     generation: int | None = None  # the live index generation the loaded index was read at
     index: IndexHandles | None = None
@@ -105,6 +109,14 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
             stream=stream,
         )
 
+    analysis_llm = chat(
+        card.analysis_endpoint,
+        card.reasoning.analysis,
+        g.analysis_temperature,
+        g.analysis_max_tokens,
+        card.timeouts.retries,
+        stream=False,
+    )
     embedding = profile.retrieval.embedding
     return Runtime(
         settings=settings,
@@ -114,17 +126,20 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
         # the answer's retries are the generate node's (a rate limit waits within the request's deadline)
         answer_llm=chat(card.answer, card.reasoning.answer, card.sampling.temperature, card.budget.answer_tokens, 0),
         analysis=ChatOpenAIModel(
-            chat(
-                card.analysis_endpoint,
-                card.reasoning.analysis,
-                g.analysis_temperature,
-                g.analysis_max_tokens,
-                card.timeouts.retries,
-                stream=False,
-            ),
+            analysis_llm,
             g.analysis_max_tokens,
             response_format(card.structured_output, card.analysis_endpoint.provider, analysis_schema(roles)),
         ),
+        # the iterative round asks the same client for its own schema
+        follow_up=ChatOpenAIModel(
+            analysis_llm,
+            g.analysis_max_tokens,
+            response_format(
+                card.structured_output, card.analysis_endpoint.provider, follow_up_schema(), "follow_up_queries"
+            ),
+        )
+        if FOLLOW_UP_PROMPT in settings.prompts
+        else None,
         counter=token_counter(card),
         embedder=EmbeddingClient(
             overlay.model_servers.embedding_url,
@@ -146,6 +161,7 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
         messages_en=rt.settings.messages_en,
         prompts=rt.prompts,
         analysis=rt.analysis,
+        follow_up=rt.follow_up,
         answer_llm=rt.answer_llm,
         counter=rt.counter,
         retrieval=RetrievalService(

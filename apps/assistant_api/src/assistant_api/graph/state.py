@@ -30,6 +30,10 @@ class AgentState(TypedDict):
     standalone_question: str
     intent: str
     retrieval_queries: list[str]
+    needs_more: bool  # the analysis found the question needs sources of more than one document
+    follow_up_queries: list[
+        str
+    ]  # what the iterative round searched for besides retrieval_queries; empty = no extra search
     date_from: Optional[str]
     date_to: Optional[str]
     context_sources: list[dict]
@@ -75,3 +79,4 @@ class GraphDeps:
     messages_en: Optional[Messages] = (
         None  # the profile's English texts, for the lines code appends to an English answer
     )
+    follow_up: Optional[ChatModel] = None  # the analysis client with the follow-up schema; None = no iterative round

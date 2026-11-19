@@ -51,6 +51,9 @@ class Switches(ProfileModel):
     # after the reranker, a section a kept parent names ("§ 22 APB") is fetched, scored against the question and added (at
     # most 3, above the threshold); off = only the sections the search found
     reference_hop: bool = True
+    # a question the analysis marks as needing more documents gets one extra search with follow-up queries, on a card that
+    # gates it on and a profile that ships the follow-up prompt; off = the first search only
+    iterative_round: bool = True
 
 
 class Retrieval(ProfileModel):

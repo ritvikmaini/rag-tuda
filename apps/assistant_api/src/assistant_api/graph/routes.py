@@ -34,5 +34,21 @@ async def docs_found_route(state: Any) -> str:
     return "no_relevant_docs_found" if not state.get("raw_docs") else "relevant_docs_found"
 
 
+def make_docs_route(iterative: bool):
+    """The router after the search. With the iterative round on, a searching intent whose analysis needs more documents and
+    that found some goes to the follow-up search first; everything else (and every turn with the round off) is
+    `docs_found_route` exactly."""
+    if not iterative:
+        return docs_found_route
+
+    async def iterative_docs_route(state: Any) -> str:
+        if state.get("needs_more") and state.get("raw_docs") and state.get("intent") in RETRIEVAL_INTENTS:
+            return "follow_up"
+        return await docs_found_route(state)
+
+    iterative_docs_route.__name__ = "CheckDocsFoundRouter"
+    return iterative_docs_route
+
+
 intent_route.__name__ = "IntentRouter"
 docs_found_route.__name__ = "CheckDocsFoundRouter"

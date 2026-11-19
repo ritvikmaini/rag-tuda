@@ -51,6 +51,7 @@ def runtime() -> types.SimpleNamespace:
         embedder=None,
         prompts=None,
         analysis=None,
+        follow_up=None,
         answer_llm=None,
         counter=None,
         turns=None,
@@ -488,3 +489,22 @@ def test_readiness_never_calls_a_remote_endpoint(tmp_path, monkeypatch) -> None:
     _, local = runtime_of("s-qwen3-4b-instruct-2507", tmp_path, monkeypatch)
     assert set(asyncio.run(rt_module.model_reports(local))) == {"embedding", "reranker", "llm"}
     assert "http://127.0.0.1:11434/v1/models" in probed
+
+
+def test_the_follow_up_client_is_the_analysis_client_with_its_own_schema(tmp_path, monkeypatch) -> None:
+    from assistant_api.settings import load_settings
+
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    tu = PROFILE.parents[1] / "tu-informatik" / "profile.yaml"
+    settings = load_settings({**ENV, "RAG_PROFILE": str(tu), "RAG__CARD": "m-qwen3.8-27b"}, secrets_dir=tmp_path)
+    rt = rt_module.build_runtime(settings, None, False)
+    assert (
+        rt.follow_up is not None and rt.follow_up.runnable.bound is rt.analysis.runnable.bound
+    )  # one client, never streamed
+    sent = rt.follow_up.runnable.kwargs
+    assert sent["max_tokens"] == rt.analysis.runnable.kwargs["max_tokens"]
+    assert sent["response_format"]["json_schema"]["name"] == "follow_up_queries"
+    assert list(sent["response_format"]["json_schema"]["schema"]["properties"]) == ["reasoning", "queries", "done"]
+    # the example profile ships no follow-up prompt: no client
+    example, rt = runtime_of("l-groq-gpt-oss-120b", tmp_path, monkeypatch)
+    assert rt.follow_up is None

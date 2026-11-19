@@ -114,6 +114,8 @@ def test_the_graph_has_its_nodes_edges_and_run_names() -> None:
         ("rewrite_follow_up_question", "generate"),
         ("get_docs", "format_docs"),
         ("get_docs", "generate"),
+        ("get_docs", "follow_up_search"),
+        ("follow_up_search", "format_docs"),
         ("format_docs", "generate"),
         ("generate", "__end__"),
     }
