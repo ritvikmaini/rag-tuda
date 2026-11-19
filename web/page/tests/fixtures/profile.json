@@ -1,0 +1,47 @@
+{
+ "degrees": [
+  "bachelor",
+  "master",
+  "promotion"
+ ],
+ "programmes": [
+  {
+   "id": "bsc-informatik",
+   "label_de": "B.Sc. Informatik",
+   "label_en": "B.Sc. Informatik",
+   "degree": "bachelor",
+   "po_versions": [
+    2023,
+    2015
+   ]
+  },
+  {
+   "id": "msc-informatik",
+   "label_de": "M.Sc. Informatik",
+   "label_en": "M.Sc. Informatik",
+   "degree": "master",
+   "po_versions": [
+    2023,
+    2015
+   ]
+  },
+  {
+   "id": "msc-computer-science",
+   "label_de": "M.Sc. Computer Science",
+   "label_en": "M.Sc. Computer Science",
+   "degree": "master",
+   "po_versions": [
+    2023
+   ]
+  }
+ ],
+ "po_versions": [
+  2023,
+  2015
+ ],
+ "answer": {
+  "model": "Qwen/Qwen3-14B-AWQ",
+  "provider": "vllm",
+  "remote": false
+ }
+}

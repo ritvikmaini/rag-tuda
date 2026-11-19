@@ -1,0 +1,26 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "a2eeceaf-fd9d-4c63-8ff7-8351b29a9fa6", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "status", "content": {"step": "analysing"}}
+
+data: {"type": "status", "content": {"step": "understood", "question": "Erz\u00e4hl mir einen Witz.", "intent": "out_of_scope", "applied_filter": {"degree": null, "programme": null, "po_version": null, "regulation": null, "date": null, "include_archived": false, "po_source": null, "from_chips": []}}}
+
+data: {"type": "shape", "content": "text"}
+
+data: {"type": "status", "content": {"step": "writing"}}
+
+data: {"type": "chunk", "content": "Dabei "}
+
+data: {"type": "chunk", "content": "kann "}
+
+data: {"type": "chunk", "content": "ich "}
+
+data: {"type": "chunk", "content": "Ihnen "}
+
+data: {"type": "chunk", "content": "leider "}
+
+data: {"type": "chunk", "content": "nicht "}
+
+data: {"type": "chunk", "content": "helfen."}
+
+data: {"type": "done", "content": {"outcome": "completed", "generation": 1, "prompts": {"rag-generation": 1, "no-docs-found": 1, "question-rewriting": 1, "direct-reply": 1, "follow-up-queries": 1}}}
+

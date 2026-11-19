@@ -1,0 +1,7 @@
+{
+ "path": "direct",
+ "status": 200,
+ "params": {
+  "question": "Erzähl mir einen Witz."
+ }
+}

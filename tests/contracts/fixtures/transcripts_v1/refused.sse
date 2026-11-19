@@ -1,0 +1,8 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "d5f52802-0908-45d7-a935-9c85e80e8907", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "chunk", "content": "Diese Umwandlung ist nur f\u00fcr die letzte Antwort mit Quellen m\u00f6glich."}
+
+data: {"type": "variant", "content": {"name": "shorter", "ok": false}, "code": "formats_off"}
+
+data: {"type": "done", "content": {"outcome": "refused"}}
+

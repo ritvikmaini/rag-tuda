@@ -1,0 +1,6 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "3d5e6e9b-4801-4fc1-9a2c-bd87252d72f1", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "variant", "content": {"name": "table", "ok": false}, "code": "no_version"}
+
+data: {"type": "done", "content": {"outcome": "refused"}}
+

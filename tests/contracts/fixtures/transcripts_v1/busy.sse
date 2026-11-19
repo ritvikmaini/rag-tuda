@@ -1,0 +1,8 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "2e135b7f-79fb-4362-a5da-4f112f211559", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "error", "content": "Gerade sind sehr viele Anfragen gleichzeitig eingegangen. Bitte versuchen Sie es in einem Moment noch einmal.", "code": "busy"}
+
+data: {"type": "chunk", "content": "Gerade sind sehr viele Anfragen gleichzeitig eingegangen. Bitte versuchen Sie es in einem Moment noch einmal."}
+
+data: {"type": "done", "content": {"outcome": "busy", "generation": 1}}
+

@@ -1,0 +1,9 @@
+{
+ "path": "version_switch_missing",
+ "status": 200,
+ "params": {
+  "formats": "v1",
+  "variant_select": "table",
+  "variant_of": "<turn>"
+ }
+}

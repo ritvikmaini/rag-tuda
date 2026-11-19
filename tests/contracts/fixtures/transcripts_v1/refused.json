@@ -1,0 +1,9 @@
+{
+ "path": "refused",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?",
+  "variant": "shorter",
+  "variant_of": "<turn>"
+ }
+}

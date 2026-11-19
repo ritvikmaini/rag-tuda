@@ -1,0 +1,30 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "fe26458b-2add-4d1b-a55e-d5fe85a5daa3", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "status", "content": {"step": "analysing"}}
+
+data: {"type": "status", "content": {"step": "understood", "question": "Wie viele Credit Points hat die Abschlussarbeit laut Modulhandbuch?", "intent": "lookup", "applied_filter": {"degree": ["master"], "programme": ["msc-informatik"], "po_version": [2015], "regulation": ["mhb"], "date": null, "include_archived": true, "po_source": "chip", "from_chips": ["degree", "po_version", "programme"]}}}
+
+data: {"type": "shape", "content": "text"}
+
+data: {"type": "status", "content": {"step": "searching", "queries": []}}
+
+data: {"type": "status", "content": {"step": "writing"}}
+
+data: {"type": "chunk", "content": "Dazu "}
+
+data: {"type": "chunk", "content": "habe "}
+
+data: {"type": "chunk", "content": "ich "}
+
+data: {"type": "chunk", "content": "keine "}
+
+data: {"type": "chunk", "content": "passenden "}
+
+data: {"type": "chunk", "content": "Dokumente "}
+
+data: {"type": "chunk", "content": "gefunden."}
+
+data: {"type": "chunk", "content": "\n\nF\u00fcr den M.Sc. Informatik, PO 2015, habe ich nichts gefunden."}
+
+data: {"type": "done", "content": {"outcome": "completed", "generation": 1, "prompts": {"rag-generation": 1, "no-docs-found": 1, "question-rewriting": 1, "direct-reply": 1, "follow-up-queries": 1}}}
+

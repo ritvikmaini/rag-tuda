@@ -1,0 +1,8 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "3f844a41-324e-4434-adfe-a6ddf9b6e075", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "error", "content": "Der Assistent wird gerade aktualisiert und ist in wenigen Minuten wieder f\u00fcr Sie da.", "code": "not_ready"}
+
+data: {"type": "chunk", "content": "Der Assistent wird gerade aktualisiert und ist in wenigen Minuten wieder f\u00fcr Sie da."}
+
+data: {"type": "done", "content": {"outcome": "failed"}}
+

@@ -1,0 +1,11 @@
+{
+ "plan": "plain",
+ "id": "direct",
+ "turn": 1,
+ "path": "direct",
+ "status": 200,
+ "params": {
+  "question": "Erzähl mir einen Witz.",
+  "formats": "v1"
+ }
+}

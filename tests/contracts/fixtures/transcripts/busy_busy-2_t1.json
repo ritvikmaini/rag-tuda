@@ -1,0 +1,11 @@
+{
+ "plan": "busy",
+ "id": "busy-2",
+ "turn": 1,
+ "path": "busy",
+ "status": 200,
+ "params": {
+  "question": "Wann hat das Studienbüro Sprechstunde?",
+  "formats": "v1"
+ }
+}

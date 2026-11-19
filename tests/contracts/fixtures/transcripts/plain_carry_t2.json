@@ -1,0 +1,11 @@
+{
+ "plan": "plain",
+ "id": "carry",
+ "turn": 2,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Und wie lange dauert die Bearbeitung der Bachelor-Thesis genau?",
+  "formats": "v1"
+ }
+}

@@ -1,0 +1,9 @@
+{
+ "path": "version_switch",
+ "status": 200,
+ "params": {
+  "formats": "v1",
+  "variant_select": "original",
+  "variant_of": "<turn>"
+ }
+}

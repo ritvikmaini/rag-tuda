@@ -1,0 +1,11 @@
+{
+ "plan": "busy",
+ "id": "busy-1",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?",
+  "formats": "v1"
+ }
+}

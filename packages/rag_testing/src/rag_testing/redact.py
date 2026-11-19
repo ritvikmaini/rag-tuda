@@ -1,7 +1,8 @@
 """Redacted stream transcripts.
 
-The recordings (`evals run --probes <plan> --record <dir>`: <id>_t<n>.raw, the bytes as received, and <id>_t<n>.json,
-status and parameters) stay local in data/transcripts/. This writes the committed copies: every frame decoded, the
+The recordings (<plan>/<id>_t<n>.raw, the frames as the harness test tests/integration/tu/test_conversations.py or
+`evals run --probes <plan> --record <dir>` kept them, and <id>_t<n>.json, status and parameters) stay local in
+data/transcripts/. This writes the committed copies: every frame decoded, the
 document text replaced by placeholders of equal length and character class, and written back in the legacy
 frame form ("data: " + json.dumps({...}) with Python's defaults, no terminator).
 
@@ -41,6 +42,8 @@ LONG_KEYS = (
     "download_url",
     "page_url",
     "public_url",
+    "official_url",
+    "twin_key",
     "doc_key",
     "title_path",
     "section",

@@ -1,0 +1,20 @@
+{
+ "ERROR_CODES": {
+  "Gerade sind sehr viele Anfragen gleichzeitig eingegangen. Bitte versuchen Sie es in einem Moment noch einmal.": "busy",
+  "Der Assistent wird gerade aktualisiert und ist in wenigen Minuten wieder für Sie da.": "not_ready",
+  "Entschuldigung, bei der Beantwortung ist ein technischer Fehler aufgetreten. Bitte versuchen Sie es in einem Moment noch einmal.": "pipeline_error",
+  "timeout": "timeout",
+  "empty answer": "empty_answer"
+ },
+ "OUTCOMES": {
+  "too_long": "too_long",
+  "busy": "busy",
+  "refused": "refused",
+  "version_switch_missing": "refused"
+ },
+ "VARIANT_CODES": {
+  "version_switch_missing": "no_version",
+  "refused": "formats_off"
+ },
+ "QUESTION_LIMIT": 2000
+}

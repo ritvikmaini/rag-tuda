@@ -1,0 +1,10 @@
+{
+ "path": "variant",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?",
+  "formats": "v1",
+  "variant": "shorter",
+  "variant_of": "<turn>"
+ }
+}

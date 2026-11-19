@@ -1,0 +1,13 @@
+{
+ "plan": "formats",
+ "id": "variants",
+ "turn": 3,
+ "path": "variant",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?",
+  "formats": "v1",
+  "variant_of": "<turn>",
+  "variant": "english"
+ }
+}

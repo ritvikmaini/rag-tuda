@@ -1,0 +1,12 @@
+{
+ "plan": "plain",
+ "id": "english",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "How many times can I retake a failed exam?",
+  "formats": "v1",
+  "lang": "en"
+ }
+}

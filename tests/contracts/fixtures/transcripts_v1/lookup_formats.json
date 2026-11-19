@@ -1,0 +1,9 @@
+{
+ "path": "lookup_formats",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?",
+  "turn_id": "632a4f4d-cb8e-4a55-a6f2-f0628e96a13b",
+  "formats": "v1"
+ }
+}

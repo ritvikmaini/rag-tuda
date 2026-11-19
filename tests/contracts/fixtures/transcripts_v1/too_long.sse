@@ -1,0 +1,6 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "36743852-4733-47c2-998f-de396050bd39", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "chunk", "content": "Ihre Nachricht ist leider zu lang f\u00fcr mich (h\u00f6chstens 2.000 Zeichen). Bitte k\u00fcrzen Sie Ihre Frage auf das Wesentliche oder stellen Sie mehrere k\u00fcrzere Fragen nacheinander, dann helfe ich Ihnen gern weiter."}
+
+data: {"type": "done", "content": {"outcome": "too_long", "generation": 1}}
+

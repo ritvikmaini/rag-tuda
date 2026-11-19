@@ -1,0 +1,12 @@
+{
+ "plan": "formats",
+ "id": "refused",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?",
+  "formats": "v1",
+  "turn_id": "b8866f1e-dbf8-40ea-ac6c-bc904d70a455"
+ }
+}

@@ -1,0 +1,11 @@
+{
+ "plan": "formats",
+ "id": "checklist",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Ich bin in einer Klausur zum zweiten Mal durchgefallen.",
+  "formats": "v1"
+ }
+}

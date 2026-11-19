@@ -1,0 +1,48 @@
+data: {"type": "meta", "content": {"format": 1, "turn_id": "b8866f1e-dbf8-40ea-ac6c-bc904d70a455", "trace_id": null, "deadline_s": 90.0, "idle_s": 5.0, "model": "Qwen/Qwen3-14B-AWQ", "provider": "vllm"}}
+
+data: {"type": "status", "content": {"step": "analysing"}}
+
+data: {"type": "status", "content": {"step": "understood", "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis?", "intent": "lookup", "applied_filter": {"degree": ["bachelor"], "programme": null, "po_version": null, "regulation": null, "date": null, "include_archived": false, "po_source": null, "from_chips": []}}}
+
+data: {"type": "shape", "content": "text"}
+
+data: {"type": "status", "content": {"step": "searching", "queries": []}}
+
+data: {"type": "status", "content": {"step": "found", "documents": 2, "passages": 2}}
+
+data: {"type": "docs", "content": [{"page_content": "### Pr\u00fcfungsordnung 2015\n\nWer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit betr\u00e4gt sechs Semester, die Bachelor-Thesis wird in vier Monaten bearbeitet.", "metadata": {"url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp#pruefungsordnung_2015", "lang": "de", "title": "Ordnungen zum Bachelor of Science Informatik \u2013 Pr\u00fcfungsordnung 2015", "degree": ["bachelor"], "origin": "website", "source": "Ordnungen zum Bachelor of Science Informatik \u2013 Pr\u00fcfungsordnung 2015", "doc_key": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp#pruefungsordnung_2015", "scraper": {"errors": "", "runDuration": ""}, "section": "pruefungsordnung_2015", "archived": false, "doc_date": null, "doc_type": "Pr\u00fcfungsordnung", "doc_year": null, "filename": "Ordnungen zum Bachelor of Science Informatik \u2013 Pr\u00fcfungsordnung 2015", "twin_key": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik#pruefungsordnung_2015", "programme": ["bsc-informatik"], "scrapedAt": "2026-11-19 13:52:52", "part_index": 0, "po_version": [2015], "regulation": "po", "section_id": "e0147f00ea0128ffae484c522bd39d88", "file-folder": "", "page_number": -1, "source_type": "page", "section_path": "Pr\u00fcfungsordnung 2015", "context_header": "Ordnungen zum Bachelor of Science Informatik \u2013 Pr\u00fcfungsordnung 2015 \u00b7 Pr\u00fcfungsordnung \u00b7 Pr\u00fcfungsordnung 2015: ", "cross_encoder_score": 0.5, "rrf_fusion_score": null, "retriever_type": "semantic", "matched_child_text": "Ordnungen zum Bachelor of Science Informatik \u2013 Pr\u00fcfungsordnung 2015 \u00b7 Pr\u00fcfungsordnung \u00b7 Pr\u00fcfungsordnung 2015: ### Pr\u00fcfungsordnung 2015\n\nWer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit betr\u00e4gt sechs Semester, die Bachelor-Thesis wird in vier Monaten bearbeitet.", "rank_score": 0.5}}, {"page_content": "[Page 1]\nStudiengangsordnung f\u00fcr den Bachelorstudiengang Informatik (Fassung 2023,\nBeispieltext)\n\u00a7 1 Geltungsbereich Diese Ordnung regelt Ziel, Aufbau und Pr\u00fcfungen des\nBachelorstudiengangs Informatik f\u00fcr Studierende, die ab dem Wintersemester 2023/24\neingeschrieben werden. Erg\u00e4nzend gelten die Allgemeinen Pr\u00fcfungsbestimmungen (APB),\ninsbesondere \u00a7 22 und \u00a7 23.\n\u00a7 2 Studienziel Das Studium vermittelt die Grundlagen der Informatik.\n\u00a7 3 Regelstudienzeit und Umfang Die Regelstudienzeit betr\u00e4gt sechs Semester. F\u00fcr den\nAbschluss sind 180 Credit Points nachzuweisen, davon 12 Credit Points f\u00fcr die\nBachelor-Thesis nach \u00a7 5.\n\n[Page 2]\n\u00a7 4 Module und Pr\u00fcfungen Jedes Modul schlie\u00dft mit einer Pr\u00fcfungsleistung ab. Die Art\nder Pr\u00fcfung gibt das Modulhandbuch zu Semesterbeginn bekannt. Nicht bestandene\nPr\u00fcfungen werden nach \u00a7 22 APB wiederholt; f\u00fcr den R\u00fccktritt gilt \u00a7 23 APB.\n\u00a7 5 Bachelor-Thesis Die Bearbeitungszeit der Bachelor-Thesis betr\u00e4gt f\u00fcnf Monate. Das\nThema wird im Studienb\u00fcro angemeldet. Zur Anmeldung sind mindestens 120 Credit Points\nerforderlich.\n\u00a7 6 Inkrafttreten Diese Ordnung gilt f\u00fcr Studierende, die ab dem Wintersemester\n2023/24 ihr Studium beginnen. F\u00fcr fr\u00fchere Jahrg\u00e4nge gilt die Ordnung von 2015 weiter;\nzur Dauer des Studiums vergleiche \u00a7 3.", "metadata": {"url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf", "lang": "de", "title": "Studiengangsordnung Bachelor Informatik 2023", "degree": ["bachelor"], "origin": "website", "source": "Studiengangsordnung Bachelor Informatik 2023", "doc_key": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf", "scraper": {"errors": "", "runDuration": ""}, "section": "pruefungsordnung_2023", "archived": false, "doc_date": null, "doc_type": "Pr\u00fcfungsordnung", "doc_year": 2023, "filename": "Studiengangsordnung Bachelor Informatik 2023", "page_url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp", "file_hash": "be6f4a46d0307d9cb0855af0f2e404b1d5b1fcd8dce6347a58d7489759da666a", "programme": ["bsc-informatik"], "scrapedAt": "2026-11-19 13:52:52", "paragraphs": ["\u00a7 1", "\u00a7 2", "\u00a7 3", "\u00a7 4", "\u00a7 5", "\u00a7 6"], "part_index": 0, "po_version": [2023], "public_url": null, "regulation": "po", "section_id": "3cbc76659299be9693eea091edebebc9", "valid_from": "2023-10-01", "file-folder": "", "page_number": 1, "source_type": "pdf", "download_url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf", "official_url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/satzungsbeilagen/SB_2023_II.pdf", "section_path": "", "context_header": "Studiengangsordnung Bachelor Informatik 2023 \u00b7 Pr\u00fcfungsordnung \u00b7 Stand 2023: ", "extraction_method": "pypdfium2", "cross_encoder_score": 0.5, "rrf_fusion_score": null, "retriever_type": "semantic", "matched_child_text": "Studiengangsordnung Bachelor Informatik 2023 \u00b7 Pr\u00fcfungsordnung \u00b7 Stand 2023: \u00a7 4 Module und Pr\u00fcfungen Jedes Modul schlie\u00dft mit einer Pr\u00fcfungsleistung ab. Die Art\nder Pr\u00fcfung gibt das Modulhandbuch zu Semesterbeginn bekannt. Nicht bestandene\nPr\u00fcfungen werden nach \u00a7 22 APB wiederholt; f\u00fcr den R\u00fccktritt gilt \u00a7 23 APB.\n\u00a7 5 Bachelor-Thesis Die Bearbeitungszeit der Bachelor-Thesis betr\u00e4gt f\u00fcnf Monate. Das\nThema wird im Studienb\u00fcro angemeldet. Zur Anmeldung sind mindestens 120 Credit Points\nerforderlich.", "rank_score": 0.5}}]}
+
+data: {"type": "status", "content": {"step": "writing"}}
+
+data: {"type": "chunk", "content": "Die "}
+
+data: {"type": "chunk", "content": "Bearbeitungszeit "}
+
+data: {"type": "chunk", "content": "der "}
+
+data: {"type": "chunk", "content": "Bachelor-Thesis "}
+
+data: {"type": "chunk", "content": "steht "}
+
+data: {"type": "chunk", "content": "in "}
+
+data: {"type": "chunk", "content": "der "}
+
+data: {"type": "chunk", "content": "Pr\u00fcfungsordnung "}
+
+data: {"type": "chunk", "content": "[1] "}
+
+data: {"type": "chunk", "content": "und "}
+
+data: {"type": "chunk", "content": "im "}
+
+data: {"type": "chunk", "content": "Pr\u00fcfungsplan "}
+
+data: {"type": "chunk", "content": "[2]."}
+
+data: {"type": "chunk", "content": "\n\nGrundlage: PO 2023 und PO 2015 des B.Sc. Informatik"}
+
+data: {"type": "citations", "content": [{"n": 1, "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp#pruefungsordnung_2015", "page": null, "title": "Ordnungen zum Bachelor of Science Informatik \u2013 Pr\u00fcfungsordnung 2015", "type": "Pr\u00fcfungsordnung", "origin": "Fachbereich Informatik, TU Darmstadt", "date": "2015", "quote": "### Pr\u00fcfungsordnung 2015 Wer vor dem Wintersemester 2023/24 begonnen hat, studiert weiter nach der Ordnung von 2015. Die Regelstudienzeit betr\u00e4gt sechs Semester, die Bachelor-Thesis wird in vier\u2026"}, {"n": 2, "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf", "page": 2, "title": "Studiengangsordnung Bachelor Informatik 2023", "type": "Pr\u00fcfungsordnung", "origin": "Fachbereich Informatik, TU Darmstadt", "date": "2023", "quote": "\u00a7 4 Module und Pr\u00fcfungen Jedes Modul schlie\u00dft mit einer Pr\u00fcfungsleistung ab. Die Art der Pr\u00fcfung gibt das Modulhandbuch zu Semesterbeginn bekannt. Nicht bestandene Pr\u00fcfungen werden nach \u00a7 22 APB\u2026"}]}
+
+data: {"type": "done", "content": {"outcome": "completed", "generation": 1, "prompts": {"rag-generation": 1, "no-docs-found": 1, "question-rewriting": 1, "direct-reply": 1, "follow-up-queries": 1}}}
+

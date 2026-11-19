@@ -1,0 +1,11 @@
+{
+ "plan": "plain",
+ "id": "carry",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Wie lange dauert die Bearbeitung der Bachelor-Thesis nach der PO 2015?",
+  "formats": "v1"
+ }
+}

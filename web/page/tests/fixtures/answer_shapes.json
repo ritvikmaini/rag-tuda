@@ -1,0 +1,438 @@
+{
+ "about": "Answer shapes shared by the backend (answer_formats.py), the evals checks and the page. Generated from the backend's functions; the three implementations must agree.",
+ "shapes": [
+  "text",
+  "table",
+  "checklist",
+  "steps",
+  "mindmap"
+ ],
+ "variants": [
+  "table",
+  "checklist",
+  "steps",
+  "mindmap",
+  "shorter",
+  "longer",
+  "simple",
+  "english"
+ ],
+ "samples": [
+  {
+   "text": "Es gibt zwei Regelungen [1].\n\n| Gruppe | Urlaub |\n| --- | --- |\n| Beamte | 30 Tage [1] |\n| Tarif | 30 Tage |",
+   "shape": "table",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     1,
+     2
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "Vorher [1].\n\n- [ ] Antrag – Personalamt [1]\n- [ ] Elterngeld [2]\n- [x] Bescheinigung",
+   "shape": "checklist",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     2,
+     3
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "So geht es [1].\n\n1. Antrag [1]\n2. Genehmigung [2]\n3. Abrechnen",
+   "shape": "steps",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     2,
+     3
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "Überblick [1].\n\n```mindmap\n# A\n## B\n- C [1]\n- D\n```",
+   "shape": "mindmap",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     1,
+     2
+    ]
+   }
+  },
+  {
+   "text": "Die Kernzeit endet um 15 Uhr [1].",
+   "shape": "text",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "",
+   "shape": "text",
+   "cited": {
+    "text": [
+     0,
+     0
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "Intro [1].\r\n\r\n| A | B |\r\n| --- | --- |\r\n| x [1] | y [1, 2] |",
+   "shape": "table",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     1,
+     1
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "| a | b |\n| --- | --- |",
+   "shape": "text",
+   "cited": {
+    "text": [
+     0,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "| a | b |\n|:---|---:|\n| 1 | 2 [3] |",
+   "shape": "table",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     1,
+     1
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "1. nur eins [1]",
+   "shape": "text",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     1,
+     1
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "1) Antrag [1]\n2) Prüfung",
+   "shape": "steps",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     1,
+     2
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "  * [x] erledigt [1]\n  * [ ] offen",
+   "shape": "checklist",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     1,
+     2
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "- [ ] nur ein Punkt [1]",
+   "shape": "text",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     1,
+     1
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "100. Zeile\n101. Zeile",
+   "shape": "text",
+   "cited": {
+    "text": [
+     0,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "text": "```mindmap\n# Thema\n- offen [12]",
+   "shape": "mindmap",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     1,
+     1
+    ]
+   }
+  },
+  {
+   "text": "Siehe [123] und [1,2].",
+   "shape": "text",
+   "cited": {
+    "text": [
+     1,
+     1
+    ],
+    "table": [
+     0,
+     0
+    ],
+    "checklist": [
+     0,
+     0
+    ],
+    "steps": [
+     0,
+     0
+    ],
+    "mindmap": [
+     0,
+     0
+    ]
+   }
+  }
+ ]
+}

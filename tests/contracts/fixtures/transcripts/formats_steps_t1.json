@@ -1,0 +1,11 @@
+{
+ "plan": "formats",
+ "id": "steps",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Wie melde ich mich zu einer Prüfung an?",
+  "formats": "v1"
+ }
+}

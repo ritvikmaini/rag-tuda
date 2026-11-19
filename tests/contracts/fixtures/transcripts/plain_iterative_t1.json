@@ -1,0 +1,11 @@
+{
+ "plan": "plain",
+ "id": "iterative",
+ "turn": 1,
+ "path": "lookup",
+ "status": 200,
+ "params": {
+  "question": "Was unterscheidet die PO 2015 von der PO 2023 bei der Bearbeitung der Bachelor-Thesis?",
+  "formats": "v1"
+ }
+}

@@ -1,0 +1,14 @@
+{
+ "plan": "plain",
+ "id": "nodocs",
+ "turn": 1,
+ "path": "no_docs",
+ "status": 200,
+ "params": {
+  "question": "Wie viele Credit Points hat die Abschlussarbeit laut Modulhandbuch?",
+  "formats": "v1",
+  "degree": "master",
+  "programme": "msc-informatik",
+  "po": "2015"
+ }
+}
