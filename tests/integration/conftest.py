@@ -19,12 +19,18 @@ from rag_testing import harness, index_view
 GEN = Path(__file__).resolve().parents[2] / "deploy" / "ci" / ".generated"
 
 # collected only while a harness runs (`just harness <profile>` sets RAG_CI_PROFILE and, by default, runs tests/integration):
-# the example leg runs this folder's tests, the TU leg its own tests (tu/) and test_index_ids.py, which holds for any profile
+# the example leg runs this folder's tests but the TU ones, the TU leg its own tests (tu/), test_index_ids.py, which holds for
+# any profile, and the TU-only tests here
 PROFILE = os.environ.get("RAG_CI_PROFILE")
+TU_ONLY = {"test_filter_carry_over.py"}
 if not (GEN / "ci.env").exists() or PROFILE not in ("example", "tu"):
     collect_ignore_glob = ["test_*.py"]
 elif PROFILE == "tu":
-    collect_ignore_glob = [p.name for p in Path(__file__).parent.glob("test_*.py") if p.name != "test_index_ids.py"]
+    collect_ignore_glob = [
+        p.name for p in Path(__file__).parent.glob("test_*.py") if p.name not in TU_ONLY | {"test_index_ids.py"}
+    ]
+else:
+    collect_ignore_glob = sorted(TU_ONLY)
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
