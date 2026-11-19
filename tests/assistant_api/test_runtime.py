@@ -275,6 +275,27 @@ def test_the_clients_and_the_window_come_from_the_card(tmp_path, monkeypatch) ->
     assert rt.analysis.runnable.bound.disable_streaming and not rt.answer_llm.disable_streaming
     assert rt.analysis.runnable.kwargs["response_format"]["json_schema"]["strict"] is False
     assert rt.analysis.runnable.kwargs["max_tokens"] == settings.profile.generation.analysis_max_tokens == 800
+    # the example profile has no roles: the base schema
+    assert "search_queries" in rt.analysis.runnable.kwargs["response_format"]["json_schema"]["schema"]["properties"]
+
+
+def test_the_analysis_schema_takes_its_enums_from_the_profiles_roles(tmp_path, monkeypatch) -> None:
+    from assistant_api.settings import load_settings
+
+    monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
+    tu = PROFILE.parents[1] / "tu-informatik" / "profile.yaml"
+    settings = load_settings(
+        {**ENV, "RAG_PROFILE": str(tu), "RAG__CARD": "s-qwen3-4b-instruct-2507"}, secrets_dir=tmp_path
+    )
+    schema = rt_module.build_runtime(settings, None, False).analysis.runnable.kwargs["response_format"]["json_schema"][
+        "schema"
+    ]
+    assert list(schema["properties"])[0] == "reasoning"
+    assert schema["properties"]["programme"]["anyOf"][0]["items"]["enum"] == [
+        "bsc-informatik",
+        "msc-computer-science",
+        "msc-informatik",
+    ]
 
 
 def test_a_hosted_card_sends_groqs_key_to_groq_only(tmp_path, monkeypatch) -> None:

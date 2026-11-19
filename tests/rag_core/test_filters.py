@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from rag_core.domain.cohort import po_for_term
 from rag_core.domain.filters import Chips, Filter, check_chips, resolve_filter
-from rag_core.domain.query_analysis import QueryAnalysis
+from rag_core.domain.query_analysis import QueryAnalysis, parse_query_analysis
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Roles
 
@@ -273,3 +273,25 @@ def test_a_filter_round_trips_through_json_with_its_tuples_and_its_date() -> Non
     for bad in ({"degree": "master"}, {"date": "gestern"}):
         with pytest.raises((TypeError, ValueError)):
             Filter.from_json(bad)
+
+
+def test_the_parsed_analysis_fills_the_filter() -> None:
+    raw = (
+        '{"standalone_question": "Was unterscheidet die Prüfungsordnungen?", "intent": "lookup", "queries_de": ["a"], '
+        '"language": "de", "degree": ["master"], "programme": ["msc-informatik"], "po_version": [2015, 2023], '
+        '"regulation": ["po"], "enrolment_term": null, "needs_more": true}'
+    )
+    analysis = parse_query_analysis(raw, "x")
+    found = resolve("Was unterscheidet die beiden Fassungen?", analysis=analysis)
+    assert (found.degree, found.programme, found.po_version, found.regulation) == (
+        ("master",),
+        ("msc-informatik",),
+        (2015, 2023),
+        ("po",),
+    )
+    assert found.po_source == "analysis"
+    term = parse_query_analysis(
+        '{"standalone_question": "x", "programme": ["bsc-informatik"], "enrolment_term": "WiSe 2023/24"}', "x"
+    )
+    assert resolve("Was gilt für mich?", analysis=term).po_version == (2023,)
+    assert resolve("Was gilt für mich?", analysis=parse_query_analysis("kaputt", "x")) == Filter()

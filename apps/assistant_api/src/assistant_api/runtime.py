@@ -86,6 +86,7 @@ class Runtime:
 def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticated: bool) -> Runtime:
     profile, card, overlay = settings.profile, settings.card, settings.overlay
     g = profile.generation
+    roles = settings.roles.model_dump() if settings.roles else None  # the schema's enums
 
     def chat(
         endpoint: Endpoint, reasoning: str, temperature: float, max_tokens: int, retries: int, stream: bool = True
@@ -122,7 +123,7 @@ def build_runtime(settings: AssistantSettings, langfuse: Any | None, authenticat
                 stream=False,
             ),
             g.analysis_max_tokens,
-            response_format(card.structured_output, card.analysis_endpoint.provider, analysis_schema(profile)),
+            response_format(card.structured_output, card.analysis_endpoint.provider, analysis_schema(roles)),
         ),
         counter=token_counter(card),
         embedder=EmbeddingClient(
