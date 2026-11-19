@@ -37,7 +37,7 @@ identity:
   bot_name: Studienassistent Informatik
   language: de
   locale: de_DE
-  date_format: "%A, der %d.%m.%Y %H:%M:%S"
+  date_format: "%A, der %d.%m.%Y %H:%M"
   day_names: [Montag, Dienstag, Mittwoch, Donnerstag, Freitag, Samstag, Sonntag]
 # no recency: the Ordnungen of different versions stand side by side, so no document type prefers its newer sources
 ranking:

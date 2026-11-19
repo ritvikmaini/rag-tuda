@@ -10,6 +10,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from rag_core.domain import query_analysis as qa
 from rag_core.domain.filters import REGULATIONS
+from rag_core.services.prompts import load_profile_prompts
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Roles
 
@@ -131,12 +132,9 @@ def test_without_roles_the_schema_is_the_base_one() -> None:
     assert set(schema["required"]) == set(schema["properties"]) and schema["additionalProperties"] is False
 
 
-def test_the_tu_prompt_asks_for_the_schemas_keys() -> None:
-    import yaml
-
-    system = yaml.safe_load((TU / "prompts" / "question-rewriting.yaml").read_text(encoding="utf-8"))["messages"][0][
-        "content"
-    ]
+@pytest.mark.parametrize("overlay", ["small", "large"])
+def test_the_tu_prompt_asks_for_the_schemas_keys(overlay: str) -> None:
+    system = load_profile_prompts(TU / "prompts", overlay)["question-rewriting"].messages[0][1]
     shown = re.search(r"# Format der Antwort\n(.*?)\n\n", system, re.S)
     assert shown and re.findall(r'^ {2}"(\w+)":', shown[1], re.M) == FIELDS
     # the prompt names every value the enums allow

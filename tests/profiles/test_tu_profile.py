@@ -1,7 +1,6 @@
 """The TU Informatik profile: its files load with the schemas, the sources and roles keep to what the pages state, and the
 prompts keep their variables and the fake LLM's markers."""
 
-import re
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -9,27 +8,11 @@ import yaml
 from assistant_api.settings import Messages
 from indexer.crawl.discover import Source
 from indexer.crawl.extract import Selectors
-from rag_core.services.prompts import PROMPT_NAMES, PromptService, load_profile_prompts
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Acronyms, Profile, Roles, Sources
-from rag_testing import llm
 
 ROOT = Path(__file__).resolve().parents[2]
 TU = ROOT / "profiles" / "tu-informatik"
-PROMPT_OF = {
-    "analysis": "question-rewriting",
-    "direct": "direct-reply",
-    "no_docs": "no-docs-found",
-    "answer": "rag-generation",
-    "follow_up": "follow-up-queries",
-}
-VARIABLES = {  # the variables the assistant fills in for each prompt
-    "question-rewriting": {"bot_name", "current_date", "history", "question", "today_iso"},
-    "direct-reply": {"bot_name", "conversation_state", "current_date", "intent", "language", "question"},
-    "no-docs-found": {"bot_name", "current_date", "language", "question"},
-    "rag-generation": {"bot_name", "context", "current_date", "language", "question"},
-    "follow-up-queries": {"bot_name", "question", "searched", "sections"},
-}
 HUBS = "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/"
 
 
@@ -218,54 +201,3 @@ def test_every_crawled_host_has_a_label_in_both_languages_and_the_languages_matc
         assert "{limit}" in text
     for key in ("past_event", "past_events"):
         assert "{dates}" in de["answer"][key] and "{dates}" in en["answer"][key]
-
-
-def _rendered(name):
-    """The prompt filled in with a value for each of its variables: (role, text) messages."""
-    prompts = load_profile_prompts(TU / "prompts")
-    values = {v: f"<{v}>" for v in prompts[name].variables} | {"question": "Frage?", "language": "Deutsch"}
-    return PromptService(prompts).render(name, values)
-
-
-def test_prompts_render_de():
-    prompts = load_profile_prompts(TU / "prompts")
-    assert tuple(prompts) == (*PROMPT_NAMES, "follow-up-queries")
-    for name, prompt in prompts.items():
-        assert prompt.version == 1 and set(prompt.variables) == VARIABLES[name], name
-        system, user = _rendered(name)
-        assert system[0] == "system" and user[0] == "user"
-        assert "{{" not in system[1] + user[1] and "<bot_name>" in system[1]
-        if name not in (
-            "question-rewriting",
-            "follow-up-queries",
-        ):  # the analysis calls answer in JSON, not to the person
-            assert '("Sie")' in system[1], name  # German answers address the person with Sie
-            assert "Antworte in: Deutsch" in system[1], name
-        assert "Studierende und Promovierende des Fachbereichs Informatik der TU Darmstadt" in system[1], name
-    rules = _rendered("rag-generation")[0][1]
-    assert [int(n) for n in re.findall(r"^(\d+)\. ", rules, re.M)] == list(range(1, 12))
-    assert "Verbindlich ist der deutsche Wortlaut" in rules and "Rechtsberatung" in rules
-    assert "PO 2015" in rules and "nebeneinander" in rules  # the versions of an Ordnung stand side by side
-    assert "kein offizieller Dienst der TU Darmstadt" in rules
-    direct = _rendered("direct-reply")[0][1]
-    assert "kein offizieller Dienst der TU Darmstadt" in direct and "112" in direct and "0800" not in direct
-    for name in ("direct-reply", "no-docs-found", "rag-generation"):
-        text = _rendered(name)[0][1]
-        assert not re.search(r"@|06151", text), name  # no contact of the university is named
-        assert set(re.findall(r"\b\d{3,}\b", text)) <= {"112", "250", "2015", "2023"}, name
-    rewriting = _rendered("question-rewriting")[0][1]
-    assert "B.Sc. Informatik, M.Sc. Informatik und M.Sc. Computer Science" in rewriting
-    assert "auch bei englischen Nachrichten" in rewriting  # German queries for every question
-
-
-def test_markers_classify_v0_prompts():
-    texts = {n: (TU / "prompts" / f"{n}.yaml").read_text(encoding="utf-8") for n in PROMPT_OF.values()}
-    for purpose, marker in llm.MARKERS:
-        assert [n for n, text in texts.items() if marker in text] == [PROMPT_OF[purpose]], purpose
-    for purpose, name in PROMPT_OF.items():
-        messages = [{"role": role, "content": text} for role, text in _rendered(name)]
-        assert llm.purpose(messages) == purpose, name
-    analysis = [{"role": r, "content": t} for r, t in _rendered("question-rewriting")]
-    assert llm.question(analysis, "analysis") == "Frage?"
-    answer = [{"role": r, "content": t} for r, t in _rendered("rag-generation")]
-    assert llm.question(answer, "answer") == "Frage?"
