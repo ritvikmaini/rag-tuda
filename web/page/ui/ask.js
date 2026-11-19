@@ -1,11 +1,11 @@
 import { withToken } from "../api/auth.js";
 import { createFrameParser } from "../api/frames.js";
 import { questionUrl } from "../api/urls.js";
-import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
 import { renderTabs } from "../features/variants.js";
 import { citationEntries } from "../model/citations.js";
 import { shapeName } from "../model/formats.js";
 import { sourceCards } from "../model/sources.js";
+import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { applyDocs, applyStatus, finishThinking, haltThinking, newThinking } from "../model/thinking.js";
 import { newTurnId, refOf, replacePlan } from "../model/turns.js";
 import { pump, renderAnswer } from "../render/answer.js";
@@ -39,13 +39,12 @@ export function ask(question, plan) {
 }
 
 export async function stream(turn, view) {
-    const session = { turn, view, controller: new AbortController(), stopped: false, timedOut: false, timer: 0,
-        startedAt: Date.now(), lastData: Date.now() };
+    const session = Object.assign({ turn, view, controller: new AbortController(), stopped: false, timedOut: false, timer: 0,
+        startedAt: Date.now(), lastData: Date.now() }, watchdogLimits());
     state.live = session;
     session.timer = window.setInterval(() => {
         tickTimer(view, turn.thinking);
-        const now = Date.now();
-        if (now - session.lastData > SILENCE_LIMIT_MS || now - session.startedAt > TOTAL_LIMIT_MS) {
+        if (watchdogExpired(session, Date.now())) {
             session.timedOut = true;
             session.controller.abort();
         }
@@ -109,6 +108,8 @@ export function handleFrame(turn, view, frame) {
         // the turn the backend names; a question's meta id is the page's own, so only a different one is kept
         const ref = refOf(frame.content && frame.content.turn_id);
         if (ref && ref !== refOf(turn.id)) turn.ref = ref;
+        // the request's own limits replace the page's fixed ones (a cold model may take longer than they allow)
+        if (state.live !== null && state.live.turn === turn) Object.assign(state.live, watchdogLimits(frame.content));
     } else if (frame.type === "error" || (frame.type === undefined && frame.message !== undefined)) {
         turn.sawError = true;
     }

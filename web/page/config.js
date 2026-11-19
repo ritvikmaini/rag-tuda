@@ -10,10 +10,11 @@ export const OLD_AFTER_YEARS = 3;
 export const VISIBLE_SOURCES = 3;
 export const RESUME_THRESHOLD_PX = 8;
 export const NEAR_END_PX = 48;
-// Page-side watchdog: the backend ends every request within REQUEST_DEADLINE_S (120 s) and never stays silent
-// longer than REQUEST_IDLE_S (45 s); beyond these limits the connection itself is gone.
+// Page-side watchdog before the meta frame has named the request's limits (it comes first): the longest silence and the
+// longest request the page waits for. The meta frame's deadline_s and idle_s replace them, plus WATCHDOG_GRACE_MS.
 export const SILENCE_LIMIT_MS = 90000;
 export const TOTAL_LIMIT_MS = 150000;
+export const WATCHDOG_GRACE_MS = 5000;
 // Question length: the backend answers longer questions only with a "too long" reply (guard.max_question_chars in the
 // profile, keep in step; a contract test checks it); the counter appears from QUESTION_WARN_AT (80 %).
 export const QUESTION_LIMIT = 2000;

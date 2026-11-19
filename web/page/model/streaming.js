@@ -1,3 +1,5 @@
+import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS, WATCHDOG_GRACE_MS } from "../config.js";
+
 // ---- calm streaming: what part of the received answer is shown, and how
 
 // Closes formatting that is still open in a streaming prefix, so raw markdown never flashes: an open code fence is
@@ -43,4 +45,19 @@ export function cutAt(text, n) {
     const end = Math.min(Math.max(0, n), text.length);
     const code = text.charCodeAt(end - 1);
     return end > 0 && end < text.length && code >= 0xD800 && code <= 0xDBFF ? end + 1 : end;
+}
+
+// ---- watchdog: how long the page waits for a request
+
+// The limits for a request: the meta frame's idle_s (longest silence) and deadline_s (longest request), plus a short grace
+// so the backend's own message arrives first; the page's fixed limits until a meta frame has named them.
+export function watchdogLimits(meta) {
+    const ms = (seconds, fallback) => (Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) + WATCHDOG_GRACE_MS : fallback);
+    const content = meta && typeof meta === "object" ? meta : {};
+    return { silenceMs: ms(content.idle_s, SILENCE_LIMIT_MS), totalMs: ms(content.deadline_s, TOTAL_LIMIT_MS) };
+}
+
+// session: { startedAt, lastData, silenceMs, totalMs } in ms; the connection is treated as gone once either limit has passed.
+export function watchdogExpired(session, now) {
+    return now - session.lastData > session.silenceMs || now - session.startedAt > session.totalMs;
 }

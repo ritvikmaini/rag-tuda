@@ -1,9 +1,10 @@
 import { withToken } from "../api/auth.js";
 import { createFrameParser } from "../api/frames.js";
 import { variantUrl } from "../api/urls.js";
-import { SILENCE_LIMIT_MS, TEXT, TOTAL_LIMIT_MS, VARIANT_LABELS } from "../config.js";
+import { TEXT, VARIANT_LABELS } from "../config.js";
 import { citationEntries } from "../model/citations.js";
 import { shapeName } from "../model/formats.js";
+import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { pump, renderAnswer } from "../render/answer.js";
 import { DOTS_HTML, h } from "../render/dom.js";
 import { renderSources } from "../render/sources.js";
@@ -64,12 +65,11 @@ export async function startVariant(turn, view, name) {
 
 // Streams one variant like a question (same limits and stop button); ok only with the backend's confirmation.
 export async function streamVariant(turn, view, version) {
-    const session = { turn, view, controller: new AbortController(), stopped: false, timedOut: false, timer: 0,
-        startedAt: Date.now(), lastData: Date.now() };
+    const session = Object.assign({ turn, view, controller: new AbortController(), stopped: false, timedOut: false, timer: 0,
+        startedAt: Date.now(), lastData: Date.now() }, watchdogLimits());
     state.live = session;
     session.timer = window.setInterval(() => {
-        const now = Date.now();
-        if (now - session.lastData > SILENCE_LIMIT_MS || now - session.startedAt > TOTAL_LIMIT_MS) {
+        if (watchdogExpired(session, Date.now())) {
             session.timedOut = true;
             session.controller.abort();
         }
@@ -88,6 +88,8 @@ export async function streamVariant(turn, view, version) {
         } else if (frame.type === "shape") {
             version.shape = shapeName(frame.content);
             turn.shape = version.shape;
+        } else if (frame.type === "meta") {
+            Object.assign(session, watchdogLimits(frame.content));
         } else if (frame.type === "variant") {
             confirmed = !!(frame.content && frame.content.ok);
         }
