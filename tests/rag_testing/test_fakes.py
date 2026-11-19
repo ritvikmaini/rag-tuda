@@ -3,11 +3,16 @@ vectors, the reranker's scores and order."""
 
 import json
 import math
+from pathlib import Path
 
+import yaml
 from fastapi.testclient import TestClient
 from hypothesis import given, strategies as st
+from rag_core.domain.query_analysis import analysis_schema, parse_query_analysis
 
 from rag_testing import llm, scoring, serve
+
+PROFILE = Path(__file__).resolve().parents[2] / "profiles" / "tu-informatik"
 
 ANALYSIS = [
     {"role": "system", "content": 'Antworte als JSON: {"standalone_question": "..."}'},
@@ -65,6 +70,43 @@ def test_the_first_fitting_rule_answers_and_the_analysis_keeps_its_defaults():
         "answer_shape": "text",
     }
     assert llm.reply(llm.pick([], "direct", DIRECT), "direct", DIRECT) == llm.DEFAULT_REPLIES["direct"]
+
+
+def profile_analysis():
+    """A call with the TU profile's rewriter prompt (the one that names `queries_de`), as the backend sends it."""
+    prompt = yaml.safe_load((PROFILE / "prompts" / "question-rewriting.yaml").read_text(encoding="utf-8"))
+    system = next(m["content"] for m in prompt["messages"] if m["role"] == "system")
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": "Gesprächsverlauf:\nKein Verlauf\n\nNachricht: Wo ist die Garage?"},
+    ]
+
+
+def test_the_profile_prompts_analysis_is_answered_in_the_profiles_schema():
+    messages = profile_analysis()
+    assert llm.purpose(messages) == "analysis"
+    roles = yaml.safe_load((PROFILE / "roles.yaml").read_text(encoding="utf-8"))
+    analysis = json.loads(llm.reply(llm.pick([], "analysis", messages), "analysis", messages))
+    assert list(analysis) == list(analysis_schema(roles)["properties"])  # the keys and their order
+    assert (analysis["shape"], analysis["needs_more"], analysis["queries_de"]) == ("text", False, [])
+    assert parse_query_analysis(json.dumps(analysis), "Wo ist die Garage?").parsed == "json"
+
+
+def test_a_rule_written_with_the_base_keys_or_the_profiles_reaches_the_profiles_analysis():
+    messages = profile_analysis()
+    rules = [
+        {
+            "purpose": "analysis",
+            "match": "Garage",
+            "reply": {"answer_shape": "table", "search_queries": ["Garage Plätze"]},
+        }
+    ]
+    base = json.loads(llm.reply(llm.pick(rules, "analysis", messages), "analysis", messages))
+    assert (base["shape"], base["queries_de"], "answer_shape" in base) == ("table", ["Garage Plätze"], False)
+    more = [{"purpose": "analysis", "reply": {"needs_more": True, "degree": ["bachelor"]}}]
+    reply = json.loads(llm.reply(llm.pick(more, "analysis", messages), "analysis", messages))
+    parsed = parse_query_analysis(json.dumps(reply), "Wo ist die Garage?")
+    assert (parsed.needs_more, parsed.degree) == (True, ["bachelor"])
 
 
 @given(st.text(alphabet=st.characters(categories=["L", "N", "P", "Zs"]) | st.sampled_from("\n\t[]"), max_size=200))

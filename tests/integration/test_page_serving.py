@@ -55,7 +55,7 @@ def test_meta_carries_deadline_and_provider(
     # the harness card's request limits (deploy/env/ci-fake-card.toml) and model
     assert meta["type"] == "meta" and meta["content"]["format"] == 1
     assert {k: meta["content"][k] for k in ("deadline_s", "idle_s", "model", "provider")} == {
-        "deadline_s": 25.0,
+        "deadline_s": 90.0,
         "idle_s": 5.0,
         "model": "Qwen/Qwen3-14B-AWQ",
         "provider": "vllm",

@@ -144,7 +144,7 @@ def test_meta_carries_deadline_and_provider(monkeypatch: pytest.MonkeyPatch) -> 
         "format": 1,
         "turn_id": first["content"]["turn_id"],
         "trace_id": None,
-        "deadline_s": 25.0,
+        "deadline_s": 90.0,
         "idle_s": 5.0,
         "model": "Qwen/Qwen3-14B-AWQ",
         "provider": "vllm",

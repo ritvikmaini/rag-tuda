@@ -7,7 +7,10 @@ system message) fit a call answers it:
   {"purpose": "follow_up", "reply": {"queries": ["APB Rücktritt"], "done": false}}    follow-up JSON fields to change
   {"purpose": "answer", "reply": "Text [1].", "first_delay_s": 8, "token_delay_s": 0}  answer text and its timing
   {"purpose": "answer", "fail": 500}                                                  an HTTP error instead
-Without a fitting rule a call gets the default reply of its purpose."""
+Without a fitting rule a call gets the default reply of its purpose. The analysis reply takes the shape its prompt asks for:
+the profile's (the prompt names `queries_de`: reasoning, queries_de, queries_en, the filter fields, shape, needs_more) or the
+base one; a rule written with the base keys (`search_queries`, `answer_shape`) is read into the profile's.
+  {"purpose": "analysis", "match": "Vergleich", "reply": {"needs_more": true}}         the profile's shape: another round"""
 
 import json
 import re
@@ -32,6 +35,9 @@ DEFAULT_REPLIES = {
     "no_docs": "Dazu habe ich keine passenden Dokumente gefunden.",
     "unknown": "OK.",
 }
+# a prompt that asks for the profile's analysis shape carries this key in its JSON contract
+PROFILE_SHAPE_MARK = '"queries_de"'
+PROFILE_KEYS = {"search_queries": "queries_de", "answer_shape": "shape"}
 QUESTION_MARKS = {"analysis": "Nachricht: ", "answer": "# Frage\n"}
 PIECE = re.compile(r"\S+\s*|\s+")
 
@@ -80,16 +86,37 @@ def pick(rules: Sequence[Rule], kind: str, messages: Sequence[Message]) -> Rule:
 
 def reply(rule: Rule, kind: str, messages: Sequence[Message]) -> str:
     if kind == "analysis":
-        analysis: dict[str, Any] = {
-            "standalone_question": question(messages, kind),
-            "intent": "lookup",
-            "search_queries": [],
-            "language": "de",
-            "date_from": None,
-            "date_to": None,
-            "answer_shape": "text",
-        }
-        analysis.update(rule.get("reply") or {})
+        asked = question(messages, kind)
+        changes: dict[str, Any] = dict(rule.get("reply") or {})
+        if PROFILE_SHAPE_MARK in system_of(messages):
+            analysis: dict[str, Any] = {
+                "reasoning": "",
+                "language": "de",
+                "standalone_question": asked,
+                "intent": "lookup",
+                "queries_de": [],
+                "queries_en": [],
+                "degree": None,
+                "programme": None,
+                "po_version": None,
+                "regulation": None,
+                "enrolment_term": None,
+                "date_range": None,
+                "shape": "text",
+                "needs_more": False,
+            }
+            changes = {PROFILE_KEYS.get(key, key): value for key, value in changes.items()}
+        else:
+            analysis = {
+                "standalone_question": asked,
+                "intent": "lookup",
+                "search_queries": [],
+                "language": "de",
+                "date_from": None,
+                "date_to": None,
+                "answer_shape": "text",
+            }
+        analysis.update(changes)
         return json.dumps(analysis, ensure_ascii=False)
     if kind == "follow_up":
         return json.dumps({**FOLLOW_UP_REPLY, **(rule.get("reply") or {})}, ensure_ascii=False)

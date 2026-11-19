@@ -71,8 +71,11 @@ def test_silence_ends_the_answer_with_the_timeout_message(
 def test_the_deadline_ends_a_slow_answer_with_the_timeout_message(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
-    llm.script({"purpose": "answer", "reply": " ".join(["Wort"] * 40), "token_delay_s": 1.5})
-    reply = assistant.ask(harness.THESIS, user)
+    deadline = assistant.ask(harness.THESIS, user + "-m").stream[0]["content"]["deadline_s"]
+    llm.script({"purpose": "answer", "reply": " ".join(["Wort"] * (int(deadline / 1.5) + 10)), "token_delay_s": 1.5})
+    reply = assistant.ask(
+        harness.THESIS, user
+    )  # the answer outlasts the card's deadline; the silence limit never fires
     assert reply.path == harness.LOOKUP[:7] + ["error", "chunk*"]
     assert reply.first("error") == "timeout" and reply.frames[-1]["content"] == "\n\n" + harness.MSG_TIMEOUT
 
