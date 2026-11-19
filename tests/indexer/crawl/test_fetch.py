@@ -195,9 +195,11 @@ def test_robots_4xx_allows_everything(status):
 @pytest.mark.parametrize("status", [500, 503])
 def test_robots_5xx_disallows_everything(status):
     net = Net(robots_served(status, "User-agent: *\nDisallow:\n"))
-    result = fetcher(net, retries=0).get(HUB)
-    assert isinstance(result, Skipped) and result.reason == "robots"
+    f = fetcher(net, retries=0)
+    result = f.get(HUB)
+    assert isinstance(result, Skipped) and result.reason == f"robots.txt unreadable (http {status})"
     assert net.paths() == ["/robots.txt"]
+    assert f.hosts_down() == {FACULTY: f"http {status}"}
 
 
 def test_robots_unreachable_disallows_everything():
@@ -205,15 +207,22 @@ def test_robots_unreachable_disallows_everything():
         raise httpx.ConnectError("down", request=request)
 
     net = Net({f"http://{FACULTY}/robots.txt": down})
-    result = fetcher(net, retries=1).get(HUB)
-    assert isinstance(result, Skipped) and result.reason == "robots"
+    f = fetcher(net, retries=1)
+    result = f.get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "robots.txt unreadable (unreachable)"
     assert net.paths() == ["/robots.txt"] * 2  # the retry
+    assert f.hosts_down() == {FACULTY: "unreachable"}
 
 
 def test_robots_html_body_with_status_200_is_not_allow_all():
     net = Net(robots_served(200, "<!doctype html><html><body>Seite nicht gefunden</body></html>", "text/html"))
     result = fetcher(net).get(HUB)
-    assert isinstance(result, Skipped) and result.reason == "robots"
+    assert isinstance(result, Skipped) and result.reason == "robots.txt unreadable (an HTML page)"
+
+
+def test_robots_that_disallow_do_not_make_a_host_down():
+    f = fetcher(Net())
+    assert isinstance(f.get(f"http://{FACULTY}{pages.LOGIN_PAGE}"), Skipped) and f.hosts_down() == {}
 
 
 def test_robots_kept_one_per_host():
@@ -577,7 +586,7 @@ def test_a_pdf_streams_into_the_cache_and_leaves_no_part_file(tmp_path):
 def test_a_robots_txt_over_the_limit_disallows_the_host(tmp_path):
     net = Net(robots_served(200, "User-agent: *\n" + "# padding\n" * 500))
     result = caching(net, tmp_path, page_limit=1000).get(HUB)
-    assert isinstance(result, Skipped) and result.reason == "robots"
+    assert isinstance(result, Skipped) and result.reason == "robots.txt unreadable (too large)"
 
 
 @pytest.mark.parametrize("host", ["www.darmstadt.de.", "WWW.Darmstadt.DE.", "h-da.de.", "www.h-da.de."])
@@ -622,7 +631,7 @@ def test_a_malformed_url_is_skipped():
 def test_a_malformed_location_in_robots_txt_disallows_the_host():
     net = Net({f"http://{FACULTY}/robots.txt": lambda r: httpx.Response(302, headers={"location": "http://[::1"})})
     result = fetcher(net).get(HUB)
-    assert isinstance(result, Skipped) and result.reason == "robots"
+    assert isinstance(result, Skipped) and result.reason.startswith("robots.txt unreadable")
 
 
 def test_a_redirect_to_a_path_robots_disallows_is_not_followed():

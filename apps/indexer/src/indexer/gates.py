@@ -52,16 +52,25 @@ def source_gate(name: str, count: int, minimum: int, kind: str) -> dict[str, Any
     return {"source": name, "kind": kind, "count": count, "minimum": minimum, "passed": count >= minimum}
 
 
+def hosts_gate(reports: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
+    """Passes when no source reports a host of its set as down (`hosts_down` in its report): a lost host is not a smaller
+    corpus the ratio may absorb."""
+    down = [d["host"] for report in reports.values() for d in report.get("hosts_down", ())]
+    return {"down": down, "passed": not down}
+
+
 def size_gate(parents: int, previous: Mapping[str, Any], ratio: float) -> dict[str, Any]:
     last = previous.get("parents")
     return {"count": parents, "last": last, "ratio": ratio, "passed": not last or parents >= ratio * last}
 
 
 def refusal(gates: Mapping[str, Mapping[str, Any]]) -> str | None:
-    """The first failed gate's message, in the order the gates were added (the sources in profile order, then size)."""
+    """The first failed gate's message, in the order the gates were added (the sources in profile order, then the hosts, then size)."""
     for name, gate in gates.items():
         if gate["passed"]:
             continue
+        if name == "hosts":
+            return f"{', '.join(gate['down'])} could not be reached (robots.txt unreadable); swap refused"
         if name == "size":
             return f"corpus shrank to {gate['count']} parents (last build {gate['last']}); swap refused"
         what = "PDFs produced documents" if gate["kind"] == "pdfs" else "documents"

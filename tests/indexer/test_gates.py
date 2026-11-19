@@ -34,4 +34,9 @@ def test_the_first_failed_gate_names_itself_and_says_swap_refused():
     assert gates.refusal({"pdfs": pdfs, "size": size}) == (
         "only 1 pdfs PDFs produced documents (minimum 9); swap refused"
     )
+    hosts = gates.hosts_gate({"web": {"hosts_down": [{"host": "a.test", "reason": "http 503"}]}, "pdfs": {}})
+    assert hosts == {"down": ["a.test"], "passed": False} and gates.hosts_gate({"web": {}})["passed"]
+    assert gates.refusal({"hosts": hosts, "size": size}) == (
+        "a.test could not be reached (robots.txt unreadable); swap refused"
+    )
     assert gates.refusal({"size": size}) == "corpus shrank to 10 parents (last build 100); swap refused"

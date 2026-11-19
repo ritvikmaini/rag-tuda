@@ -161,6 +161,7 @@ def build_corpus(
     )
     minutes["chunk"] = time.monotonic() - t
     children = sum(len(p.children) for p in parents)
+    checks["hosts"] = gates.hosts_gate(reports)
     checks["size"] = gates.size_gate(len(parents), previous, ingest.collections[settings.collection].min_build_ratio)
     refused = None if limit else gates.refusal(checks)
     if refused:

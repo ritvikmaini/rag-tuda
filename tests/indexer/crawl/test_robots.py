@@ -159,6 +159,7 @@ def test_dot_segments_are_resolved(path, blocked):
 
 
 def test_disallow_all_blocks_every_url():
-    robots = Robots.disallow_all()
+    robots = Robots.disallow_all("http 503")
+    assert robots.unreadable == "http 503"
     assert not robots.allowed(AGENT, f"{HOST}/")
     assert not robots.allowed("anybot", f"{HOST}/a?b=c")

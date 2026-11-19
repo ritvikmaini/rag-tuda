@@ -9,7 +9,7 @@ Rules are split at their `*` once at parse time and matched by a greedy left-to-
 cannot make matching slow."""
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from urllib.parse import quote, urlsplit
 
 __all__ = ["Robots"]
@@ -86,6 +86,7 @@ class Robots:
 
     groups: dict[str, list[_Rule]] = field(default_factory=dict)
     sitemaps: list[str] = field(default_factory=list)  # the `Sitemap:` URLs, for discovery
+    unreadable: str = ""  # why robots.txt could not be read (the host is down), when it could not
 
     @classmethod
     def parse(cls, text: str) -> "Robots":
@@ -114,9 +115,10 @@ class Robots:
         return cls(groups, sitemaps)
 
     @classmethod
-    def disallow_all(cls) -> "Robots":
-        """The rules for a host whose robots.txt could not be read (a server error, no answer): nothing may be fetched."""
-        return cls.parse("User-agent: *\nDisallow: /\n")
+    def disallow_all(cls, unreadable: str) -> "Robots":
+        """The rules for a host whose robots.txt could not be read (a server error, no answer; `unreadable` says what):
+        nothing may be fetched."""
+        return replace(cls.parse("User-agent: *\nDisallow: /\n"), unreadable=unreadable)
 
     def allowed(self, agent: str, url: str) -> bool:
         """Whether `agent` (a product token, or a full user agent string whose leading name counts) may fetch `url`."""

@@ -69,6 +69,12 @@ def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
         *_capped(
             "warning",
             name,
+            [f"host down {d['host']}: robots.txt unreadable ({d['reason']})" for d in report.get("hosts_down", ())],
+            "hosts down",
+        ),
+        *_capped(
+            "warning",
+            name,
             [f"not indexed, lacks {', '.join(d['missing'])}: {d['url']}" for d in report.get("not_indexed", ())],
             "not indexed",
         ),

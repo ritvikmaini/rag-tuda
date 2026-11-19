@@ -264,9 +264,15 @@ class Fetcher:
         host, parts = _host(url), _parts(url)
         if host not in self._robots:
             self._robots[host] = (
-                self._read_robots(f"{parts.scheme}://{parts.netloc}/robots.txt") if parts else Robots.disallow_all()
+                self._read_robots(f"{parts.scheme}://{parts.netloc}/robots.txt")
+                if parts
+                else Robots.disallow_all("not an http url")
             )
         return self._robots[host]
+
+    def hosts_down(self) -> dict[str, str]:
+        """The hosts whose robots.txt could not be read, with why: nothing was fetched from them."""
+        return {host: robots.unreadable for host, robots in self._robots.items() if robots.unreadable}
 
     def _host_refusal(self, host: str) -> str | None:
         if _never_fetched(host):
@@ -279,7 +285,10 @@ class Fetcher:
             return Skipped(asked, "not an http url", url)
         if reason := self._host_refusal(host):
             return Skipped(asked, reason, host)
-        if not self.robots(url).allowed(self.user_agent, url):
+        robots = self.robots(url)
+        if robots.unreadable:
+            return Skipped(asked, f"robots.txt unreadable ({robots.unreadable})", url)
+        if not robots.allowed(self.user_agent, url):
             return Skipped(asked, "robots", url)
         return None
 
@@ -291,18 +300,19 @@ class Fetcher:
             try:
                 url = urljoin(url, reply.headers["location"])
             except ValueError:
-                return Robots.disallow_all()
+                return Robots.disallow_all("bad redirect")
             reply = "refused" if self._host_refusal(_host(url)) else self._send(url)
         if isinstance(reply, _Reply) and reply.file:
             reply.file.unlink(missing_ok=True)  # robots.txt served as a PDF is not a robots file
-            return Robots.disallow_all()
+            return Robots.disallow_all("a PDF")
         if isinstance(reply, str) or reply.status >= 500 or reply.status == 429 or 300 <= reply.status < 400:
-            log.warning("robots.txt of %s is unreadable: nothing is fetched from that host", url)
-            return Robots.disallow_all()
+            why = reply if isinstance(reply, str) else f"http {reply.status}"
+            log.warning("robots.txt of %s is unreadable (%s): nothing is fetched from that host", url, why)
+            return Robots.disallow_all(why)
         if reply.status >= 400:
             return Robots.parse("")
         if "html" in reply.headers.get("content-type", "").lower():  # a soft 404 is allow-all only on a 4xx status
-            return Robots.disallow_all()
+            return Robots.disallow_all("an HTML page")
         return Robots.parse(reply.body.decode("utf-8", "replace"))
 
     def _wait(self, host: str) -> None:

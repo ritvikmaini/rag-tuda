@@ -15,8 +15,9 @@ is not fetched a second time; `--resume` continues the interrupted crawl of the 
 
 The report's `manifest` lists, per kept document this crawl fetched, its URL, content hash, fetch date and metadata, for the
 snapshot manifest the build writes after it publishes. The report also lists what the build summary names: `empty_pages` (a main content selector that finds nothing: the site may have
-changed), `not_indexed` (the fail-closed documents), `copies` (hub copies skipped) and `skipped` (a URL that was not fetched,
-and why). `fetcher_options` are Fetcher's own (a test injects a client and a clock)."""
+changed), `not_indexed` (the fail-closed documents), `copies` (hub copies skipped), `skipped` (a URL that was not fetched,
+and why) and `hosts_down` (a host of the source set whose robots.txt could not be read: nothing was fetched from it, and the
+build refuses to swap). `fetcher_options` are Fetcher's own (a test injects a client and a clock)."""
 
 import dataclasses
 from collections.abc import Iterator, Mapping
@@ -179,6 +180,7 @@ class TudaWeb:
             "not_indexed": [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed],
             "copies": list(selection.copies),
             "skipped": crawl.skipped,
+            "hosts_down": [{"host": h, "reason": why} for h, why in fetcher.hosts_down().items()],
             "manifest": [asdict(m) for m in self._manifest(crawl, kept)],
         }
         report["pdf_sync"] = {

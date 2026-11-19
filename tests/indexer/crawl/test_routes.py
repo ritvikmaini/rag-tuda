@@ -42,4 +42,6 @@ def test_the_fetcher_of_a_context_with_routes_fetches_nothing_from_an_unrouted_h
     ctx = build.context(settings, "web", None, False)
     ctx = dataclasses.replace(ctx, options={**ctx.options, "routes": ROUTES})
     reply = make_fetcher(ctx, ["www.faculty.test", "www.other.test"], interval=0).get("https://www.other.test/page.jsp")
-    assert isinstance(reply, Skipped) and reply.reason == "robots"  # robots.txt could not be read: nothing is fetched
+    assert (
+        isinstance(reply, Skipped) and reply.reason == "robots.txt unreadable (unreachable)"
+    )  # robots.txt could not be read: nothing is fetched

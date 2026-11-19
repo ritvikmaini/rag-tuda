@@ -611,3 +611,22 @@ def test_shrunk_build_keeps_live_generation(builder, tmp_path):
     assert (
         (tmp_path / "state" / REGISTRY).read_text(encoding="utf-8").count(PO_PDF) == registry_before.count(PO_PDF) == 1
     )
+
+
+def test_a_host_that_is_down_keeps_the_live_generation(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    live = list(builder.published)
+    stats = (tmp_path / "state" / gates.STATS_NAME).read_text(encoding="utf-8")
+    code, lines = builder(EXTRA_PAGES, TODAY + timedelta(days=1), down={INTERN})
+    warning = f"warning: tu_web: host down {INTERN}: robots.txt unreadable (http 503)"
+    refused = [line for line in lines if line.startswith("refused:")]
+    assert code == 1 and len(refused) == 1 and INTERN in refused[0] and "swap refused" in refused[0]
+    assert warning in lines and lines.index(warning) < lines.index(refused[0])
+    assert builder.published == live
+    assert sorted(p.name for p in (tmp_path / "snapshots").iterdir()) == ["1.json"]
+    assert (tmp_path / "state" / gates.STATS_NAME).read_text(encoding="utf-8") == stats
+
+
+def test_a_full_set_host_that_is_down_does_not_stop_a_core_build(builder):
+    code, lines = builder(EXTRA_PAGES, down={LADADI})
+    assert code == 0 and not any("host down" in line for line in lines)

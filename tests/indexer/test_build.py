@@ -119,7 +119,7 @@ def test_the_documents_reach_the_chunker_in_profile_order_then_the_gates(setting
         "extract": EXTRACTED,
     }
     assert result["sources"]["web"] == {"crawl": "kept", "crawl_pages": 2, "documents": 2}
-    assert list(result["gates"]) == ["web", "pdfs", "maps", "size"]
+    assert list(result["gates"]) == ["web", "pdfs", "maps", "hosts", "size"]
     assert result["gates"]["pdfs"]["kind"] == "pdfs" and result["gates"]["maps"]["kind"] == "documents"
     assert (result["parents"], result["children"], result["reused"]) == (2, 4, False)
     assert set(result["minutes"]) == {"collect", "extract", "chunk"} and "minutes_total" in result
