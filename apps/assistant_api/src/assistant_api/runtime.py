@@ -139,6 +139,7 @@ def graph_deps(rt: Runtime, index: IndexHandles) -> GraphDeps:
     overlay = rt.settings.overlay
     return GraphDeps(
         profile=rt.settings.profile,
+        roles=rt.settings.roles.model_dump() if rt.settings.roles else None,
         card=rt.settings.card,
         messages=rt.settings.messages,
         prompts=rt.prompts,

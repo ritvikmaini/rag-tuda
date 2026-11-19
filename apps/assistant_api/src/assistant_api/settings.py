@@ -22,7 +22,7 @@ from rag_core.settings.card import (
     with_local_model,
     with_local_url,
 )
-from rag_core.settings.profile import Guard, Profile
+from rag_core.settings.profile import Guard, Profile, Roles
 from rag_core.settings.sections import Compute, DatabaseSection, Http, ModelServersSection, Server, Timeouts, Tracing
 
 
@@ -105,6 +105,7 @@ class AssistantSettings:
     messages: Messages
     prompts: dict[str, PromptText]
     profile_dir: Path
+    roles: Roles | None = None  # roles.yaml beside the profile, when it has one
 
     @property
     def guard(self) -> Guard:
@@ -151,4 +152,8 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | Pa
         )
     texts = yaml.safe_load((profile_file.parent / "messages.de.yaml").read_text(encoding="utf-8"))
     prompts = load_profile_prompts(profile_file.parent / "prompts")
-    return AssistantSettings(profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent)
+    roles_file = profile_file.parent / "roles.yaml"
+    roles = load_profile(Roles, roles_file) if roles_file.exists() else None
+    return AssistantSettings(
+        profile, card, overlay, Messages.model_validate(texts), prompts, profile_file.parent, roles
+    )

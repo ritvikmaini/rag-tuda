@@ -13,6 +13,7 @@ from typing import Any, Optional
 
 from rag_core.domain.access import ANONYMOUS, Principal
 from rag_core.domain.answer_shapes import FORMATS_VERSION
+from rag_core.domain.filters import Chips
 from rag_core.domain.history import kept_ids, valid_turn_id
 
 from assistant_api.chat.guard import PROGRESS
@@ -43,12 +44,14 @@ async def pipeline(
     principal: Principal = ANONYMOUS,
     record: TurnRecord | None = None,
     deadline_at: float | None = None,
+    chips: Chips | None = None,
 ) -> AsyncIterator[Any]:
     """
     RAG pipeline with concurrency control. `turn` is the turn id the route sent in `meta` (the stored question takes it) and
     `trace_id` the Langfuse trace id it sent (None: untraced). `record` is the question's turn (None for a variant or a switch):
     the store gets its row before the early exits and the run fills it, the guard's end writes it. `deadline_at` is the guard's
-    deadline as a time.monotonic() value: the answer step waits out a rate limit only within it.
+    deadline as a time.monotonic() value: the answer step waits out a rate limit only within it. `chips` are the page's degree,
+    programme and PO selectors of this request (already checked against the roles).
 
     Uses a semaphore to limit concurrent executions and prevent resource exhaustion
     under high load. Excess requests will wait for a slot to become available.
@@ -156,6 +159,7 @@ async def pipeline(
         # never its name as a str)
         config["configurable"]["principal"] = principal
         config["configurable"]["deadline_at"] = deadline_at
+        config["configurable"]["chips"] = chips
 
         try:
             async for frame in run_stream(

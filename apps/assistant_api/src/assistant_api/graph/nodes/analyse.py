@@ -1,9 +1,12 @@
-"""The query analysis node: rag_core.services.analysis.analyse over the turn's history and question."""
+"""The query analysis node: rag_core.services.analysis.analyse over the turn's history and question, and the hard filter
+resolved from the question, the request's chips, the analysis and the previous turn's filter."""
 
 from datetime import datetime, timezone
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from rag_core.domain.answer_shapes import FORMATS_VERSION
+from rag_core.domain.filters import resolve_filter
 from rag_core.domain.history import context_turns, history_text
 from rag_core.services.analysis import analyse
 
@@ -12,8 +15,11 @@ from assistant_api.graph.state import AgentState, GraphDeps
 
 def make_analyse(deps: GraphDeps):
     budget, history = deps.card.budget, deps.profile.history
+    roles = (
+        deps.roles if deps.profile.retrieval.switches.filters else None
+    )  # no roles.yaml or the switch off: no filter
 
-    async def rewrite_follow_up_question(state: AgentState) -> dict[str, Any]:
+    async def rewrite_follow_up_question(state: AgentState, config: RunnableConfig | None = None) -> dict[str, Any]:
         prior = context_turns(
             state["messages"], budget.history_turns, history.max_age_hours, datetime.now(timezone.utc)
         )
@@ -38,6 +44,13 @@ def make_analyse(deps: GraphDeps):
             "retrieval_queries": queries,
             "date_from": analysis.date_from,
             "date_to": analysis.date_to,
+            # the readers run on the user's own words, so they also work when the analysis fell back; the state's filter, if
+            # the run's input seeded one, is the previous turn's
+            "filter": resolve_filter(
+                question, ((config or {}).get("configurable") or {}).get("chips"), analysis, state.get("filter"), roles
+            )
+            if roles
+            else None,
             "raw_docs": [],
             "grouped_raw_docs": [],
             "formatted_docs": "",

@@ -4,6 +4,7 @@ import asyncio
 import json
 import types
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
@@ -83,6 +84,9 @@ def test_the_chat_route_keeps_its_parameters() -> None:
         "variant",
         "variant_of",
         "variant_select",
+        "degree",
+        "programme",
+        "po",
     ]
 
 
@@ -268,3 +272,59 @@ def test_the_lifespan_starts_the_heal_task_after_a_failed_load_and_cancels_it_be
         client.get("/healthz")  # one round trip through the loop: the task has started
         assert events == ["heal started"]
     assert events == ["heal started", "heal cancelled", "pools disposed"]  # no reload can open a pool after the dispose
+
+
+def chip_client(monkeypatch, roles):
+    """The app with a pipeline that records the chips it is given."""
+    chips: list[object] = []
+
+    async def pipeline(rt, **kwargs):
+        chips.append(kwargs["chips"])
+        yield fr.Chunk(content="Antwort")
+
+    class Turns:
+        async def finish(self, record, outcome):
+            pass
+
+    monkeypatch.setattr(chat_route, "pipeline", pipeline)
+    client, rt = app_with()
+    rt.turns, rt.handler, rt.messages = Turns(), None, {"guard.error": "Fehler"}
+    rt.settings.roles = roles
+    rt.settings.profile = types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000))
+    rt.settings.card = types.SimpleNamespace(timeouts=types.SimpleNamespace(deadline_s=5, idle_s=5))
+
+    def get(**params):
+        return client.get(
+            "/api/chat",
+            params={"question": "Frage", "conversation_id": "c-chips", **params},
+            headers={"Authorization": "Bearer t0k"},
+        )
+
+    return get, chips
+
+
+def test_the_chat_route_passes_the_chips_and_refuses_values_the_roles_do_not_know(monkeypatch) -> None:
+    from rag_core.domain.filters import Chips
+    from rag_core.settings import load_profile
+    from rag_core.settings.profile import Roles
+
+    roles = load_profile(Roles, Path(__file__).resolve().parents[2] / "profiles" / "tu-informatik" / "roles.yaml")
+    get, chips = chip_client(monkeypatch, roles)
+    assert get().status_code == 200 and get(degree="", programme="").status_code == 200
+    assert chips == [Chips(), Chips()]  # an empty selector is "not chosen"
+    assert get(degree="master", programme="msc-informatik", po="2015").status_code == 200
+    assert chips[-1] == Chips("master", "msc-informatik", 2015)
+    for bad in (
+        {"degree": "doktor"},
+        {"programme": "nope"},
+        {"po": "1999"},
+        {"po": "x"},
+        {"degree": "bachelor", "programme": "msc-informatik"},
+    ):
+        reply = get(**bad)
+        assert reply.status_code == 422, bad
+    assert (
+        "unknown filter" in get(programme="nope").json()["detail"] and len(chips) == 3
+    )  # nothing ran for a refused chip
+    none, none_chips = chip_client(monkeypatch, None)  # a profile without roles.yaml takes no chips
+    assert none(degree="master").status_code == 422 and none_chips == []

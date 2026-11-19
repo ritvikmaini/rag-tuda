@@ -56,6 +56,7 @@ NAMED = {
     "identity.day_names": ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"],
     "retrieval.rerank.revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
     "retrieval.rerank.scope_fallback_min": None,
+    "retrieval.switches.filters": True,
 }
 # the stack's technical values (deploy/compose.yaml's backend environment; a repo test holds the file to them)
 STACK = {
@@ -297,3 +298,11 @@ def test_the_model_servers_section_no_longer_takes_the_llm_url(secrets: Path) ->
 def test_the_secrets_folder_defaults_to_the_environments(secrets: Path) -> None:
     database = load_settings(environment(RAG_SECRETS_DIR=str(secrets))).overlay.database
     assert database.user is not None and database.user.get_secret_value() == "rag_app"
+
+
+def test_roles_come_from_the_file_beside_the_profile(secrets: Path) -> None:
+    assert load_settings(environment(), secrets_dir=secrets).roles is None  # the example profile has none
+    tu = PROFILE.parents[1] / "tu-informatik" / "profile.yaml"
+    settings = load_settings(environment(RAG_PROFILE=str(tu)), secrets_dir=secrets)
+    assert settings.roles is not None and "msc-informatik" in settings.roles.programmes
+    assert settings.profile.retrieval.switches.filters is True

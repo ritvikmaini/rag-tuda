@@ -7,6 +7,7 @@ from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 from rag_core.domain.access import ANONYMOUS, Principal
+from rag_core.domain.filters import Filter
 from rag_core.ports.chat import ChatModel, TokenCounter
 from rag_core.services.prompts import PromptService
 from rag_core.settings.card import Card
@@ -37,6 +38,9 @@ class AgentState(TypedDict):
     variant: Optional[str]  # set only while a variant of the last answer runs
     answer_versions: dict  # versions of the last answer: name -> {"text", "shape"}
     usage: dict  # the provider's token counts of the answer call: prompt_tokens, completion_tokens (empty without)
+    # the hard filter of the question; the run's input may seed it with the previous turn's. None = no filtering at all (the
+    # switch is off or the profile has no roles.yaml), unlike an empty Filter, which still leaves archived rows out
+    filter: Optional[Filter]
     scope_fallback: bool  # an out-of-scope question whose best passage was strong enough, answered from the documents
 
 
@@ -64,3 +68,6 @@ class GraphDeps:
     answer_llm: Any  # ChatOpenAI: the generate node awaits it, so LangChain's callbacks stream the answer
     counter: TokenCounter
     retrieval: Retriever  # a Protocol, not the concrete RetrievalService
+    roles: Optional[dict[str, Any]] = (
+        None  # the dump of roles.yaml (plain data for the filter readers); None without the file
+    )

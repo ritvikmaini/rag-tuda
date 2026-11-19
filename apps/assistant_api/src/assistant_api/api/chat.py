@@ -5,9 +5,10 @@ import uuid
 from functools import partial
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from rag_core.domain.access import ANONYMOUS
+from rag_core.domain.filters import Chips, check_chips
 from rag_core.domain.history import valid_turn_id
 
 from assistant_api.api.deps import limiter, verify_token
@@ -34,9 +35,17 @@ async def main(
     variant: Optional[str] = None,
     variant_of: Optional[str] = None,
     variant_select: Optional[str] = None,
+    degree: Optional[str] = None,
+    programme: Optional[str] = None,
+    po: Optional[int] = None,
     token: None = Depends(verify_token),
 ) -> StreamingResponse:
     rt = request.app.state.runtime
+    chips = Chips(degree or None, programme or None, po)
+    if chips != Chips():  # an empty selector is "not chosen"; a value the roles do not know is refused, never ignored
+        roles = rt.settings.roles.model_dump() if rt.settings.roles else {}
+        if problem := check_chips(chips, roles):
+            raise HTTPException(status_code=422, detail=f"unknown filter: {problem}")
     timeouts = rt.settings.card.timeouts
     principal = ANONYMOUS  # the route is where a deployment names its principal
     # stream format 1: meta (the first frame) names the turn and the trace; a variant or a version switch belongs to the turn
@@ -75,6 +84,7 @@ async def main(
                 principal=principal,
                 record=record,
                 deadline_at=deadline_at,
+                chips=chips,
             ),
             deadline_s=timeouts.deadline_s,
             idle_s=timeouts.idle_s,

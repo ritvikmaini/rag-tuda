@@ -36,6 +36,12 @@ class Rerank(ProfileModel):
     scope_fallback_min: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class Switches(ProfileModel):
+    """The retrieval stages that can be turned off one by one (an ablation); all on by default."""
+
+    filters: bool = True  # the hard filter of a question (degree, programme, PO version, regulation, date); off = none
+
+
 class Retrieval(ProfileModel):
     embedding: Embedding
     fts_language: str
@@ -44,6 +50,7 @@ class Retrieval(ProfileModel):
     fts_extra_stopwords: tuple[str, ...]
     semantic_max_distance: float | None
     rerank: Rerank
+    switches: Switches = Switches()
 
 
 class Chunking(ProfileModel):

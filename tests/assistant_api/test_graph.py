@@ -810,3 +810,43 @@ def test_the_du_bias_and_bad_words_go_with_german_answers_only() -> None:
     assert "3845" in german["logit_bias"] and "bad_words" in german["extra_body"]
     _, english = answered(ENGLISH_QUESTION, "lookup", "Urlaub", **limits)
     assert "logit_bias" not in english and "bad_words" not in (english.get("extra_body") or {})
+
+
+def filtered_state(question: str, chips=None, roles=True, switch=True, previous=None) -> dict:
+    """The final state of a run over the TU roles (the example profile has none) with the filters switch as given."""
+    import dataclasses
+
+    from rag_core.settings.profile import Roles, Switches
+
+    tu = Path(__file__).resolve().parents[2] / "profiles" / "tu-informatik"
+    base = deps("lookup")
+    retrieval = base.profile.retrieval.model_copy(update={"switches": Switches(filters=switch)})
+    profile = base.profile.model_copy(update={"retrieval": retrieval})
+    graph = build_graph(
+        dataclasses.replace(
+            base, profile=profile, roles=load_profile(Roles, tu / "roles.yaml").model_dump() if roles else None
+        )
+    )
+    inputs = {
+        "messages": [question_message(question, None, datetime.now(timezone.utc))],
+        "variant": None,
+        "formats": "",
+        "filter": previous,
+    }
+    config = {"configurable": {"thread_id": "t", "chips": chips}}
+    return asyncio.run(graph.ainvoke(inputs, config=config))
+
+
+def test_the_analysis_step_resolves_the_filter_from_the_question_the_chips_and_the_previous_turn() -> None:
+    from rag_core.domain.filters import Chips, Filter
+
+    own = filtered_state("Was gilt in der PO 2015?", Chips(degree="master"))["filter"]
+    assert (own.degree, own.po_version, own.include_archived) == (("master",), (2015,), True)
+    previous = Filter(programme=("msc-informatik",))
+    followed = filtered_state("Und die Frist?", Chips(), previous=previous)["filter"]
+    assert followed == previous  # the question names nothing: the previous turn's filter stays
+
+
+def test_without_the_switch_or_roles_there_is_no_filter_at_all() -> None:
+    assert filtered_state("Was gilt in der PO 2015?", switch=False)["filter"] is None
+    assert filtered_state("Was gilt in der PO 2015?", roles=False)["filter"] is None

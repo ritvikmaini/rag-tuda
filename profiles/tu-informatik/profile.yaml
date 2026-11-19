@@ -15,6 +15,7 @@ retrieval:
   keyword_k: 10
   fts_extra_stopwords: []
   semantic_max_distance: null
+  switches: {filters: true}
   rerank: {model: BAAI/bge-reranker-v2-m3, revision: 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e, threshold: 0.50,
            parent_text: true, min_docs: 3, scope_fallback_min: null}
 ingest:
