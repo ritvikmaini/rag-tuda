@@ -16,6 +16,7 @@ from psycopg.rows import TupleRow
 from psycopg_pool import AsyncConnectionPool
 
 from rag_core.adapters.db import credentials
+from rag_core.domain.filters import Filter
 from rag_core.domain.resilience import check_or_sweep
 from rag_core.domain.retrieval import Hit, Section
 from rag_core.settings.profile import Profile
@@ -25,21 +26,23 @@ logger = logging.getLogger(__name__)
 
 VECTOR: LiteralString = (
     'SELECT "content", "section_id", cosine_distance("embedding", %(vector)s::vector) as distance '
-    'FROM "public".{} ORDER BY "embedding" <=> %(vector)s::vector LIMIT %(k)s'
+    'FROM "public".{}{where} ORDER BY "embedding" <=> %(vector)s::vector LIMIT %(k)s'
 )
 FTS_AND: LiteralString = (
     "SELECT content, section_id, ts_rank(fts_de, plainto_tsquery(%(lang)s, %(query)s)) as rank "
-    "FROM {} WHERE fts_de @@ plainto_tsquery(%(lang)s, %(query)s) ORDER BY rank DESC LIMIT %(k)s"
+    "FROM {} WHERE fts_de @@ plainto_tsquery(%(lang)s, %(query)s){where} ORDER BY rank DESC LIMIT %(k)s"
 )
 FTS_OR: LiteralString = (
     "SELECT content, section_id, ts_rank(fts_de, to_tsquery(%(lang)s, %(or_terms)s)) as rank "
     "FROM {} WHERE fts_de @@ to_tsquery(%(lang)s, %(or_terms)s) AND NOT fts_de @@ plainto_tsquery(%(lang)s, "
-    "%(query)s) ORDER BY rank DESC LIMIT %(remaining)s"
+    "%(query)s){where} ORDER BY rank DESC LIMIT %(remaining)s"
 )
 TSQUERY: LiteralString = "SELECT plainto_tsquery(%(lang)s, %(query)s)::text as tsq"
 COUNT_ALL: LiteralString = "SELECT COUNT(*) FROM {}"
 COUNT_TERM: LiteralString = "SELECT COUNT(*) FROM {} WHERE fts_de @@ to_tsquery(%(lang)s, %(term)s)"
-SECTIONS: LiteralString = "SELECT section_id, content as text, metadata FROM {} WHERE section_id = ANY(%(section_ids)s)"
+SECTIONS: LiteralString = (
+    "SELECT section_id, content as text, metadata FROM {} WHERE section_id = ANY(%(section_ids)s){where}"
+)
 PING: LiteralString = "SELECT 1 FROM {} LIMIT 1"
 CHILD_PROBE: LiteralString = 'SELECT "content", "section_id", "embedding" FROM {} LIMIT 0'
 FREQUENT_SHARE = 0.05  # a term in more than 5 % of the children is left out of the OR fallback
@@ -47,8 +50,41 @@ READ_POOL_MAX = 20  # two pools live 120 s per reload
 ReadPool = AsyncConnectionPool[AsyncConnection[TupleRow]]  # strict typing needs the pool's type argument
 
 
-def _on(template: LiteralString, view: str) -> sql.Composed:
-    return sql.SQL(template).format(sql.Identifier(view))
+# The hard filter's conditions, over the typed columns of both views. A NULL column passes every filter on it; a row bound
+# to a PO version (po_version set) is kept for a date only once its valid_from has come. Values are bound parameters.
+ARCHIVED: LiteralString = "archived = false"
+DEGREE: LiteralString = "(degree && %(f_degree)s::text[] OR degree IS NULL)"
+PROGRAMME: LiteralString = "(programme && %(f_programme)s::text[] OR programme IS NULL)"
+PO_VERSION: LiteralString = "(po_version && %(f_po_version)s::int[] OR po_version IS NULL)"
+REGULATION: LiteralString = "(regulation = ANY(%(f_regulation)s::text[]) OR regulation IS NULL)"
+VALID_FROM: LiteralString = "(valid_from <= %(f_date)s::date OR valid_from IS NULL OR po_version IS NULL)"
+
+
+def where_of(filter: Filter | None, lead: LiteralString = " AND") -> tuple[LiteralString, dict[str, Any]]:
+    """The filter's conditions as one clause starting with `lead` (" AND" after a WHERE, " WHERE" without one) and the
+    parameters it binds; None (no filtering) gives no clause. An empty Filter keeps archived rows out."""
+    if filter is None:
+        return "", {}
+    conditions: list[LiteralString] = [] if filter.include_archived else [ARCHIVED]
+    params: dict[str, Any] = {}
+    wanted: tuple[tuple[LiteralString, str, Any], ...] = (
+        (DEGREE, "f_degree", filter.degree),
+        (PROGRAMME, "f_programme", filter.programme),
+        (PO_VERSION, "f_po_version", filter.po_version),
+        (REGULATION, "f_regulation", filter.regulation),
+        (VALID_FROM, "f_date", filter.date),
+    )
+    for condition, name, value in wanted:
+        if value is not None:
+            conditions.append(condition)
+            params[name] = list(value) if isinstance(value, tuple) else value
+    if not conditions:
+        return "", {}
+    return lead + " " + " AND ".join(conditions), params
+
+
+def _on(template: LiteralString, view: str, where: LiteralString = "") -> sql.Composed:
+    return sql.SQL(template).format(sql.Identifier(view), where=sql.SQL(where))
 
 
 def _meta(value: Any) -> dict[str, Any]:
@@ -69,12 +105,17 @@ def keyword_terms(tsq_text: str, extra_stopwords: Sequence[str] = ()) -> list[st
 
 class PgVectorStore:
     def __init__(self, pool: ReadPool, view: str) -> None:
-        self.pool, self.query = pool, _on(VECTOR, view)
+        self.pool, self.view = pool, view
 
-    async def search(self, vector: Sequence[float], k: int, *, max_distance: float | None = None) -> list[Hit]:
+    async def search(
+        self, vector: Sequence[float], k: int, *, max_distance: float | None = None, filter: Filter | None = None
+    ) -> list[Hit]:
         literal = f"{[float(x) for x in vector]}"
+        where, bound = where_of(filter, " WHERE")
         async with self.pool.connection() as conn:
-            rows = await (await conn.execute(self.query, {"vector": literal, "k": k})).fetchall()
+            rows = await (
+                await conn.execute(_on(VECTOR, self.view, where), {"vector": literal, "k": k, **bound})
+            ).fetchall()
         if rows:
             logger.info(
                 "[Semantic] k=%d distance min=%.3f max=%.3f", k, min(r[2] for r in rows), max(r[2] for r in rows)
@@ -97,7 +138,6 @@ class PgFullText:
     def __init__(self, pool: ReadPool, view: str, language: str, extra_stopwords: Sequence[str] = ()) -> None:
         self.pool, self.view, self.language = pool, view, language
         self.extra_stopwords = tuple(extra_stopwords or ())
-        self.and_query, self.or_query = _on(FTS_AND, view), _on(FTS_OR, view)
         # per instance: a reload after a publish or a rollback starts with fresh term statistics
         self.term_is_frequent: dict[str, bool] = {}
         self.total_rows: int | None = None
@@ -124,12 +164,15 @@ class PgFullText:
             logger.info("[FTS] Filtered %d high-freq terms", len(terms) - len(kept))
         return " | ".join("'" + t.replace("'", "''") + "'" for t in kept)
 
-    async def search(self, query: str, k: int) -> list[Hit]:
+    async def search(self, query: str, k: int, filter: Filter | None = None) -> list[Hit]:
+        where, bound = where_of(
+            filter
+        )  # both statements carry it: the OR fallback never brings back a filtered-out row
         try:
             async with self.pool.connection() as conn:  # one transaction for all statements
-                params = {"lang": self.language, "query": query, "k": k}
+                params = {"lang": self.language, "query": query, "k": k, **bound}
                 # binary rows: ts_rank is real; the text format would round fts_rank
-                rows = list(await (await conn.execute(self.and_query, params, binary=True)).fetchall())
+                rows = list(await (await conn.execute(_on(FTS_AND, self.view, where), params, binary=True)).fetchall())
                 if len(rows) < k:
                     seen = {r[0] for r in rows}
                     or_terms = await self._or_terms(conn, query)
@@ -139,8 +182,11 @@ class PgFullText:
                             "query": query,
                             "or_terms": or_terms,
                             "remaining": k - len(rows),
+                            **bound,
                         }
-                        more = await (await conn.execute(self.or_query, more_params, binary=True)).fetchall()
+                        more = await (
+                            await conn.execute(_on(FTS_OR, self.view, where), more_params, binary=True)
+                        ).fetchall()
                         rows += [r for r in more if r[0] not in seen]
         except Exception as exc:
             logger.error("[PostgresFTSRetriever] Error during search: %s", type(exc).__name__)
@@ -156,14 +202,16 @@ class PgFullText:
 
 class PgSections:
     def __init__(self, pool: ReadPool, view: str) -> None:
-        self.pool, self.query, self.ping_query = pool, _on(SECTIONS, view), _on(PING, view)
+        self.pool, self.view, self.ping_query = pool, view, _on(PING, view)
 
-    async def get_many(self, section_ids: Sequence[str]) -> dict[str, Section]:
+    async def get_many(self, section_ids: Sequence[str], filter: Filter | None = None) -> dict[str, Section]:
         if not section_ids:
             return {}
+        where, bound = where_of(filter)
         try:
             async with self.pool.connection() as conn:
-                rows = await (await conn.execute(self.query, {"section_ids": list(section_ids)})).fetchall()
+                params = {"section_ids": list(section_ids), **bound}
+                rows = await (await conn.execute(_on(SECTIONS, self.view, where), params)).fetchall()
         except Exception as exc:
             logger.error("[PostgresParentLookup] Error in batch lookup: %s", exc)
             return {}  # a failed lookup gives no sections, the answer goes on without them

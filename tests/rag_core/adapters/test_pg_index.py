@@ -2,6 +2,7 @@
 statements. A fake pool records what would be sent."""
 
 import asyncio
+import datetime as dt
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -9,6 +10,7 @@ from typing import Any
 import pytest
 from psycopg_pool import AsyncConnectionPool
 from rag_core.adapters import pg_index
+from rag_core.domain.filters import Filter
 
 
 class Cursor:
@@ -68,8 +70,54 @@ def test_the_statements_read_the_typed_views():
     assert [(h.page_content, dict(h.metadata)) for h in hits] == [
         ("Kind", {"section_id": "p1", "retriever": "semantic", "child_chunk_semantic_search_score": 0.25})
     ]
-    assert "fts_de @@ plainto_tsquery(%(lang)s, %(query)s) ORDER BY rank DESC LIMIT %(k)s" in pg_index.FTS_AND
-    assert "section_id = ANY(%(section_ids)s)" in pg_index.SECTIONS
+    assert "fts_de @@ plainto_tsquery(%(lang)s, %(query)s){where} ORDER BY rank DESC LIMIT %(k)s" in pg_index.FTS_AND
+    assert "section_id = ANY(%(section_ids)s){where}" in pg_index.SECTIONS
+
+
+def test_a_filter_binds_its_values_into_both_legs_and_the_section_lookup():
+    flt = Filter(po_version=(2023,), regulation=("mhb",), date=dt.date(2026, 10, 1))
+    where = (
+        " AND archived = false"
+        " AND (po_version && %(f_po_version)s::int[] OR po_version IS NULL)"
+        " AND (regulation = ANY(%(f_regulation)s::text[]) OR regulation IS NULL)"
+        " AND (valid_from <= %(f_date)s::date OR valid_from IS NULL OR po_version IS NULL)"
+    )
+    bound = {"f_po_version": [2023], "f_regulation": ["mhb"], "f_date": dt.date(2026, 10, 1)}
+    pool: Any = Pool(
+        [("cosine_distance", []), ("ts_rank(fts_de, plainto_tsquery", []), ("ts_rank(fts_de, to_tsquery", [])]
+    )
+    asyncio.run(pg_index.PgVectorStore(pool, "v").search([0.5], 3, filter=flt))
+    text, params = pool.conn.sent[0]
+    assert text.endswith(f'FROM "public"."v" WHERE{where[4:]} ORDER BY "embedding" <=> %(vector)s::vector LIMIT %(k)s')
+    assert params == {"vector": "[0.5]", "k": 3, **bound}
+    pool = Pool(
+        [
+            ("ts_rank(fts_de, plainto_tsquery", []),
+            ("::text as tsq", [("'garag'",)]),
+            ('COUNT(*) FROM "v" WHERE', [(0,)]),
+        ]
+    )
+    asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Garage", 2, flt))
+    and_sql, and_params = pool.conn.sent[0]
+    or_sql, or_params = next((t, p) for t, p in pool.conn.sent if "to_tsquery(%(lang)s, %(or_terms)s)" in t)
+    assert f"plainto_tsquery(%(lang)s, %(query)s){where} ORDER BY rank" in and_sql  # the OR fallback carries it too
+    assert f"plainto_tsquery(%(lang)s, %(query)s){where} ORDER BY rank" in or_sql
+    assert and_params.items() >= bound.items() and or_params.items() >= bound.items()
+    pool = Pool([("section_id = ANY", [])])
+    asyncio.run(pg_index.PgSections(pool, "v").get_many(["a"], flt))
+    text, params = pool.conn.sent[0]
+    assert text.endswith(f"WHERE section_id = ANY(%(section_ids)s){where}")
+    assert params == {"section_ids": ["a"], **bound}
+
+
+def test_no_filter_adds_no_condition_and_an_empty_filter_only_leaves_archived_rows_out():
+    assert pg_index.where_of(None) == ("", {})
+    assert pg_index.where_of(Filter()) == (" AND archived = false", {})
+    assert pg_index.where_of(Filter(include_archived=True)) == ("", {})
+    assert pg_index.where_of(Filter(degree=("master",)), " WHERE") == (
+        " WHERE archived = false AND (degree && %(f_degree)s::text[] OR degree IS NULL)",
+        {"f_degree": ["master"]},
+    )
 
 
 def test_no_statement_names_a_legacy_relation_or_column():  # no legacy read is left behind
@@ -272,8 +320,7 @@ def test_open_index_builds_the_three_reads_on_the_typed_views_after_probing_both
         'SELECT 1 FROM "example_sections" LIMIT 1',
         'SELECT "content", "section_id", "embedding" FROM "example_chunks" LIMIT 0',
     ]
-    assert '"public"."example_chunks"' in handles.vector.query.as_string(None)
-    assert '"example_chunks"' in handles.full_text.and_query.as_string(None)
+    assert handles.vector.view == handles.full_text.view == "example_chunks"
     asyncio.run(handles.sections.ping())
     assert pool.conn.sent[-1][0] == 'SELECT 1 FROM "example_sections" LIMIT 1'
 

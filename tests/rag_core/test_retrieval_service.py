@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from rag_core.adapters.reranker_http import RerankerHttp
+from rag_core.domain.filters import Filter
 from rag_core.domain.retrieval import Hit, Section
 from rag_core.ports.retrieval import RerankError
 from rag_core.services.retrieval import RetrievalService
@@ -35,24 +36,26 @@ class Embedder:
 
 class Vector:
     def __init__(self, texts: dict[str, str], fail: bool = False) -> None:
-        self.texts, self.fail = texts, fail
+        self.texts, self.fail, self.filters = texts, fail, []
 
-    async def search(self, vector, k, *, max_distance=None):
+    async def search(self, vector, k, *, max_distance=None, filter=None):
+        self.filters.append(filter)
         if self.fail:
             raise RuntimeError("db down")
         return [Hit(page_content=t, metadata={"section_id": i, "retriever": "semantic"}) for t, i in self.texts.items()]
 
 
 class FullText(Vector):
-    async def search(self, query, k):  # type: ignore[override]
-        return await Vector.search(self, [0.0], k)
+    async def search(self, query, k, filter=None):  # type: ignore[override]
+        return await Vector.search(self, [0.0], k, filter=filter)
 
 
 class Sections:
     def __init__(self, sections: dict[str, Section]) -> None:
-        self.sections = sections
+        self.sections, self.filters = sections, []
 
-    async def get_many(self, section_ids):
+    async def get_many(self, section_ids, filter=None):
+        self.filters.append(filter)
         return {i: self.sections[i] for i in section_ids if i in self.sections}
 
     async def ping(self) -> None:
@@ -104,6 +107,21 @@ def test_children_are_reranked_cut_and_lifted_to_their_parents() -> None:
     docs = asyncio.run(make_service(reranker=Reranker(scores)).retrieve(["q"], question="q"))
     assert [d.page_content for d in docs] == ["Parent 1", "Parent 2", "Parent 3"]  # threshold 0.50, min_docs 3
     assert all("rank_score" in d.metadata for d in docs)
+
+
+def test_the_filter_reaches_both_legs_and_every_section_lookup() -> None:
+    vector, full_text, sections = Vector(CHILDREN), FullText(CHILDREN), Sections({"p1": Section("p1", "Parent 1", {})})
+    flt = Filter(po_version=(2023,))
+    asyncio.run(
+        make_service(vector, full_text, sections, Reranker({"child one": 0.9})).retrieve(["q"], flt, question="q")
+    )
+    assert vector.filters == full_text.filters == [flt]
+    assert sections.filters == [
+        flt,
+        flt,
+    ]  # the parent texts for the reranker, then the parents of the reranked children
+    asyncio.run(make_service(vector, full_text, sections, Reranker({})).retrieve(["q"], question="q"))
+    assert vector.filters[-1] is None and sections.filters[-1] is None  # no filter given: none applied
 
 
 def test_the_result_is_cut_to_the_cards_final_k() -> None:
@@ -164,13 +182,13 @@ class FailingSections(Sections):
         super().__init__(sections)
         self.batch, self.lookup = batch, lookup
 
-    async def get_many(self, section_ids):
+    async def get_many(self, section_ids, filter=None):
         if self.batch:  # the first call (the reranker's parent texts) fails, the parents lookup after it works
             self.batch = False
             raise RuntimeError("db down")
         if self.lookup:
             raise asyncio.TimeoutError
-        return await super().get_many(section_ids)
+        return await super().get_many(section_ids, filter)
 
 
 class Verbatim(Reranker):
@@ -232,18 +250,18 @@ def test_a_search_that_finds_nothing_returns_nothing() -> None:
 
 def test_a_query_searches_both_ways_and_one_failure_does_not_sink_the_other() -> None:
     service = make_service(vector=Vector({"v": "a"}), full_text=FullText({}, fail=True))
-    hits = asyncio.run(service._search("q"))
+    hits = asyncio.run(service._search("q", None))
     assert [h.page_content for h in hits] == ["v"] and service.embedder.asked == ["q"]
     both = make_service(vector=Vector({}, fail=True), full_text=FullText({}, fail=True))
     with pytest.raises(RuntimeError, match="every search failed") as raised:
-        asyncio.run(both._search("Personalnummer 4711 Beihilfe"))
+        asyncio.run(both._search("Personalnummer 4711 Beihilfe", None))
     assert "4711" not in str(raised.value)  # no question text in an error or a log
 
 
 def test_a_failing_search_logs_the_kind_and_the_reason_never_the_query(caplog) -> None:
     caplog.set_level(logging.ERROR)
     service = make_service(vector=Vector({"v": "a"}), full_text=FullText({}, fail=True))
-    asyncio.run(service._search("Personalnummer 4711 Beihilfe"))
+    asyncio.run(service._search("Personalnummer 4711 Beihilfe", None))
     assert "[HybridRetriever] keyword search failed: " in caplog.text
     assert "4711" not in caplog.text and "Beihilfe" not in caplog.text
 

@@ -97,7 +97,10 @@ def test_rag_app_reads_the_two_views_and_the_registry_and_nothing_else(connect, 
 
 def test_every_statement_of_the_adapter_runs_as_rag_app(connect, tables):
     app = connect("rag_app")
-    run = lambda text, view, params=None: app.execute(sql.SQL(text).format(sql.Identifier(view)), params).fetchall()  # noqa: E731
+
+    def run(text, view, params=None):
+        return app.execute(sql.SQL(text).format(sql.Identifier(view), where=sql.SQL("")), params).fetchall()
+
     near = "[" + ",".join(["1.0", "0.5"] + ["0.1"] * 766) + "]"
     assert len(run(pg_index.VECTOR, "rag_chunks", {"vector": near, "k": 5})) == 5
     words = {"lang": "german", "query": "Garage Rathaus"}

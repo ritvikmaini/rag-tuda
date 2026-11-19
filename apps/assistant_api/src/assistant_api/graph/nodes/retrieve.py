@@ -24,6 +24,7 @@ def make_retrieve(deps: GraphDeps):
         principal = (config.get("configurable") or {}).get("principal", ANONYMOUS)
         hits = await deps.retrieval.retrieve(
             query_list,
+            state.get("filter"),
             question=state.get("standalone_question") or question,
             date_from=state.get("date_from"),
             date_to=state.get("date_to"),

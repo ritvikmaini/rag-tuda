@@ -50,6 +50,7 @@ class Retriever(Protocol):
     async def retrieve(
         self,
         queries: list[str],
+        filter: Filter | None = None,
         *,
         question: str = "",
         date_from: str | None = None,

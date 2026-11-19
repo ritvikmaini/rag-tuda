@@ -63,6 +63,7 @@ async def score_one(deps: GraphDeps, analyse: Any, question: str) -> dict[str, A
         row["intent"] = state["intent"]
         hits = await deps.retrieval.retrieve(
             state["retrieval_queries"],
+            state.get("filter"),
             question=state["standalone_question"] or question,
             date_from=state["date_from"],
             date_to=state["date_to"],

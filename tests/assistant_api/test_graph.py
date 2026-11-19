@@ -17,11 +17,13 @@ from langchain_core.messages import AIMessage
 from assistant_api.graph.build import NODES, build_graph
 from assistant_api.graph.history import documents, history_messages, question_message, variant_inputs
 from assistant_api.graph.nodes.format_docs import make_format_docs
+from assistant_api.graph.nodes.retrieve import make_retrieve
 from assistant_api.chat.service import pipeline
 from assistant_api.graph.state import GraphDeps
 from assistant_api.sse import frames as fr
 from assistant_api.settings import Messages
 from rag_core.domain.access import ANONYMOUS, Principal
+from rag_core.domain.filters import Filter
 from rag_core.domain.history import PastTurn, VariantInput, context_turns
 from rag_core.services.prompts import PromptService, load_profile_prompts
 from rag_core.settings import load_profile
@@ -51,11 +53,13 @@ class Counter:
 
 
 SEEN: list[Any] = []  # the principals the retrieval was asked for
+FILTERS: list[Any] = []  # the filters it was asked for
 
 
 class Retrieval:
-    async def retrieve(self, queries, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
         SEEN.append(principal)
+        FILTERS.append(filter)
         return [
             Document(
                 page_content="Quelle eins",
@@ -272,7 +276,7 @@ class Scored:
     def __init__(self, *scores: float | None) -> None:
         self.scores, self.calls = scores, []
 
-    async def retrieve(self, queries, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
         self.calls.append(list(queries))
         return [
             Document(
@@ -565,6 +569,17 @@ def test_the_principal_reaches_the_retrieval_through_the_run_config() -> None:
     assert SEEN[-1] == Principal("kollegin")
 
 
+def test_the_retrieve_node_hands_the_states_filter_to_the_retrieval() -> None:
+    node = make_retrieve(deps("lookup"))
+    messages = [question_message("Frage?", None, datetime.now(timezone.utc))]
+    asyncio.run(node({"messages": messages, "filter": Filter(po_version=(2023,))}, {}))
+    assert FILTERS[-1] == Filter(po_version=(2023,))
+    asyncio.run(
+        node({"messages": messages, "filter": None}, {})
+    )  # filtering is off: the retrieval gets no filter at all
+    assert FILTERS[-1] is None
+
+
 def test_a_request_untraced_at_its_start_stays_untraced_when_the_login_heals_meanwhile(monkeypatch) -> None:
     """chat.py sent trace_id null in meta; the handler the heal task sets while the request waits for the slot must not
     attach the run to a random trace the page has no link to."""
@@ -595,7 +610,7 @@ class Dated:
     def __init__(self, text: str) -> None:
         self.text = text
 
-    async def retrieve(self, queries, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
         meta = {"filename": "a.pdf", "section_id": "p1", "cross_encoder_score": 0.9, "url": "https://x/a.pdf"}
         return [Document(page_content=self.text, metadata=meta)]
 
@@ -739,7 +754,7 @@ class Titled:
     def __init__(self, *titles: str) -> None:
         self.titles = titles
 
-    async def retrieve(self, queries, *, question="", date_from=None, date_to=None, principal=None):
+    async def retrieve(self, queries, filter=None, *, question="", date_from=None, date_to=None, principal=None):
         return [
             Document(
                 page_content="Regel %d" % i,

@@ -11,6 +11,7 @@ from typing import Any
 
 from rag_core.domain.access import ANONYMOUS, AllowAll, Principal, allowed
 from rag_core.domain.doc_scores import mark_unscored, sort_score
+from rag_core.domain.filters import Filter
 from rag_core.domain.parent_rerank import parent_texts, rerank_texts, score_children
 from rag_core.domain.ranking import RankingPolicy, rank
 from rag_core.domain.resilience import gather_bounded
@@ -59,17 +60,17 @@ class RetrievalService:
         self.final_k = final_k  # the model card's budget
         self.access = access or AllowAll()
 
-    async def _search(self, query: str) -> list[Hit]:
+    async def _search(self, query: str, filter: Filter | None) -> list[Hit]:
         """One query's children: the semantic search (its embedding inside the same time bound) and the keyword search,
-        each bounded; one failing does not sink the other."""
+        each bounded and both under the filter; one failing does not sink the other."""
         r = self.retrieval
 
         async def semantic() -> list[Hit]:
             vector = await self.embedder.aembed_query(query)
-            return await self.vector.search(vector, r.semantic_k, max_distance=r.semantic_max_distance)
+            return await self.vector.search(vector, r.semantic_k, max_distance=r.semantic_max_distance, filter=filter)
 
         results, failures = await gather_bounded(
-            [semantic(), self.full_text.search(query, r.keyword_k)], self.timeouts.retrieval_s
+            [semantic(), self.full_text.search(query, r.keyword_k, filter)], self.timeouts.retrieval_s
         )
         for index, reason in failures:
             kind = "semantic" if index == 0 else "keyword"
@@ -81,6 +82,7 @@ class RetrievalService:
     async def retrieve(
         self,
         queries: list[str],
+        filter: Filter | None = None,
         *,
         question: str = "",
         date_from: str | None = None,
@@ -88,8 +90,10 @@ class RetrievalService:
         principal: Principal = ANONYMOUS,
         today: date | None = None,
     ) -> list[Hit]:
+        """The ranked hits for the queries. The filter (None: none) narrows both legs and both section lookups; a filter
+        that keeps nothing gives no hits, the search is never repeated without it."""
         logger.info(f"[DocumentRetriever] using {len(queries)} retrieval queries")
-        tasks = [self._search(query) for query in queries]
+        tasks = [self._search(query, filter) for query in queries]
         # each query bounded; failed queries are skipped, and if every query failed the request ends with the German
         # error message instead of "nothing found"
         all_docs_nested, failures = await gather_bounded(tasks, self.timeouts.retrieval_s + 2)
@@ -110,7 +114,7 @@ class RetrievalService:
             )
             try:
                 found = await asyncio.wait_for(
-                    self.sections.get_many(section_ids), timeout=self.timeouts.parent_lookup_s
+                    self.sections.get_many(section_ids, filter), timeout=self.timeouts.parent_lookup_s
                 )
                 # a denied section's children leave before the reranker, so its text is never scored
                 unique_docs, found = without_denied(unique_docs, found, principal, self.access)
@@ -131,7 +135,9 @@ class RetrievalService:
             section_ids = list(dict.fromkeys(i for i in (_metadata(d).get("section_id") for d in reranked_docs) if i))
             if reranked_docs and not section_ids:
                 logger.warning("[DB] No section_ids found in child chunks")
-            found = await asyncio.wait_for(self.sections.get_many(section_ids), timeout=self.timeouts.parent_lookup_s)
+            found = await asyncio.wait_for(
+                self.sections.get_many(section_ids, filter), timeout=self.timeouts.parent_lookup_s
+            )
             if section_ids:
                 logger.info(f"[DB] Retrieved {len(found)} parent documents from database")
             reranked_docs, permitted = without_denied(reranked_docs, found, principal, self.access)

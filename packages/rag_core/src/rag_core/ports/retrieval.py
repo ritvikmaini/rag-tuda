@@ -4,6 +4,7 @@ rag_core.domain.types.Doc."""
 from collections.abc import Sequence
 from typing import Protocol
 
+from rag_core.domain.filters import Filter
 from rag_core.domain.retrieval import Hit, Section
 
 
@@ -12,16 +13,22 @@ class RerankError(Exception):
 
 
 class VectorStore(Protocol):
-    async def search(self, vector: Sequence[float], k: int, *, max_distance: float | None = None) -> list[Hit]: ...
+    async def search(
+        self, vector: Sequence[float], k: int, *, max_distance: float | None = None, filter: Filter | None = None
+    ) -> list[Hit]:
+        """The k nearest children among the rows the filter keeps (None: no filter at all)."""
+        ...
 
 
 class FullTextIndex(Protocol):
-    async def search(self, query: str, k: int) -> list[Hit]: ...
+    async def search(self, query: str, k: int, filter: Filter | None = None) -> list[Hit]:
+        """The best keyword matches among the rows the filter keeps (None: no filter at all)."""
+        ...
 
 
 class SectionStore(Protocol):
-    async def get_many(self, section_ids: Sequence[str]) -> dict[str, Section]:
-        """The sections found ({} when the lookup fails: the answer goes on without them)."""
+    async def get_many(self, section_ids: Sequence[str], filter: Filter | None = None) -> dict[str, Section]:
+        """The sections found among the rows the filter keeps ({} when the lookup fails: the answer goes on without them)."""
         ...
 
     async def ping(self) -> None:
