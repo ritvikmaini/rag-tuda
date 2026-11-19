@@ -546,3 +546,17 @@ def test_up_takes_the_mode_of_the_hardware_unless_told(repo, monkeypatch, scenar
         and cli.main(["up", "--card", S4B["name"], "--mode", "native"]) == 0
     )
     assert seen == ["compose", "native"]
+
+
+def test_purge_removes_crawl_dirs(repo, monkeypatch, capsys):
+    monkeypatch.setattr(stack, "System", lambda: FakeSystem())
+    current = state.ensure(repo)
+    for folder in ("crawl/www.example.org", "crawl/pdfs", "snapshots"):
+        (current.dir / folder).mkdir(parents=True)
+        (current.dir / folder / "page.json").write_text("{}")
+    (current.dir / "state").mkdir()
+    (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
+    assert cli.main(["down", "--purge", "--yes"]) == 0
+    assert not (current.dir / "crawl").exists() and not (current.dir / "snapshots").exists()
+    assert (current.dir / "state" / "corpus_build_stats.json").is_file() and (current.dir / "token").is_file()
+    assert cli.main(["down", "--purge", "--yes"]) == 0  # nothing left to delete is not an error
