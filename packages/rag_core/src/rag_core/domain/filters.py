@@ -31,6 +31,9 @@ class Filter:
     regulation: tuple[str, ...] | None = None
     date: dt.date | None = None
     include_archived: bool = False
+    # where po_version came from: "text", "chip", "term" (derived from a start term: the PO "in der Regel" in force), "analysis",
+    # "carried" (the previous turn's; a term-derived one stays "term"); None without a PO
+    po_source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -45,15 +48,18 @@ class Chips:
 # explicit text ---------------------------------------------------------------------------------------------------------
 
 _YEAR = r"(?<!\d)(?:19|20)\d{2}(?!\d)"
-# "PO 2015", "Prüfungsordnung von 2015", "PO 2015 und PO 2023", "PO 2015 vs 2023", "examination regulations 2023"
+# "PO 2015", "PO (2015)", "Prüfungsordnung von 2015", "Prüfungsordnung aus dem Jahr 2015", "PO 2015 und PO 2023",
+# "PO 2015 vs 2023", "examination regulations 2023"
 PO_YEARS = re.compile(
-    r"\b(?:PO|Prüfungsordnung(?:en)?|(?:examination|exam) regulations?)[\s-]*(?:von|vom|aus|of|from)?\s*("
+    r"\b(?:PO|Prüfungsordnung(?:en)?|(?:examination|exam) regulations?)[\s-]*(?:(?:von|vom|aus|of|from)\s+)?"
+    r"(?:(?:dem\s+)?Jahre?\s+|the\s+year\s+)?\(?\s*("
     + _YEAR
     + r"(?:\s*(?:,|/|&|und|oder|bzw\.?|vs\.?|versus|and|or)\s*(?:PO\s*)?"
     + _YEAR
     + r")*)",
     re.IGNORECASE,
 )
+PO_SHORT_YEAR = re.compile(r"\bPO[\s-]?'?(\d{2})(?!\d)", re.IGNORECASE)  # "PO15", "PO 15": the year 2015
 DEGREE_WORDS = {
     "bachelor": re.compile(r"\bbachelor\w*|\bb\.?\s?sc\b|\bbsc\b", re.IGNORECASE),
     "master": re.compile(r"\bmaster\w*|\bm\.?\s?sc\b|\bmsc\b", re.IGNORECASE),
@@ -121,7 +127,8 @@ def _read(text: str, roles: Mapping[str, Any]) -> dict[str, tuple[Any, ...]]:
         if any(re.search(rf"(?<!\w){re.escape(alias)}(?!\w)", folded) for alias in _programme_aliases(programme))
     ):
         found["programme"] = names
-    if years := [int(y) for m in PO_YEARS.finditer(text) for y in re.findall(_YEAR, m[1])]:
+    years = [int(y) for m in PO_YEARS.finditer(text) for y in re.findall(_YEAR, m[1])]
+    if years := years + [2000 + int(m[1]) for m in PO_SHORT_YEAR.finditer(text)]:
         found["po_version"] = tuple(years)
     if names := tuple(name for name, pattern in REGULATION_TEXT.items() if pattern.search(text)):
         found["regulation"] = names
@@ -152,8 +159,11 @@ def _fits(field: str, value: tuple[Any, ...], current: Mapping[str, Any], roles:
         return all(current["degree"] is None or programmes[p]["degree"] in current["degree"] for p in value) and (
             current["po_version"] is None or set(current["po_version"]) <= _years(roles, value)
         )
-    if field == "po_version":
-        return current["programme"] is None or set(value) <= _years(roles, current["programme"])
+    if field == "po_version":  # a year the taken programmes, else the programmes of the taken degree, have a PO for
+        chosen = current["programme"] or [
+            p for p, v in programmes.items() if current["degree"] is None or v["degree"] in current["degree"]
+        ]
+        return set(value) <= _years(roles, chosen)
     return True
 
 
@@ -197,35 +207,51 @@ def resolve_filter(
         "regulation": set(REGULATIONS),
     }
     current: dict[str, Any] = dict.fromkeys(allowed)
-
-    def take(layer: Mapping[str, Iterable[Any] | None]) -> None:
-        for field in allowed:  # degree, programme, po_version, regulation: the order the fits are checked in
-            value = _keep(layer.get(field), allowed[field])
-            if current[field] is None and value and _fits(field, value, current, roles):
-                current[field] = value
-
     own = _read(text, roles)
-    take(own)
-    take({"degree": [chips.degree], "programme": [chips.programme], "po_version": [chips.po]})
+    po_source: str | None = None
+
+    def take(layer: Mapping[str, Iterable[Any] | None], source: str) -> None:
+        nonlocal po_source
+        for field in allowed:  # degree, programme, po_version, regulation: the order the fits are checked in
+            if source != "text" and field in own:
+                continue  # the question named this field: a value of it that was rejected is not replaced by a weaker source
+            value = _keep(layer.get(field), allowed[field])
+            if current[field] is not None or not value or not _fits(field, value, current, roles):
+                continue
+            if field == "po_version":
+                # a PO year belongs to the degree and programme its layer names with it: dropped when they were not taken
+                named = (_keep(layer.get(f), allowed[f]) for f in ("degree", "programme"))
+                if any(
+                    v is not None and set(v) != set(current[f] or ()) for f, v in zip(("degree", "programme"), named)
+                ):
+                    continue
+                po_source = source
+            current[field] = value
+
+    take(own, "text")
+    take({"degree": [chips.degree], "programme": [chips.programme], "po_version": [chips.po]}, "chip")
     from_analysis = {f: _listed(analysis, f) for f in allowed}
     if term := _cohort_term(text, analysis):
         known = current["programme"] or _keep(from_analysis["programme"], allowed["programme"]) or previous.programme
         years = [po_for_term(p, term, roles) for p in known or ()]
         if years and None not in years:
-            take({"po_version": years})
-    take(from_analysis | {"po_version": [_int(v) for v in from_analysis["po_version"] or ()]})
+            take({"po_version": years}, "term")
+    take(from_analysis | {"po_version": [_int(v) for v in from_analysis["po_version"] or ()]}, "analysis")
     date = _text_date(text, today or dt.date.today())
     history = bool(HISTORY.search(text))
     named = date is not None or any(v is not None for v in current.values())
-    take({"degree": previous.degree, "programme": previous.programme, "po_version": previous.po_version})
+    carried = "term" if previous.po_source == "term" else "carried"
+    take({"degree": previous.degree, "programme": previous.programme, "po_version": previous.po_version}, carried)
     if not named:
-        take({"regulation": previous.regulation})
+        take({"regulation": previous.regulation}, carried)
         date = previous.date
     # a carried history request counts; a carried True that came from a PO year does not (the PO is carried or dropped itself)
     archived = (
         history or current["po_version"] is not None or (previous.include_archived and previous.po_version is None)
     )
-    return Filter(current["degree"], current["programme"], current["po_version"], current["regulation"], date, archived)
+    return Filter(
+        current["degree"], current["programme"], current["po_version"], current["regulation"], date, archived, po_source
+    )
 
 
 def check_chips(chips: Chips, roles: Mapping[str, Any]) -> str | None:

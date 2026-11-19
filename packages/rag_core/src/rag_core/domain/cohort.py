@@ -9,7 +9,7 @@ from rag_core.domain.dates import Term, parse_term, terms_written
 
 # the words that make a term in a question the start of the asker's studies: within this many characters of the term
 ENROLMENT_CUE = re.compile(
-    r"\bseit\b|\bsince\b|eingeschrieben|immatrikuliert|einschreibung|studienbeginn|angefangen|begonnen|gestartet|"
+    r"\bseit\b(?!\s+wann)|\bsince\b(?!\s+when)|eingeschrieben|immatrikuliert|einschreibung|studienbeginn|angefangen|begonnen|gestartet|"
     r"\benrolled\b|\benrolment\b|\bstarted\b|\bbegan\b|\bbegun\b",
     re.IGNORECASE,
 )

@@ -1,6 +1,7 @@
 """The hard filter of a question: the readers of explicit text, the chips, the term-to-PO parser, the analysis enums and the
 previous turn's filter, in that order, over roles passed as plain data."""
 
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -108,11 +109,12 @@ def test_start_term_maps_to_po_from_roles() -> None:
 
 
 def test_previous_filter_carried_when_nothing_named() -> None:
-    previous = Filter(("master",), ("msc-informatik",), (2015,), ("mhb",), date(2020, 4, 1), True)
-    assert resolve("Und wann ist die Frist?", previous=previous) == previous
+    previous = Filter(("master",), ("msc-informatik",), (2015,), ("mhb",), date(2020, 4, 1), True, "text")
+    kept = replace(previous, po_source="carried")
+    assert resolve("Und wann ist die Frist?", previous=previous) == kept
     assert (
         resolve("Und wann ist die Frist?", None, QueryAnalysis("Und wann ist die Frist?", parsed="fallback"), previous)
-        == previous
+        == kept
     )
     # a new value replaces its field, the others stay; regulation and date go with the old question
     changed = resolve("Und nach PO 2023?", previous=previous)
@@ -165,7 +167,7 @@ def test_a_value_that_contradicts_a_stronger_one_is_dropped() -> None:
     assert found.programme == ("msc-informatik",) and found.degree == (
         "master",
     )  # the chip's bachelor and programme lose
-    assert found.po_version == (2023,)
+    assert found.po_version is None  # the chips' PO year went with the programme and degree that lost
     chip = resolve("Wie melde ich mich ab?", Chips(po=2015), SimpleNamespace(programme=["msc-computer-science"]))
     assert chip.programme is None and chip.po_version == (2015,)  # the analysis' programme has no PO 2015
 
@@ -188,3 +190,72 @@ def test_the_shipped_roles_have_no_guessed_boundaries() -> None:
     assert po_for_term("msc-informatik", "WiSe 2019/20", roles) is None
     assert po_for_term("msc-informatik", "WiSe 2024/25", roles) == 2023
     assert resolve_filter("Seit WiSe 2024/25 im M.Sc. Informatik", None, None, None, roles).po_version == (2023,)
+
+
+def test_a_po_year_follows_its_degree_and_programme() -> None:
+    bachelor = resolve("Wie melde ich mich ab?", Chips("bachelor", "bsc-informatik", 2023))
+    assert (bachelor.degree, bachelor.programme, bachelor.po_version) == (("bachelor",), ("bsc-informatik",), (2023,))
+    # carried: a new degree drops the programme and the PO year of the old one
+    asked = resolve("Und im Master?", previous=bachelor)
+    assert (asked.degree, asked.programme, asked.po_version, asked.po_source) == (("master",), None, None, None)
+    assert asked.include_archived is False
+    # chips: the question names another degree, so the chips' programme and PO year do not apply to it
+    chips = Chips("master", "msc-informatik", 2023)
+    thesis = resolve("Kann ich meine Bachelorarbeit anrechnen?", chips)
+    assert (thesis.degree, thesis.programme, thesis.po_version) == (("bachelor",), None, None)
+    # a year that only a programme of another degree has a PO for is no filter
+    only_bachelor = {"programmes": {k: v for k, v in ROLES["programmes"].items()}, "groups": {}}
+    only_bachelor["programmes"]["bsc-informatik"] = {
+        **ROLES["programmes"]["bsc-informatik"],
+        "po_versions": [version(2009, None, None)],
+    }
+    assert (
+        resolve_filter("Im Master?", None, None, Filter(po_version=(2009,)), only_bachelor, today=TODAY).po_version
+        is None
+    )
+    assert resolve_filter(
+        "Im Bachelor?", None, None, Filter(po_version=(2009,)), only_bachelor, today=TODAY
+    ).po_version == (2009,)
+
+
+def test_a_field_the_text_named_is_not_refilled_by_a_weaker_source() -> None:
+    chips = Chips("master", "msc-informatik", 2023)
+    found = resolve("Was gilt in PO 2015 für M.Sc. Computer Science?", chips)
+    assert found.programme == ("msc-computer-science",) and found.po_version is None  # PO 2015 does not exist there
+    assert (
+        resolve("Was gilt in der PO 2019?", chips).po_version is None
+    )  # an unknown year is not replaced by the chip's
+    analysed = resolve("Was gilt in der PO 2019?", analysis=SimpleNamespace(po_version=[2023]))
+    assert analysed.po_version is None
+
+
+def test_po_years_in_more_spellings() -> None:
+    for text in (
+        "PO15",
+        "PO 15",
+        "PO (2015)",
+        "PO-2015",
+        "Prüfungsordnung aus dem Jahr 2015",
+        "the exam regulations of 2015",
+    ):
+        assert resolve(text).po_version == (2015,), text
+    assert resolve("PO 2015 und PO15 und Prüfungsordnung (2023)").po_version == (2015, 2023)
+    assert resolve("Hat PO 99 eine Frist?").po_version is None
+
+
+def test_seit_wann_is_a_question_not_the_start_of_the_studies() -> None:
+    found = resolve("Seit wann gilt im M.Sc. Informatik die neue PO ab WiSe 2024/25?")
+    assert found.po_version is None and found.date == date(2024, 10, 1)
+    assert resolve("Since when does it apply to the M.Sc. Informatik in WiSe 2024/25?").po_version is None
+    assert resolve("Ich bin im M.Sc. Informatik seit WiSe 2024/25.").po_version == (2023,)
+
+
+def test_the_po_source_names_where_the_year_came_from() -> None:
+    assert resolve("Wie melde ich mich ab?").po_source is None
+    assert resolve("Was gilt in PO 2015?").po_source == "text"
+    assert resolve("Wie melde ich mich ab?", Chips(po=2015)).po_source == "chip"
+    assert resolve("Ich studiere M.Sc. Informatik seit WiSe 2024/25").po_source == "term"
+    assert resolve("Wie melde ich mich ab?", analysis=SimpleNamespace(po_version=[2015])).po_source == "analysis"
+    term = resolve("Ich studiere M.Sc. Informatik seit WiSe 2024/25")
+    assert resolve("Und die Frist?", previous=term).po_source == "term"  # a term-derived PO stays "in der Regel"
+    assert resolve("Und die Frist?", previous=resolve("Was gilt in PO 2015?")).po_source == "carried"
