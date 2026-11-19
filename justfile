@@ -23,8 +23,9 @@ cov_indexer := "73"
 # apps/assistant_api and the rag_core_assistant_covered files together (measured 91.24; rounded down)
 cov_assistant := "91"
 
-# all checks of the gate; db-tests, images and harness need Docker (Colima on the Mac: colima start --cpu 6 --memory 12)
-ci: lint types imports unit cli db-tests contracts model-servers images (harness "example") (harness "tu")
+# all checks of the gate; db-tests, images and harness need Docker (Colima on the Mac: colima start --cpu 6 --memory 12); page needs
+# Node and downloads Chromium for Playwright on its first run
+ci: lint types imports unit cli db-tests contracts model-servers images (harness "example") (harness "tu") page
 
 # what the pre-push hook runs (no Docker)
 pre-push: lint types imports unit contracts
@@ -87,6 +88,12 @@ cli:
     set -euo pipefail
     env=$(mktemp -d); trap 'rm -rf "$env"' EXIT
     UV_PROJECT_ENVIRONMENT="$env/venv" uv run --frozen pytest -q tests/cli
+
+# the page: its Node tests, then the browser suite (Python Playwright in Chromium, axe) against the recorded streams. The goldens
+# (web/page/tests/e2e/golden/) and the axe baseline change only with an intended change of the page: UPDATE_GOLDEN=1 and
+# UPDATE_AXE=1 rewrite them
+page:
+    cd web/page && npm test && npm run test:page
 
 # cross-component contracts, transcripts, limit parity and the profile's data
 contracts:

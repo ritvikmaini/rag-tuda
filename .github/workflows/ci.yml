@@ -52,6 +52,8 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSfLo /tmp/gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           echo "$GITLEAKS_SHA256  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C "$HOME/.local/bin" gitleaks
+      - name: browser libraries (the page's browser tests run Chromium)
+        run: uv run --frozen --project web/page/tests/e2e playwright install-deps chromium
       - run: just ci
 
   # the command line is standard library only: no workspace member and no model library is installed here

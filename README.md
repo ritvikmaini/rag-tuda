@@ -85,8 +85,9 @@ pre-commit --hook-type pre-push` and `just ci`.
 `just ci` runs, identically on a development machine and in CI: `lint` (ruff, deptry, gitleaks, the three locks), `types`
 (basedpyright), `imports` (import-linter), `unit` (pytest, the coverage ratchet), `db-tests` (the tests that need a migrated
 pgvector), `contracts` (shared fixtures, the stream schema, the profile's data), `model-servers` (each model server's tests in
-its own environment, with fake models), `images` and `harness` (the real backend and indexer images against fake model
-servers). `just pre-push` (the part without Docker) runs before every push.
+its own environment, with fake models), `images`, `harness` (the real backend and indexer images against fake model
+servers) and `page` (the page's Node tests, then its browser suite in Chromium against streams recorded from the TU leg; it
+needs Node and downloads Chromium on the first run). `just pre-push` (the part without Docker) runs before every push.
 
 `just harness example` runs the example profile's leg: the ten law texts of `profiles/example` are indexed and queried through
 the real images.
