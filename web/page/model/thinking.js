@@ -1,4 +1,4 @@
-import { TEXT } from "../config.js";
+import { DEGREE_NAMES, TEXT } from "../config.js";
 
 export function quoteList(items) {
     return items.map(item => "„" + item + "“").join(", ");
@@ -11,6 +11,20 @@ export function normalizeQuestion(text) {
 export function differsFromTyped(typed, understood) {
     const u = normalizeQuestion(understood);
     return u !== "" && u !== normalizeQuestion(typed);
+}
+
+// The chip fields of an applied filter (the status frame's applied_filter) as one line, "" when it holds none of them.
+// programmeNames: programme id -> label; an id without one is shown as it is.
+export function filterText(applied, programmeNames) {
+    if (!applied || typeof applied !== "object") return "";
+    const values = field => (Array.isArray(applied[field]) ? applied[field] : []).filter(v => v !== null && v !== undefined && v !== "");
+    const names = programmeNames || {};
+    const parts = [
+        values("degree").map(id => DEGREE_NAMES[id] || id).join(", "),
+        values("programme").map(id => names[id] || id).join(", "),
+        values("po_version").length ? "PO " + values("po_version").join(", ") : "",
+    ].filter(Boolean);
+    return parts.length ? TEXT.filterApplied.replace("{filter}", parts.join(" · ")) : "";
 }
 
 export function formatSeconds(ms) {
@@ -59,7 +73,7 @@ export function completeActive(t) {
     });
 }
 
-export function applyStatus(t, content, typed) {
+export function applyStatus(t, content, typed, programmeNames) {
     const c = content && typeof content === "object" ? content : {};
     t.statusSeen = true;
     if (c.step === "analysing") {
@@ -77,6 +91,8 @@ export function applyStatus(t, content, typed) {
         if (differsFromTyped(typed, question)) {
             t.steps.push({ key: "understood", text: "Verstanden als: „" + question + "“", state: "done" });
         }
+        const filter = filterText(c.applied_filter, programmeNames);
+        if (filter) t.steps.push({ key: "filter", text: filter, state: "done" });
     } else if (c.step === "searching") {
         // sent when the document search starts; direct replies never search
         completeActive(t);

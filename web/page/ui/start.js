@@ -4,6 +4,7 @@ import { toggleTick } from "../features/tasks.js";
 import { h } from "../render/dom.js";
 import { hideTip, onTipScroll, showTip } from "../render/tooltip.js";
 import { stopLive } from "./ask.js";
+import { startChips } from "./chips.js";
 import { autosize, cancelEdit, onKeyDown, onSubmit, updateSend } from "./composer.js";
 import { onScroll, readerNearEnd, scrollToEnd, updateJump, userScrolled } from "./scroll.js";
 import { state, ui } from "./state.js";
@@ -32,6 +33,8 @@ export function init() {
     ui.limitLive = h("span", { class: "sr-only", id: "limit-live", role: "status" });
     ui.composerWrap.appendChild(ui.limitLive);
     ui.question.setAttribute("aria-describedby", "limit-live");
+
+    startChips();
 
     document.title = ASSISTANT_NAME;
     document.querySelectorAll("[data-name]").forEach(el => { el.textContent = ASSISTANT_NAME; });

@@ -12,6 +12,7 @@ import { pump, renderAnswer } from "../render/answer.js";
 import { prefersReducedMotion } from "../render/dom.js";
 import { renderSources } from "../render/sources.js";
 import { renderThinking, tickTimer } from "../render/thinking.js";
+import { currentChips, programmeNames } from "./chips.js";
 import { updateSend } from "./composer.js";
 import { keepFollowing, scrollToEnd, updateJump } from "./scroll.js";
 import { state, store, views } from "./state.js";
@@ -52,9 +53,10 @@ export async function stream(turn, view) {
     updateSend();
     let ok = false;
     try {
-        const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept),
+        const response = await fetch(questionUrl(turn.question, store.id, turn.id, turn.replaceFrom, turn.kept, currentChips()),
             withToken({ signal: session.controller.signal, cache: "no-store" }));
         turn.unauthorized = response.status === 401;
+        turn.refused = response.status === 422;  // the backend does not know the chip selection
         if (!response.ok || !response.body) throw new Error("HTTP " + response.status);
         const reader = response.body.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -76,7 +78,7 @@ export async function stream(turn, view) {
 export function handleFrame(turn, view, frame) {
     if (!frame || typeof frame !== "object") return;
     if (frame.type === "status") {
-        applyStatus(turn.thinking, frame.content, turn.question);
+        applyStatus(turn.thinking, frame.content, turn.question, programmeNames());
         renderThinking(view, turn.thinking);
         keepFollowing();
     } else if (frame.type === "docs") {

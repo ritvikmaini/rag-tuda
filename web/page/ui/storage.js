@@ -7,6 +7,7 @@ import { renderAnswer } from "../render/answer.js";
 import { prefersReducedMotion } from "../render/dom.js";
 import { renderSources } from "../render/sources.js";
 import { renderThinking } from "../render/thinking.js";
+import { syncChips } from "./chips.js";
 import { autosize, cancelEdit, updateSend } from "./composer.js";
 import { scrollToEnd } from "./scroll.js";
 import { state, store, ui, views } from "./state.js";
@@ -19,6 +20,7 @@ export function newConversation() {
     store.turns = [];
     views.splice(0).forEach(view => view.root.remove());
     save();
+    syncChips();  // chips belong to a conversation: the new one starts without
     ui.question.value = "";
     autosize();
     updateSend();
@@ -55,6 +57,7 @@ export function restore() {
         }
     }
     save();
+    syncChips();
 }
 
 export function renderRestored() {

@@ -2,7 +2,9 @@
 
 export const ASSISTANT_NAME = "Assistant";
 export const API_PATH = "/api/chat";
+export const PROFILE_PATH = "/api/profile";
 export const STORAGE_KEY = "assistant-chat-v1";
+export const CHIPS_KEY = "assistant-chips-v1";
 export const TOKEN_KEY = "assistant-token-v1";
 export const OLD_AFTER_YEARS = 3;
 export const VISIBLE_SOURCES = 3;
@@ -44,6 +46,9 @@ export const LIBRARIES = {
         integrity: "sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" },
 };
 
+// The degree ids roles.yaml uses, as the chips and the filter line show them.
+export const DEGREE_NAMES = { bachelor: "Bachelor", master: "Master", promotion: "Promotion" };
+
 export const TEXT = {
     pending: "Frage wird bearbeitet …",
     pendingDone: "Frage bearbeitet",
@@ -55,6 +60,12 @@ export const TEXT = {
     writingDone: "Antwort formuliert",
     failed: "Die Antwort konnte nicht geladen werden. Bitte versuchen Sie es noch einmal.",
     unauthorized: "Der Zugang wurde nicht akzeptiert. Bitte öffnen Sie den Link aus „rag up“ noch einmal.",
+    chipsRefused: "Diese Auswahl aus Abschluss, Studiengang und PO ist nicht möglich. Bitte ändern Sie die Auswahl über dem Eingabefeld.",
+    chipsLabel: "Auswahl für Ihre Frage",
+    chipDegree: "Abschluss",
+    chipProgramme: "Studiengang",
+    chipPo: "PO-Version",
+    filterApplied: "Filter: {filter}",
     stopped: "Antwort angehalten.",
     interrupted: "Die Antwort wurde unterbrochen.",
     reference: "Bitte nennen Sie bei Rückfragen die Referenz {ref}.",
