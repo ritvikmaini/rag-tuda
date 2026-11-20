@@ -11,6 +11,7 @@ from rag_tuda import ask, cards, classes, doctor, runtime, sources, stack, state
 from rag_tuda import eval as rag_eval
 
 DEFAULT_URL = "http://127.0.0.1:8700"
+DEFAULT_PROFILE = "tu-informatik"
 
 
 def _doctor(args: argparse.Namespace) -> int:
@@ -58,9 +59,8 @@ def _up(args: argparse.Namespace) -> int:
         if warning:
             print(f"warning: {warning}", file=sys.stderr)
         current = state.ensure(root)
-        up = stack.Args(
-            card["name"], args.mode or doctor.default_mode(hardware), args.profile, args.model, args.llm_url
-        )
+        profile = args.profile or current.data.get("profile") or DEFAULT_PROFILE
+        up = stack.Args(card["name"], args.mode or doctor.default_mode(hardware), profile, args.model, args.llm_url)
         steps = stack.plan_up(current, stack.gather(root, current, card, hardware, up), up)
         if not _confirm(steps, args.yes):
             return 1
@@ -216,7 +216,8 @@ def main(argv: list[str] | None = None) -> int:
     u.add_argument("--model", help="a model for the answers: the Ollama model the card's derived model is made from")
     u.add_argument("--llm-url", help="an OpenAI-compatible server you run; the stack does not manage it")
     u.add_argument(
-        "--profile", default="tu-informatik", help="the profile to index and answer from (default %(default)s)"
+        "--profile",
+        help=f"the profile to index and answer from (default: the one this folder was started with, else {DEFAULT_PROFILE})",
     )
     u.add_argument(
         "--mode",

@@ -573,3 +573,39 @@ def test_up_defaults_to_the_tu_informatik_profile(repo, monkeypatch):
     )
     assert cli.main(["up", "--yes"]) == 0 and cli.main(["up", "--yes", "--profile", "example"]) == 0
     assert seen == ["tu-informatik", "example"]
+
+
+def _spy_profile(monkeypatch):
+    seen = []
+    plan_up = stack.plan_up
+    monkeypatch.setattr(
+        stack, "plan_up", lambda current, facts, up: (seen.append(up.profile), plan_up(current, facts, up))[1]
+    )
+    return seen
+
+
+def _record_profile(repo, profile):
+    (repo / ".rag").mkdir(exist_ok=True)
+    (repo / ".rag" / "state.json").write_text(json.dumps({"profile": profile, "first_run_done": True}))
+
+
+@pytest.mark.parametrize(
+    ("recorded", "flags", "expected"),
+    [
+        (None, [], "tu-informatik"),
+        ("example", [], "example"),
+        ("example", ["--profile", "tu-informatik"], "tu-informatik"),
+    ],
+    ids=["first run", "recorded example", "explicit flag wins"],
+)
+def test_up_takes_the_profile_from_the_flag_then_the_recorded_one_then_the_tu_profile(
+    repo, monkeypatch, recorded, flags, expected
+):
+    monkeypatch.setattr(stack, "System", lambda: FakeSystem())
+    monkeypatch.setattr(stack, "gather", settled_facts(repo, index_built=True))
+    seen = _spy_profile(monkeypatch)
+    if recorded:
+        _record_profile(repo, recorded)
+    assert cli.main(["up", "--yes", *flags]) == 0
+    assert seen == [expected]
+    assert json.loads((repo / ".rag" / "state.json").read_text())["profile"] == expected
