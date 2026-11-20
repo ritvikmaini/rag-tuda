@@ -1,0 +1,36 @@
+rag-tuda uses the third-party models, libraries and data listed here. Each keeps its own licence and terms; this file names
+them and says what was checked. "Not read" means the licence text was not available locally when this file was written:
+read it at the source before redistributing anything.
+
+Models served by the model servers and the indexer (downloaded from Hugging Face, pinned by revision in the profile)
+  Snowflake/snowflake-arctic-embed-m-v2.0   the embedder          licence stated on its model card: apache-2.0
+  BAAI/bge-reranker-v2-m3                    the reranker          licence stated on its model card: apache-2.0
+  docling-project/docling-layout-heron       PDF layout (docling)  licence stated on its model card: apache-2.0
+  docling-project/docling-models             PDF tables (docling)  licence stated on its model card: cdla-permissive-2.0
+
+Answer models named by the model cards in models/cards/ (pulled by Ollama or served by Groq or vLLM; none is shipped here)
+  Qwen3.5 4B (s-qwen3.5-4b)                  Apache License 2.0 (the LICENSE file of its Hugging Face snapshot)
+  Qwen3 4B Instruct 2507, Qwen3.6 35B-A3B, Qwen3.8 27B, Qwen3 235B-A22B Instruct 2507 FP8 (vLLM example)
+                                             licences not read; see each model's Hugging Face page
+  Gemma 4 E4B and 31B                        licence not read; see Google's model page and terms
+  gpt-oss 20B and 120B                       licence not read; see OpenAI's model page
+  Models reached through Groq are also bound by Groq's terms for its hosted service.
+
+Libraries vendored in web/page/vendor/ (versions, sources and integrity hashes in web/page/vendor.json)
+  showdown 2.1.0         MIT
+  dompurify 3.4.16       (MPL-2.0 OR Apache-2.0)
+  d3 7.9.0               ISC
+  markmap-view 0.18.12   MIT
+  chart.js 4.5.1         MIT
+
+Python dependencies are installed from the locks (uv.lock and the model servers' locks) under their own licences; none is
+copied into this repository.
+
+Data sources
+  TU Darmstadt websites (www.informatik.tu-darmstadt.de, www.intern.tu-darmstadt.de, www.tu-darmstadt.de), the City of
+  Darmstadt's digitales-rathaus.darmstadt.de and the Landkreis Darmstadt-Dieburg's www.ladadi.de: read by the crawler on
+  the user's own machine under the hosts' robots.txt and meta robots rules and kept only in .rag/crawl/. Their content
+  belongs to their publishers, is not part of this repository and is not to be redistributed. This project is not
+  affiliated with or endorsed by any of them.
+  www.gesetze-im-internet.de: the statutes of the federal government (official works, section 5 UrhG). The ten labour laws
+  in profiles/example/documents/ and the statutes the TU profile reads as XML come from there.
