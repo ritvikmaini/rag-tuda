@@ -9,12 +9,17 @@ Models served by the model servers and the indexer (downloaded from Hugging Face
   docling-project/docling-models             PDF tables (docling)  licence stated on its model card: cdla-permissive-2.0
 
 Answer models named by the model cards in models/cards/ (pulled by Ollama or served by Groq or vLLM; none is shipped here)
-  Qwen3.5 4B (s-qwen3.5-4b)                  Apache License 2.0 (the LICENSE file of its Hugging Face snapshot)
-  Qwen3 4B Instruct 2507, Qwen3.6 35B-A3B, Qwen3.8 27B, Qwen3 235B-A22B Instruct 2507 FP8 (vLLM example)
-                                             licences not read; see each model's Hugging Face page
-  Gemma 4 E4B and 31B                        licence not read; see Google's model page and terms
-  gpt-oss 20B and 120B                       licence not read; see OpenAI's model page
+  Qwen3 4B Instruct 2507 (s-qwen3-4b-instruct-2507, the default card)
+                                             Apache License 2.0 (as printed by `ollama show --license`)
+  gpt-oss 20B (l-groq-gpt-oss-20b)           Apache License 2.0 (as printed by `ollama show --license`)
+  Qwen3.5 4B, Qwen3.6 35B-A3B, Qwen3.8 27B, Gemma 4 E4B and 31B, gpt-oss 120B, and the vLLM example's Qwen3-235B-A22B
+  Instruct 2507 FP8
+                                             licence not read here (its page could not be reached from this machine);
+                                             check before publishing
   Models reached through Groq are also bound by Groq's terms for its hosted service.
+
+OCR weights fetched by docling[easyocr] at first use (not shipped here)
+  EasyOCR detection and recognition models   licence not read here; check before publishing
 
 Libraries vendored in web/page/vendor/ (versions, sources and integrity hashes in web/page/vendor.json)
   showdown 2.1.0         MIT
