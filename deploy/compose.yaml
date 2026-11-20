@@ -261,7 +261,7 @@ services:
       context: ..
       dockerfile: apps/evals/Dockerfile
       args:
-        PROFILE: example
+        PROFILE: "${RAG_PROFILE:-example}"
     logging: *default-logging
     volumes:
       - ../data/eval_runs:/app/data/eval_runs:ro

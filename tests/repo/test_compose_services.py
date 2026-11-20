@@ -59,7 +59,7 @@ def test_the_evals_job_is_a_profile_service_that_starts_nothing_else():
     assert evals["build"] == {
         "context": "..",
         "dockerfile": "apps/evals/Dockerfile",
-        "args": {"PROFILE": "example"},
+        "args": {"PROFILE": "${RAG_PROFILE:-example}"},
     }
     assert "networks" not in evals  # the project's default network, with the backend
     assert evals["volumes"] == ["../data/eval_runs:/app/data/eval_runs:ro"]
