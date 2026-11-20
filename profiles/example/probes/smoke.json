@@ -6,7 +6,12 @@
    "set": "smoke",
    "turns": [
     {
-     "q": "Wie viele Urlaubstage stehen mir zu?"
+     "q": "Wie viele Urlaubstage stehen mir zu?",
+     "gold": {
+      "url": "https://www.gesetze-im-internet.de/burlg",
+      "heading": "§ 3 Dauer des Urlaubs",
+      "quote": "Der Urlaub beträgt jährlich mindestens 24 Werktage."
+     }
     }
    ]
   },
@@ -15,7 +20,12 @@
    "set": "smoke",
    "turns": [
     {
-     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+     "q": "Wie lange darf ich täglich höchstens arbeiten?",
+     "gold": {
+      "url": "https://www.gesetze-im-internet.de/arbzg",
+      "heading": "§ 3 Arbeitszeit der Arbeitnehmer",
+      "quote": "Die werktägliche Arbeitszeit der Arbeitnehmer darf acht Stunden nicht überschreiten."
+     }
     }
    ]
   },
@@ -33,7 +43,12 @@
    "set": "smoke",
    "turns": [
     {
-     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+     "q": "Wie lange darf ich täglich höchstens arbeiten?",
+     "gold": {
+      "url": "https://www.gesetze-im-internet.de/arbzg",
+      "heading": "§ 3 Arbeitszeit der Arbeitnehmer",
+      "quote": "Die werktägliche Arbeitszeit der Arbeitnehmer darf acht Stunden nicht überschreiten."
+     }
     },
     {
      "q": "Und die Ruhepausen?",
@@ -49,7 +64,12 @@
    "set": "smoke",
    "turns": [
     {
-     "q": "Wie lange darf ich täglich höchstens arbeiten?"
+     "q": "Wie lange darf ich täglich höchstens arbeiten?",
+     "gold": {
+      "url": "https://www.gesetze-im-internet.de/arbzg",
+      "heading": "§ 3 Arbeitszeit der Arbeitnehmer",
+      "quote": "Die werktägliche Arbeitszeit der Arbeitnehmer darf acht Stunden nicht überschreiten."
+     }
     },
     {
      "q": "Und die Ruhepausen?"
