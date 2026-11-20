@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { createFrameParser, readFrames } from "../api/frames.js";
 import { questionUrl, variantUrl } from "../api/urls.js";
 import { SILENCE_LIMIT_MS, TOTAL_LIMIT_MS } from "../config.js";
-import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detectLang, getLang, providerLine, setLang }
+import { DEGREE_NAMES, LANGS, STRINGS, TEXT, VARIANT_LABELS, applyStatic, detectLang, getLang, providerLine, setLang, text }
     from "../i18n.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from "../model/thinking.js";
@@ -135,12 +135,26 @@ test("the page language: stored choice, else browser, else German; the switch ch
     assert.equal(VARIANT_LABELS.original, "Original");
     // a variant is known by its label being a string: the table is a Proxy, so hasOwnProperty finds nothing in it
     assert.equal(Object.prototype.hasOwnProperty.call(VARIANT_LABELS, "shorter"), false);
-    assert.deepEqual(["shorter", "english", "constructor"].map(name => typeof VARIANT_LABELS[name]), ["string", "string", "function"]);
+    assert.deepEqual(["shorter", "english", "constructor"].map(name => typeof VARIANT_LABELS[name]), ["string", "string", "undefined"]);
     assert.deepEqual(menuEntries({ id: "a", answer: "Text [1]", state: "done", citations: [{ n: 1 }], shape: "text" }, true)
         .map(group => group.label), ["Form", "Length", "Language", "Export"]);
     // anything but de/en is German
     setLang("fr");
     assert.equal(getLang(), "de");
+});
+
+test("the string tables answer for their own keys only, never for Object.prototype members", t => {
+    t.after(() => setLang("de"));
+    for (const lang of LANGS) {
+        setLang(lang);
+        for (const name of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+            assert.equal(text(name), undefined, `text ${name} ${lang}`);
+            for (const table of [TEXT, DEGREE_NAMES, VARIANT_LABELS]) {
+                assert.equal(table[name], undefined, `${name} ${lang}`);
+                assert.equal(name in table, false, `${name} in ${lang}`);
+            }
+        }
+    }
 });
 
 test("both languages have the same strings, with the same {marks} (test_i18n_switch)", () => {

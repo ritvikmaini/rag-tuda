@@ -254,9 +254,14 @@ export function detectLang(stored, browser) {
     return String(browser || "").toLowerCase().startsWith("en") ? "en" : "de";
 }
 
+// The entry the table holds itself: never a member of Object.prototype (`constructor`, `toString`).
+function ownEntry(entries, key) {
+    return Object.hasOwn(entries, key) ? entries[key] : undefined;
+}
+
 export function text(key) {
-    const own = STRINGS[current][key];
-    return own === undefined ? STRINGS.de[key] : own;
+    const own = ownEntry(STRINGS[current], key);
+    return own === undefined ? ownEntry(STRINGS.de, key) : own;
 }
 
 // `values` fills the {name} marks of a string.
@@ -273,8 +278,8 @@ function table(pick) {
 }
 
 export const TEXT = table(text);
-export const DEGREE_NAMES = table(key => DEGREES[current][key]);
-export const VARIANT_LABELS = table(key => VARIANTS[current][key]);
+export const DEGREE_NAMES = table(key => ownEntry(DEGREES[current], key));
+export const VARIANT_LABELS = table(key => ownEntry(VARIANTS[current], key));
 
 // The line under the composer about the model that answers; "" while the answer stays on this machine.
 export function providerLine(answer) {
