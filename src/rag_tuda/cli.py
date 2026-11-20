@@ -242,7 +242,9 @@ def main(argv: list[str] | None = None) -> int:
     b.set_defaults(run=_rollback)
     e = sub.add_parser("eval", help="run the eval against the running stack (the smoke unless told otherwise)")
     kind = e.add_mutually_exclusive_group()
-    kind.add_argument("--smoke", action="store_true", help="the smoke questions, answers included (default)")
+    kind.add_argument(
+        "--smoke", action="store_true", help="the deploy smoke: five fixed probes, stream structure only (default)"
+    )
     kind.add_argument("--retrieval-only", action="store_true", help="the gold sources' rank after fusion and reranking")
     e.add_argument("--ablation", action="store_true", help="with --retrieval-only: one row per retrieval switch")
     e.add_argument("--card", help="run on this card, bringing the stack onto it first (default: the running card)")

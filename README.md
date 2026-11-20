@@ -47,7 +47,7 @@ The commands:
 | `uv run rag ask "<question>"` | asks one question and streams the cited answer; `--degree`, `--programme`, `--po`, `--lang` |
 | `uv run rag reindex` | builds a new index generation from a re-crawl, swaps it in and restarts the backend; `--full`, `--resume` |
 | `uv run rag rollback` | makes the previous index generation live again and restarts the backend |
-| `uv run rag eval` | the smoke questions against the running stack; `--retrieval-only [--ablation]` scores retrieval alone |
+| `uv run rag eval` | the deploy smoke (stream structure) against the running stack, on the example profile for now; `--retrieval-only [--ablation]` scores retrieval alone, native mode only |
 | `uv run rag add <folder>` | registers a folder of your own documents (Markdown, text, PDF) as a source; then `rag reindex` |
 | `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots` |
 
@@ -125,13 +125,19 @@ remote card is active. Only the generation call leaves the machine, to the card'
 
 ## Evaluation
 
-`uv run rag eval` runs the smoke questions against the running stack and checks every answer in code: each `[n]` maps to a
-source, the answer's language equals the question's, the PO-version line is present when a version-bound source is cited,
-"Sie" in German answers, the residence disclaimer when a residence source is cited.
+`uv run rag eval` runs the deploy smoke against the running stack: the five fixed probes of the profile's `gate.yaml`, about six
+requests, about two minutes. It checks the structure of the stream only, so a correct deploy does not fail on answer variance: no
+error frames, the time to first token, the sequence of status steps, and the `docs`, `chunk` and `citations` frames. The checks
+on the answers themselves (each `[n]` maps to a source, the language equals the question's, the PO-version line, "Sie" in
+German answers, the residence disclaimer) belong to the gate and probe runs of `apps/evals`, not to the smoke.
 
-`uv run rag eval --retrieval-only` scores retrieval alone: for each question the rank of its gold source after fusion and after
-reranking (hit@k and MRR). With `--ablation` it adds one row per retrieval stage turned on, cumulatively: no filters, + filters,
-+ acronyms, + fusion cut, + whole parents, + reference hop.
+`rag eval` reads `<profile>/gate.yaml`, and `profiles/tu-informatik` has none yet, so it runs on the example profile for now;
+the TU smoke set and gate come later.
+
+`uv run rag eval --retrieval-only` scores retrieval alone: for each question of the gate's probe sets, the rank of its gold
+source after fusion and after reranking (hit@k and MRR). It runs against the native stack only. With `--ablation` it adds one
+row per retrieval stage turned on, cumulatively: no filters, + filters, + acronyms, + fusion cut, + whole parents, + reference
+hop.
 
 The ablation table for the TU profile is **pending**: it waits for the TU smoke set and index. What exists today is the
 example profile's run, shown only to say that the eval runs end to end: on 4 questions with a gold source, hit@1 is 0.25 and

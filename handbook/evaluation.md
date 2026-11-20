@@ -1,25 +1,32 @@
 # Evaluation
 
-Two scores, both against the running stack: whether answers hold up (the smoke), and where the right source ranks (the
-retrieval eval).
+Three things are measured against the running stack: that a deploy works (the smoke), whether answers hold up (the probe
+runs), and where the right source ranks (the retrieval eval). `rag eval` reads `<profile>/gate.yaml`; only `profiles/example`
+has one so far, so `rag eval` runs on the example profile for now and the TU smoke set and gate come later.
 
-## The smoke set
+## The TU question set
 
-`profiles/tu-informatik/smoke/*.json` holds hand-written questions in the evals runner's probe format. Each carries the
+The TU question set will live in `profiles/tu-informatik/smoke/*.json`: hand-written questions in the evals runner's probe format. Each carries the
 expected facts, the gold source as a URL with a heading or page and a short quote, the PO version, and `volatile: true` for
 fees and dates. A probe whose gold quote is no longer found in the gold source's current text is reported **stale**, not
-failed. The TU smoke set is not written yet: it needs the first TU index. The example profile has its own probes in
+failed. It is not written yet: it needs the first TU index. The example profile has its own probes in
 `profiles/example/probes/`.
 
-## Checks on every answer
+## The deploy smoke
 
-Run in code by `rag eval`: every `[n]` maps to a source; the answer's language equals the question's; the PO-version line is
-present when a version-bound source is cited; "Sie" in German answers; the residence disclaimer when a residence source is
-cited.
+`rag eval` runs the five fixed probes of `gate.yaml` (about six requests, about two minutes) and checks structure only, so a
+correct deploy never fails on answer variance: no error frames, the time to first token, the sequence of status steps, and the
+`docs`, `chunk` and `citations` frames.
+
+## Checks on answers
+
+The answer checks run in the gate and probe runs of `apps/evals`, as `expect` keys of a probe: every `[n]` maps to a source; the
+answer's language equals the question's; the PO-version line is present when a version-bound source is cited; "Sie" in German
+answers; the residence disclaimer when a residence source is cited.
 
 ## Retrieval eval
 
-`rag eval --retrieval-only` reads the smoke questions' gold sources and reports, after fusion and after reranking, hit@1,
+`rag eval --retrieval-only` reads the probe sets of `gate.yaml` (`--sets`, `--limit`), runs against the native stack only, and reports, after fusion and after reranking, hit@1,
 hit@3, hit@5, hit@10 and MRR. Only the analysis call uses the language model, and it is cached per run. The code lives in
 `apps/assistant_api/src/assistant_api/retrieval_eval.py` because the import contract bars `evals` from importing the
 assistant.
