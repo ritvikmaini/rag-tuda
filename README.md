@@ -36,7 +36,7 @@ the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.ra
 creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints the link. The
 crawl of the default profile is polite: about one request per second per host. `--profile` defaults to the profile this
 folder was last started with, else `tu-informatik`; naming another profile switches. A model that is already on the
-machine is not downloaded again, and nothing is downloaded without your `--yes`. A second `up` changes nothing.
+machine is not downloaded again, and nothing is downloaded without your yes (`--yes` or the prompt). A second `up` changes nothing.
 
 The commands:
 
@@ -161,7 +161,8 @@ MRR 0.625 after fusion, and 1.00 and 1.000 after reranking. That is not a result
 ## Warnings
 
 - **Not legal advice, not an official TU service.** The page footer says so too.
-- **Prompt injection through crawled pages.** Hidden text is dropped when a page is extracted, but crawled text still reaches
+- **Prompt injection through crawled pages.** Text hidden in a page's markup (`hidden`, `aria-hidden="true"`, inline `display:none` or `visibility:hidden`) is dropped when
+  a page is extracted; text hidden by a CSS class and the text of PDFs are not covered, and crawled text still reaches
   the model's prompt; treat an answer as a pointer to the source.
 - **Remote cards.** Questions leave the machine only to the answer endpoint of a hosted card, and the page shows it. Groq's
   free-tier data terms are not fully read: no personal matters while a remote card is active.
