@@ -5,6 +5,7 @@ packages, so they run with the full workspace and not in the command line's own 
 import re
 from pathlib import Path
 
+import pytest
 import yaml
 
 from rag_tuda import cards, classes, runtime, stack
@@ -87,8 +88,11 @@ def test_a_hosted_cards_environment_loads_with_the_services_settings(tmp_path):
     assert card.analysis_endpoint.model == "rag-l-groq-gpt-oss-120b-analysis"
 
 
-def test_the_pins_are_the_ones_the_profile_and_the_images_pin():
-    profile = yaml.safe_load((ROOT / "profiles" / "example" / "profile.yaml").read_text(encoding="utf-8"))["retrieval"]
+@pytest.mark.parametrize(
+    "profile_file", sorted((ROOT / "profiles").glob("*/profile.yaml")), ids=lambda p: p.parent.name
+)
+def test_the_pins_are_the_ones_the_profiles_and_the_images_pin(profile_file):
+    profile = yaml.safe_load(profile_file.read_text(encoding="utf-8"))["retrieval"]
     embedding, reranker = stack.PINNED["embedding"], stack.PINNED["reranker"]
     assert (embedding.repo, embedding.revision) == (profile["embedding"]["model"], profile["embedding"]["revision"])
     assert (reranker.repo, reranker.revision) == (profile["rerank"]["model"], profile["rerank"]["revision"])
