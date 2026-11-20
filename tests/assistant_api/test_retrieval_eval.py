@@ -1,6 +1,7 @@
 """The retrieval-only eval: the gold's rank after fusion and after reranking, hit@k and MRR, the analysis asked once per
 question, and the ablation rows; never a question or a document in the output."""
 
+import argparse
 import asyncio
 import io
 import json
@@ -148,11 +149,11 @@ def profile_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def run(profile_dir: Path, rows, deps=None, open_row=None, limit=None):
+def run(profile_dir: Path, rows, deps=None, open_row=None, limit=None, header=""):
     deps = deps or make_deps()
     open_row = open_row or Rows(deps.profile)
     out = io.StringIO()
-    code = asyncio.run(ev.evaluate(deps, open_row, profile_dir, None, limit, rows, out))
+    code = asyncio.run(ev.evaluate(deps, open_row, profile_dir, None, limit, rows, out, header))
     return code, out.getvalue(), deps, open_row
 
 
@@ -160,7 +161,20 @@ def cells(text: str) -> list[list[str]]:
     return [line.split() for line in text.splitlines()]
 
 
-def test_hit_at_k_and_mrr(profile_dir: Path) -> None:
+class Clock:
+    """A perf_counter whose k-th interval lasts the k-th of these seconds."""
+
+    def __init__(self, *seconds: float) -> None:
+        self.seconds, self.now, self.started = list(seconds), 0.0, False
+
+    def __call__(self) -> float:
+        self.started = not self.started
+        if not self.started:
+            self.now += self.seconds.pop(0)
+        return self.now
+
+
+def test_hit_at_k_and_mrr(profile_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ranks = [1, 2, None, 7]
     assert ev.summarise(ranks) == {
         "hit@1": 0.25, "hit@3": 0.5, "hit@5": 0.5, "hit@10": 0.75, "mrr": (1 + 1 / 2 + 1 / 7) / 4,
@@ -190,15 +204,16 @@ def test_hit_at_k_and_mrr(profile_dir: Path) -> None:
     assert ev.is_gold({"url": "u"}, section("u"))  # no quote, heading or page: the url decides
     assert not ev.valid_gold({"quote": "x"}) and not ev.valid_gold("x") and ev.valid_gold({"url": "u"})
     # end to end: A1, A2 and A5 (a gold with no quote) hold the gold second among the fused sections and first after reranking; A4's is never found, A6's gold has no url
+    monkeypatch.setattr(ev, "perf_counter", Clock(1.0, 2.0, 3.0, 4.5))  # the four retrievals that work
     code, text, _, _ = run(profile_dir, ev.PLAIN)
     assert code == 0
     assert cells(text) == [
         ["1", "conversations", "without", "a", "gold", "left", "out"],
         ["1", "conversations", "with", "a", "bad", "gold", "left", "out"],
-        ["stage", "n", "failed", "hit@1", "hit@3", "hit@5", "hit@10", "MRR"],
-        ["after", "fusion", "4", "0", "0.00", "0.75", "0.75", "0.75", "0.375"],
-        ["after", "reranking", "4", "0", "0.75", "0.75", "0.75", "0.75", "0.750"],
-    ]
+        ["stage", "n", "failed", "hit@1", "hit@3", "hit@5", "hit@10", "MRR", "median", "s", "max", "s"],
+        ["after", "fusion", "4", "0", "0.00", "0.75", "0.75", "0.75", "0.375", "-", "-"],
+        ["after", "reranking", "4", "0", "0.75", "0.75", "0.75", "0.75", "0.750", "2.50", "4.50"],
+    ]  # the latency is of the whole retrieval, so only the last stage carries it
 
 
 def test_analysis_cached_per_run(profile_dir: Path) -> None:
@@ -254,6 +269,44 @@ def test_a_conversation_without_a_gold_or_a_failing_one_does_not_count_as_a_miss
     code, text, _, _ = run(profile_dir, ev.PLAIN, deps=deps, open_row=Down(deps.profile))
     assert code == 1 and "Kanarienvogel" not in text
     assert cells(text)[4][:5] == ["after", "reranking", "0", "4", "0.00"]  # all four failed, none counted a miss
+
+
+def test_the_table_comes_after_the_header_line(profile_dir: Path) -> None:
+    deps = make_deps()
+    retrieval = deps.profile.retrieval
+    rt = SimpleNamespace(
+        collection="example",
+        settings=SimpleNamespace(profile=deps.profile, card=SimpleNamespace(name="s-card")),
+    )
+    line = ev.header_line(rt, 7)  # type: ignore[arg-type]
+    assert line == (
+        f"index example generation 7; embedder {retrieval.embedding.model}@{retrieval.embedding.revision}; "
+        f"reranker {retrieval.rerank.model}@{retrieval.rerank.revision}; card s-card\n"
+    )
+    assert "generation unknown" in ev.header_line(rt, None)  # type: ignore[arg-type]
+    _, text, _, _ = run(profile_dir, ev.PLAIN, header=line)
+    assert text.startswith(line) and "Kanarienvogel" not in line
+
+
+def test_only_models_that_are_the_pins_are_served() -> None:
+    ok = {"embedding": "ok", "reranker": "ok", "llm": "unavailable: ConnectError"}  # the LLM is not this eval's
+    assert ev.not_served(ok) == []
+    assert ev.not_served({**ok, "reranker": "mismatch: other/rerank@abc"}) == ["reranker: mismatch: other/rerank@abc"]
+    assert ev.not_served({**ok, "embedding": "unavailable: HTTP 503"}) == ["embedding: unavailable: HTTP 503"]
+
+
+def test_a_run_against_other_models_than_the_pins_stops_with_exit_1(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    async def reports(rt):
+        return {"embedding": "ok", "reranker": "mismatch: other/rerank@abc", "llm": "ok"}
+
+    # nothing past the check is reached: no index is opened, no table written
+    monkeypatch.setattr(ev, "load_settings", lambda environ, secrets_dir=None: SimpleNamespace())
+    monkeypatch.setattr(ev, "build_runtime", lambda *args: SimpleNamespace())
+    monkeypatch.setattr(ev, "model_reports", reports)
+    code = asyncio.run(ev.run(argparse.Namespace(sets=None, limit=None, ablation=False), {}, None))
+    assert code == 1 and "reranker: mismatch: other/rerank@abc" in caplog.text
 
 
 def test_the_example_golds_are_in_their_documents() -> None:

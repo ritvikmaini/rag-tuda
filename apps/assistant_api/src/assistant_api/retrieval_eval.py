@@ -8,14 +8,17 @@ the gold when its url (a `#` fragment ignored) equals the gold's and the section
 normalised); a gold without a quote falls back to its heading (in the section path or a heading line of the text), then to its page.
 The rank is the 1-based position of the gold among the sections of the fused
 list the reranker is given (a section once, at its best child) and among the reranked sections the retrieval returns. One table goes
-to stdout: hit@1/3/5/10 and MRR per stage (a plain run), or per ablation row after reranking. Never a question, a query or a
-document. Logs go to stderr. A conversation without a gold, or with one that names no url, is counted and left out.
+to stdout, after a line naming the index (collection and live generation), the embedder and reranker `model@revision` the servers
+serve, and the card: hit@1/3/5/10 and MRR per stage (a plain run), or per ablation row after reranking, with the median and the
+maximum of the seconds one retrieval took (the call that fuses, reranks and returns; not split by stage). Never a question, a
+query or a document. Logs go to stderr. A conversation without a gold, or with one that names no url, is counted and left out.
 
 The analysis runs once per distinct question per run, with the filter readers on (the profile's analysis_temperature is 0); the
 `filters` switch of a row only decides whether the resolved filter is applied. Each ablation row sets the five switches of
 `ORDER` (`retrieval.switches` of the profile): the first row has all off, each next row turns one more on, in the order of ORDER.
 The retrieval of a row is a service built with those switches; `acronyms` is read when the index is opened, so every row opens its
-own. Exit 0 when a conversation with a gold was scored, 1 when none could be."""
+own. Exit 0 when a conversation with a gold was scored, 1 when none could be or when a model server does not serve the profile's
+pin (a different model or revision, or no answer): scores of the wrong model would be taken for the profile's."""
 
 import argparse
 import asyncio
@@ -28,10 +31,12 @@ from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import median
+from time import perf_counter
 from typing import Any, TextIO
 
 from rag_core.adapters.http import close_http_client
-from rag_core.adapters.pg_index import open_index
+from rag_core.adapters.pg_index import open_index, read_pool
 from rag_core.domain.access import ANONYMOUS
 from rag_core.domain.answer_shapes import answer_language
 from rag_core.domain.filters import Filter
@@ -44,7 +49,8 @@ from rag_core.settings.profile import Profile
 from assistant_api.graph.history import question_message
 from assistant_api.graph.nodes.analyse import make_analyse
 from assistant_api.graph.state import GraphDeps
-from assistant_api.runtime import Runtime, build_runtime, graph_deps
+from assistant_api.chat.turns_store import TurnStore, store_conninfo
+from assistant_api.runtime import Runtime, build_runtime, graph_deps, model_reports
 from assistant_api.scope_scores import file_sets, first_question
 from assistant_api.settings import load_settings
 
@@ -169,6 +175,7 @@ class Tally:
     def __init__(self) -> None:
         self.fused: list[int | None] = []
         self.reranked: list[int | None] = []
+        self.seconds: list[float] = []  # one per retrieval that worked
         self.failed = 0
 
 
@@ -180,8 +187,10 @@ async def evaluate(
     limit: int | None,
     rows: Sequence[tuple[str, Mapping[str, bool]]],
     out: TextIO,
+    header: str = "",
 ) -> int:
-    """Writes the table of the rows over the chosen sets (gate.yaml's file sets by default; at most `limit` conversations of each)."""
+    """Writes the header line and the table of the rows over the chosen sets (gate.yaml's file sets by default; at most `limit`
+    conversations of each)."""
     known = file_sets(profile_dir)
     chosen = list(names) if names else list(known)
     if unknown := [n for n in chosen if n not in known]:
@@ -205,6 +214,7 @@ async def evaluate(
                     if len(question) > deps.profile.guard.max_question_chars:
                         raise ValueError("too_long")  # such a question never reaches the analysis
                     state = await analyses.of(question)
+                    started = perf_counter()
                     fused, final = await traced.places(
                         state["retrieval_queries"],
                         state.get("filter") if switches["filters"] else None,
@@ -214,13 +224,15 @@ async def evaluate(
                         principal=ANONYMOUS,
                         language=answer_language(state),
                     )
+                    seconds = perf_counter() - started
                 except Exception as exc:  # the class only: a message may echo a question
                     logger.error("[RetrievalEval] row %s: %s", label, type(exc).__name__)
                     tally.failed += 1
                     continue
+                tally.seconds.append(seconds)
                 tally.fused.append(rank_of(gold, fused))
                 tally.reranked.append(rank_of(gold, final))
-    out.write(table(rows, tallies, no_gold, bad_gold))
+    out.write(header + table(rows, tallies, no_gold, bad_gold))
     out.flush()
     return 0 if any(t.reranked for t in tallies.values()) else 1
 
@@ -229,16 +241,26 @@ def table(
     rows: Sequence[tuple[str, Mapping[str, bool]]], tallies: Mapping[str, Tally], no_gold: int, bad_gold: int
 ) -> str:
     """The plain table: one row (a plain run) shows both stages, several (an ablation) the rows after reranking."""
-    lines = [("stage", "n", "failed", *(f"hit@{k}" for k in KS), "MRR")]
+    lines: list[tuple[str, ...]] = [("stage", "n", "failed", *(f"hit@{k}" for k in KS), "MRR", "median s", "max s")]
     for label, _ in rows:
         t = tallies[label]
+        seconds = (f"{median(t.seconds):.2f}", f"{max(t.seconds):.2f}") if t.seconds else ("-", "-")
         stages = (
-            (("after fusion", t.fused), ("after reranking", t.reranked)) if len(rows) == 1 else ((label, t.reranked),)
+            (("after fusion", t.fused, ("-", "-")), ("after reranking", t.reranked, seconds))
+            if len(rows) == 1
+            else ((label, t.reranked, seconds),)
         )
-        for stage, ranks in stages:
+        for stage, ranks, timing in stages:
             s = summarise(ranks)
             lines.append(
-                (stage, str(len(ranks)), str(t.failed), *(f"{s[f'hit@{k}']:.2f}" for k in KS), f"{s['mrr']:.3f}")
+                (
+                    stage,
+                    str(len(ranks)),
+                    str(t.failed),
+                    *(f"{s[f'hit@{k}']:.2f}" for k in KS),
+                    f"{s['mrr']:.3f}",
+                    *timing,
+                )
             )
     widths = [max(len(line[i]) for line in lines) for i in range(len(lines[0]))]
     body = [
@@ -247,6 +269,25 @@ def table(
     ]
     notes = f"{no_gold} conversations without a gold left out\n{bad_gold} conversations with a bad gold left out\n"
     return notes + "\n".join(body) + "\n"
+
+
+def not_served(reports: Mapping[str, str]) -> list[str]:
+    """The embedder and reranker reports (`model_reports`) that are not "ok": a model or revision other than the profile's pin, or
+    a server that does not answer."""
+    return [f"{name}: {reports[name]}" for name in ("embedding", "reranker") if reports[name] != "ok"]
+
+
+def header_line(rt: Runtime, generation: int | None) -> str:
+    """The run's header: the index, the models the servers serve (checked against the profile's pins) and the card."""
+    retrieval = rt.settings.profile.retrieval
+    pins = (
+        f"{retrieval.embedding.model}@{retrieval.embedding.revision}",
+        f"{retrieval.rerank.model}@{retrieval.rerank.revision}",
+    )
+    return (
+        f"index {rt.collection} generation {'unknown' if generation is None else generation}; "
+        f"embedder {pins[0]}; reranker {pins[1]}; card {rt.settings.card.name}\n"
+    )
 
 
 def row_opener(rt: Runtime) -> OpenRow:
@@ -269,19 +310,27 @@ def row_opener(rt: Runtime) -> OpenRow:
 async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir: str | Path | None) -> int:
     settings = load_settings(environ, secrets_dir=secrets_dir)
     rt = build_runtime(settings, None, False)  # no Langfuse client: nothing is traced
-    index = await open_index(rt.collection, settings.profile, settings.overlay.database, settings.acronyms)
-    try:  # this index serves the analysis' deps only; every row opens its own
-        return await evaluate(
-            graph_deps(rt, index),
-            row_opener(rt),
-            settings.profile_dir,
-            args.sets,
-            args.limit,
-            ABLATION if args.ablation else PLAIN,
-            sys.stdout,
-        )
+    try:
+        if wrong := not_served(await model_reports(rt)):
+            logger.error("[RetrievalEval] the model servers do not serve the profile's pins: %s", "; ".join(wrong))
+            return 1
+        async with read_pool(store_conninfo(settings.overlay.database), max_size=1, name="turns") as pool:
+            generation = await TurnStore(pool).live_generation(rt.collection)
+        index = await open_index(rt.collection, settings.profile, settings.overlay.database, settings.acronyms)
+        try:  # this index serves the analysis' deps only; every row opens its own
+            return await evaluate(
+                graph_deps(rt, index),
+                row_opener(rt),
+                settings.profile_dir,
+                args.sets,
+                args.limit,
+                ABLATION if args.ablation else PLAIN,
+                sys.stdout,
+                header_line(rt, generation),
+            )
+        finally:
+            await dispose_engines(*index.engines)
     finally:
-        await dispose_engines(*index.engines)
         await close_http_client()
 
 
