@@ -1,93 +1,263 @@
 # rag-tuda
 
-Cited answers on open-weight models. The assistant answers a question from its indexed documents only, each statement with a
-numbered link to its source; the language model's own knowledge serves only for conversation. It answers in German, or in the
-question's language, and shapes an answer as a table, a checklist, a chart or a mind map when the question calls for one.
-Everything runs on your own hardware; no cloud service sees a question.
+Cited answers on open-weight models, customised for TU Darmstadt's Fachbereich Informatik. A private proof-of-concept
+showcase: a student project that answers questions about Bachelor, Master and PhD study rules, the examination regulations
+(PO) and their versions, TU-wide rules and the residence permit for studying. It is **not an official service of TU
+Darmstadt**, **not legal advice**, and every answer is AI-generated and without guarantee: check the cited source.
 
-Today the repository holds the engine, a single-page chat client and one profile, `profiles/example`: ten German federal
-labour laws, indexed by the `folder` connector. A profile holds everything specific to one document collection.
+The assistant answers from its indexed documents only, each statement with a numbered link to its source and the PO version
+it rests on; the language model's own knowledge serves only for conversation. It answers in German ("Sie"), or in the
+question's language, and shapes an answer as a table, a checklist, a chart or a mind map when the question calls for one.
+Everything runs on your own hardware. A question stays on the machine unless you choose a hosted model card (a `l-groq-...`
+card); the page then shows which model and provider answer.
+
+## What this showcases
+
+- a configuration-driven crawler for a real university site (polite, robots.txt-aware, host allow-list);
+- version-aware retrieval: hard filters for degree, programme, PO version and document type, with the filter named when
+  nothing matches (never a silent unfiltered retry);
+- hybrid search (vectors and German full text, with acronym expansion), fusion, whole-section reranking, a deterministic
+  reference hop that resolves "§ n APB"-style references, and an LLM-driven extra round on the larger model classes;
+- one architecture across model classes, from a 4B model on a laptop to a large open model on a GPU server.
+
+## Quick start
+
+Native mode needs an Apple-silicon Mac (16 GB or more), Docker (Colima, OrbStack or Docker Desktop), Ollama running
+(`ollama serve`), and [`uv`](https://docs.astral.sh/uv/).
+
+```sh
+uv run rag doctor     # checks the machine and lists the model cards it can run
+uv run rag up         # the default profile is tu-informatik: it crawls the listed TU hosts, then indexes
+uv run rag up --profile example --yes   # the bundled labour-law example: no crawl at all
+```
+
+`rag up` starts Postgres in Docker on `127.0.0.1:55432`, migrates, starts the embedding (8701) and reranker (8702) servers and
+the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`), builds the index when there is none,
+creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints the link. The
+crawl of the default profile is polite: about one request per second per host. `--profile` defaults to the profile this
+folder was last started with, else `tu-informatik`; naming another profile switches. A model that is already on the
+machine is not downloaded again, and nothing is downloaded without your `--yes`. A second `up` changes nothing.
+
+The commands:
+
+| Command | What it does |
+|---|---|
+| `uv run rag doctor` | checks the machine and picks a class; `--card` shows one card's download size and whether it fits |
+| `uv run rag up` | brings the stack up; `--card`, `--profile`, `--mode native\|compose`, `--model`, `--llm-url`, `--yes` |
+| `uv run rag ask "<question>"` | asks one question and streams the cited answer; `--degree`, `--programme`, `--po`, `--lang` |
+| `uv run rag reindex` | builds a new index generation from a re-crawl, swaps it in and restarts the backend; `--full`, `--resume` |
+| `uv run rag rollback` | makes the previous index generation live again and restarts the backend |
+| `uv run rag eval` | the smoke questions against the running stack; `--retrieval-only [--ablation]` scores retrieval alone |
+| `uv run rag add <folder>` | registers a folder of your own documents (Markdown, text, PDF) as a source; then `rag reindex` |
+| `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots` |
+
+## Profiles
+
+A profile holds everything specific to one document collection. Two exist:
+
+- `profiles/tu-informatik` (the default): the department's and the university's pages, crawled from the hosts in its
+  `sources.yaml` (see [Sources and rights](#sources-and-rights)).
+- `profiles/example`: ten German federal labour laws, read by the `folder` connector. It is the profile CI uses and a demo
+  that needs no crawl.
 
 ## Architecture at a glance
 
+```mermaid
+flowchart LR
+  crawl[crawl<br/>allow-listed hosts] --> gen[index generations<br/>pgvector, atomic swap]
+  q([question]) --> an[query analysis<br/>filters, language]
+  an --> ret[hybrid retrieval<br/>vectors + German full text]
+  gen --> ret
+  ret --> fuse[fusion cut]
+  fuse --> rr[rerank<br/>bge-reranker-v2-m3]
+  rr --> par[whole parents]
+  par --> hop[reference hop]
+  hop --> ans[answer<br/>numbered citations<br/>appended lines]
+```
+
 ```text
 page (web/page) --GET /api/chat, server-sent events--> backend (FastAPI, one pipeline slot)
-  backend: 1 query analysis ............................ vllm (Qwen3-14B-AWQ)
-           2 search: the question's vector ............. embedding_service (snowflake-arctic-embed-m-v2.0)
-                     sections and full text ............ pgvector (views rag_chunks, rag_sections)
-           3 rerank ................................... reranker_service (bge-reranker-v2-m3)
-           4 answer, streamed with citations .......... vllm
-indexer (a one-off container, `indexer build`) -> a new index generation -> views repointed -> the backend reloads it on its next start
+  backend: 1 query analysis ............. the card's OpenAI-compatible endpoint (Ollama natively)
+           2 search: the question's vector ... embedding_service (snowflake-arctic-embed-m-v2.0)
+                     sections and full text .. pgvector (views rag_chunks, rag_sections)
+           3 rerank ..................... reranker_service (bge-reranker-v2-m3)
+           4 answer, streamed with citations . the card's OpenAI-compatible endpoint
+indexer (a one-off container or process, `indexer build`) -> a new index generation -> views repointed -> the backend reloads it on its next start
 evals (a job container, never running on its own): probe runs, the gate and the smoke, over HTTP to the backend
 ```
 
-The stream (format 1) sends `meta` first, then `status` (five steps), `docs`, `chunk`, `citations` and `error` frames, and
-`done` last; each frame is `data: <json>` followed by a blank line. The compose file publishes one host port, the backend's
-`127.0.0.1:8700`; everything else is reached on the compose network or with `docker exec`.
+The answer endpoint is the one the model card names: Ollama on the machine for the S and M cards, Groq's hosted endpoint for
+the L cards, and a vLLM server for the XL card, which is documented but untested (see below). The stream (format 1) sends
+`meta` first, then `status` (five steps), `docs`, `chunk`, `citations` and `error` frames, and `done` last; each frame is
+`data: <json>` followed by a blank line. The compose file publishes one host port, the backend's `127.0.0.1:8700`;
+everything else is reached on the compose network or with `docker exec`. More in [`handbook/architecture.md`](handbook/architecture.md).
 
-## Repository layout
+## Models and classes
 
-| Folder | What it holds |
-|---|---|
-| `src/rag_tuda/` | the command line (`doctor`, `up`, `down`, `ask`, `add`) and the `.rag/` state (the token, the database role passwords, one secret folder per native process, pid files, logs); standard library only |
-| `apps/` | `assistant_api` (the backend: FastAPI app and runtime, settings, the LangGraph graph, its own image); `indexer` (settings, connectors found by entry point, generations, the one-shot `indexer build` command and its status, housekeep, rollback and compare commands); `evals` (probe runner, gate, stats, compare, rescore, smoke; its own job image) |
-| `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes; never in a service image), workspace members |
-| `profiles/` | `example/`: `profile.yaml`, `messages.de.yaml`, `prompts/`, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/` |
-| `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
-| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `compose.native.yaml` (Postgres alone on `127.0.0.1:55432`, for the native stack), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
-| `web/page/` | the chat client: static files, the vendored libraries, its unit and browser tests |
-| `tests/` | unit, contract (`contracts/`), harness (`integration/`) and repository tests |
-| `secrets/` | credential files, never in git |
-| `data/` | runtime data, not in git |
+A model card (`models/cards/*.toml`) names the answer model, its endpoint, its window and its timeouts. The classes:
 
-## Setup
+| Class | Cards | Where it runs |
+|---|---|---|
+| S | `s-qwen3-4b-instruct-2507` (default, about 2.5 GB), `s-qwen3.5-4b` (3.3 GB), `s-gemma4-e4b` (6.6 GB) | Ollama on the machine |
+| M | `m-qwen3.6-35b-a3b` (22.6 GB), `m-qwen3.8-27b` (17.7 GB), `m-gemma4-31b` (20.4 GB) | Ollama on the machine |
+| L | `l-groq-gpt-oss-120b`, `l-groq-gpt-oss-20b`, `l-groq-qwen3.8-27b` | Groq's hosted endpoint; analysis, embedding and reranking stay local |
+| XL | `xl-vllm-example` | a vLLM server on NVIDIA GPUs; shipped as an example to copy, not tested |
 
-`uv run rag doctor` checks the machine and lists the model cards it can run. On a Mac, `uv run rag up --profile example --card
-s-qwen3-4b-instruct-2507 --yes` starts Postgres in Docker on `127.0.0.1:55432`, migrates, starts the embedding (8701) and
-reranker (8702) servers and the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`), builds the
-index when there is none, creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints
-the link. `--profile` defaults to the profile this folder was last started with, and to `tu-informatik` (which crawls the department's pages) on the first run; `example` indexes the ten law texts, and naming another profile switches. Ollama must be running (`ollama serve`). A model that is already on the machine (the pinned snapshots in the Hugging Face
-cache, the Ollama tag) is not downloaded again; a second `up` changes nothing, and `uv run rag down` stops everything (safe to
-repeat, data stays; `--purge` also deletes `.rag/crawl` and `.rag/snapshots`). On Linux or WSL2, `--mode compose` runs the compose
-files below with the card, its window, the profile and the secrets taken from `.rag/` (build, then migrate, then up, then a
-first request to the answer model). A hosted card (`l-groq-...`) needs `GROQ_API_KEY` in the environment of `rag up`; the key goes to
-the backend process only and is never stored.
+**What is measured.** Only the S card `s-qwen3-4b-instruct-2507` has been measured, on one M1 Max with 64 GB (Ollama 0.40.12):
+a prompt of about 6K tokens gets its first token after 16.4 s (about 400 tokens/s prefill), and decoding runs at 25 to 33
+tokens/s. The card's comment gives the full 8K-token window: the first token after about 18 s, and a 700-token answer ending
+after about 36 s. The card's timeouts follow from that, and they were measured on an M1 Max: a base-chip Mac may need the
+card's `idle_s`, `llm_read_s` and `deadline_s` raised.
 
-The stack needs Docker with compose on Linux or WSL2. `deploy/compose.yaml` runs on the CPU with Ollama; add
-`-f deploy/compose.nvidia.yaml` for NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve
-the language model with vLLM instead of Ollama. The compose file names the project `rag-tuda`, so containers are
-`rag-tuda-<service>-1` and volumes `rag-tuda_<name>`.
+**What is not measured yet.** The M class has not been run, and the bake-offs (embedder, reranker, answer models) are not run
+yet, so no card is a bake-off winner; the shipped defaults are the cards' starting choices. No quality or latency numbers for
+M, L or XL are given here.
+
+**vLLM (XL).** `deploy/compose.vllm.yaml` serves the card's model at a pinned revision and loads the weights offline from the
+host's Hugging Face cache (`~/.cache/huggingface`). Download that revision there first (the revision is in the `--revision`
+flag of `compose.vllm.yaml`, for example with `hf download Qwen/Qwen3-235B-A22B-Instruct-2507-FP8 --revision <revision>`); the
+container starts with `HF_HUB_OFFLINE=1` and downloads nothing itself. To serve another model, copy the card and change both
+together.
+
+**Hosted cards (Groq).** A `l-groq-...` card needs `GROQ_API_KEY` in the environment of `rag up`; the key goes to the backend
+process only and is never stored. Groq's free-tier data terms have not been read in full: enter no personal matters while a
+remote card is active. Only the generation call leaves the machine, to the card's endpoint.
+
+## Evaluation
+
+`uv run rag eval` runs the smoke questions against the running stack and checks every answer in code: each `[n]` maps to a
+source, the answer's language equals the question's, the PO-version line is present when a version-bound source is cited,
+"Sie" in German answers, the residence disclaimer when a residence source is cited.
+
+`uv run rag eval --retrieval-only` scores retrieval alone: for each question the rank of its gold source after fusion and after
+reranking (hit@k and MRR). With `--ablation` it adds one row per retrieval stage turned on, cumulatively: no filters, + filters,
++ acronyms, + fusion cut, + whole parents, + reference hop.
+
+The ablation table for the TU profile is **pending**: it waits for the TU smoke set and index. What exists today is the
+example profile's run, shown only to say that the eval runs end to end: on 4 questions with a gold source, hit@1 is 0.25 and
+MRR 0.625 after fusion, and 1.00 and 1.000 after reranking. That is not a result about TU's documents.
+
+## Sources and rights
+
+- The crawled pages and PDFs live only in `.rag/crawl/` on your machine. They are never committed, never redistributed; the
+  repository holds configuration and, in the smoke set, short quotes. The index is local and not to be redistributed: TU
+  Darmstadt's imprint says its content may not be reproduced in other publications without consent.
+- Answers quote short passages and link to the source.
+- The crawler's host allow-list is `profiles/tu-informatik/sources.yaml`: `www.informatik.tu-darmstadt.de`,
+  `www.intern.tu-darmstadt.de`, `www.tu-darmstadt.de`, `digitales-rathaus.darmstadt.de`, `www.gesetze-im-internet.de` (the
+  statutes' official XML) and, in a full build, `www.ladadi.de`. `www.darmstadt.de` and `h-da.de` are never fetched. The
+  crawler honours robots.txt (RFC 9309) and `<meta name="robots">`, and sends the user agent
+  `rag-tuda/<version> (+<contact>)`.
+- Set `RAG__CRAWL__CONTACT` in your environment to put a contact into the user agent; it is optional and is never read from
+  a file in the repository. `rag reindex` prints a note when it is not set.
+- README screenshots must come from the fixture mini-site, never from crawled pages; none is committed yet.
+
+## Warnings
+
+- **Not legal advice, not an official TU service.** The page footer says so too.
+- **Prompt injection through crawled pages.** Hidden text is dropped when a page is extracted, but crawled text still reaches
+  the model's prompt; treat an answer as a pointer to the source.
+- **Remote cards.** Questions leave the machine only to the answer endpoint of a hosted card, and the page shows it. Groq's
+  free-tier data terms are not fully read: no personal matters while a remote card is active.
+- **No telemetry.** Every host port binds `127.0.0.1`, `/api/*` needs a Bearer token, and the backend's HTTP access log is off
+  (the question is a GET parameter).
+
+## Operations
+
+Keep the index current with `rag reindex`, on a schedule. It needs Docker and the stack's Postgres running (a first `rag up`
+done), and it crawls again, so schedule it rarely. `rag reindex --resume` continues an interrupted crawl; `rag reindex --full`
+adds the full source set and takes hours. `rag rollback` makes the previous generation live again.
+
+One cron line (use the full path of `uv`, from `command -v uv`, and of this folder):
+
+```text
+17 3 * * 0  cd /path/to/rag-tuda && /path/to/uv run rag reindex >> .rag/logs/reindex.log 2>&1
+```
+
+One launchd example for the Mac, `~/Library/LaunchAgents/rag-tuda.reindex.plist`, loaded with
+`launchctl load ~/Library/LaunchAgents/rag-tuda.reindex.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>rag-tuda.reindex</string>
+  <key>WorkingDirectory</key><string>/path/to/rag-tuda</string>
+  <key>ProgramArguments</key><array>
+    <string>/path/to/uv</string><string>run</string><string>rag</string><string>reindex</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartCalendarInterval</key><dict>
+    <key>Weekday</key><integer>0</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>17</integer>
+  </dict>
+  <key>StandardOutPath</key><string>/path/to/rag-tuda/.rag/logs/reindex.log</string>
+  <key>StandardErrorPath</key><string>/path/to/rag-tuda/.rag/logs/reindex.log</string>
+</dict></plist>
+```
+
+Your own folders (`rag add <folder>`, then `rag reindex`) work in native mode only; compose mode prints a note on reindex and
+rollback when folders are registered. `uv run rag down` stops the stack and keeps the data.
+
+## Compose mode (Linux or WSL2)
+
+`uv run rag up --mode compose` runs the compose files below with the card, its window, the profile and the secrets taken from
+`.rag/` (build, then migrate, then up, then a first request to the answer model).
+
+The stack needs Docker with compose. `deploy/compose.yaml` runs on the CPU with Ollama; add `-f deploy/compose.nvidia.yaml` for
+NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve the language model with vLLM
+instead of Ollama. The compose file names the project `rag-tuda`, so containers are `rag-tuda-<service>-1` and volumes
+`rag-tuda_<name>`. By hand, a fresh clone builds before it migrates:
 
 ```sh
 git clone <this repository> rag-tuda; cd rag-tuda
-cp .env_example .env    # then set BACKEND_REFRESH_TOKEN
+cp .env_example .env    # then set BACKEND_REFRESH_TOKEN, and RAG_PROFILE=tu-informatik (the default there is example)
 PYTHONPATH=src python -m rag_tuda.state init    # the secret files under secrets/
+docker compose --env-file .env -f deploy/compose.yaml --profile build --profile evals build
 docker compose --env-file .env -f deploy/compose.yaml up -d pgvector
 docker compose --env-file .env -f deploy/compose.yaml --profile migrate run --rm migrate
 docker compose --env-file .env -f deploy/compose.yaml up -d
 docker compose --env-file .env -f deploy/compose.yaml exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
 
-Ollama starts without a model, so the last command downloads the default card's model (about 2.5 GB) once.
+Ollama starts without a model; the last command downloads the default card's model (about 2.5 GB) once, and you run it after
+deciding to download. Model pulls in compose mode are always this manual step.
 
 Then build the first index: `docker compose --env-file .env -f deploy/compose.yaml --profile build run --rm indexer build`.
-The backend reports healthy (`/readyz`) only once an index is published.
+The backend reports healthy (`/readyz`) only once an index is published. Every compose command names the file and the root
+`.env`; a missing `--env-file` leaves `BACKEND_REFRESH_TOKEN` unset, and the backend then refuses every `/api` request.
 
-Every compose command names the file and the root `.env`; a missing `--env-file` leaves `BACKEND_REFRESH_TOKEN` unset, and the
-backend then refuses every `/api` request.
+## Repository layout
+
+| Folder | What it holds |
+|---|---|
+| `src/rag_tuda/` | the command line (`doctor`, `up`, `down`, `reindex`, `rollback`, `eval`, `ask`, `add`) and the `.rag/` state (the token, the database role passwords, one secret folder per native process, pid files, logs); standard library only |
+| `models/cards/` | one TOML file per model card |
+| `apps/` | `assistant_api` (the backend: FastAPI app and runtime, settings, the LangGraph graph, the retrieval eval, its own image); `indexer` (settings, connectors found by entry point, the crawler, generations, the one-shot `indexer build` command and its status, housekeep, rollback and compare commands); `evals` (probe runner, gate, stats, compare, rescore, smoke; its own job image) |
+| `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes and the fixture mini-site; never in a service image), workspace members |
+| `profiles/` | `tu-informatik/` (profile, messages, prompts, roles, acronyms, sources) and `example/` (profile, messages, prompts, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/`) |
+| `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
+| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `compose.native.yaml` (Postgres alone on `127.0.0.1:55432`, for the native stack), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
+| `web/page/` | the chat client: static files, the vendored libraries, its unit and browser tests |
+| `handbook/` | architecture, operations, evaluation, sources, models and design decisions |
+| `tests/` | unit, contract (`contracts/`), harness (`integration/`) and repository tests |
+| `secrets/` | credential files, never in git |
+| `data/` | runtime data, not in git |
+
+## Checks: just ci
 
 For development (macOS or Linux): install `uv`, `just`, Docker with compose and buildx (on macOS through Colima: `colima start
 --cpu 6 --memory 12`), gitleaks and pre-commit; then `uv sync --frozen --all-packages`, `pre-commit install --hook-type
 pre-commit --hook-type pre-push` and `just ci`.
 
-## Checks: just ci
-
 `just ci` runs, identically on a development machine and in CI: `lint` (ruff, deptry, gitleaks, the three locks), `types`
-(basedpyright), `imports` (import-linter), `unit` (pytest, the coverage ratchet), `db-tests` (the tests that need a migrated
-pgvector), `contracts` (shared fixtures, the stream schema, the profile's data), `model-servers` (each model server's tests in
-its own environment, with fake models), `images`, `harness` (the real backend and indexer images against fake model
-servers) and `page` (the page's Node tests, then its browser suite in Chromium against streams recorded from the TU leg; it
-needs Node and downloads Chromium on the first run). `just pre-push` (the part without Docker) runs before every push.
+(basedpyright), `imports` (import-linter), `unit` (pytest, the coverage ratchet), `cli` (the command line's tests in an
+environment holding the root project alone), `db-tests` (the tests that need a migrated pgvector), `contracts` (shared
+fixtures, the stream schema, the profile's data), `model-servers` (each model server's tests in its own environment, with fake
+models), `images`, `harness` (the real backend and indexer images against fake model servers) and `page` (the page's Node
+tests, then its browser suite in Chromium against streams recorded from the TU leg; it needs Node and downloads Chromium on
+the first run). `just pre-push` (the part without Docker) runs before every push.
 
 `just harness example` runs the example profile's leg: the ten law texts of `profiles/example` are indexed and queried through
 the real images.
@@ -104,11 +274,18 @@ A profile holds what is specific to one deployment.
 - `profile.yaml` holds the values that decide the index (chunking, extraction, the sources and their minimums, the embedding
   model) and the assistant's answer-affecting values (identity, ranking, history, guard, generation); it is baked into the
   indexer and assistant images, so an image tag fixes them. `messages.de.yaml` holds the assistant's German texts, under `labels`
-  the origin labels of the sources, and `prompts/` its four prompts, read by the backend from the image.
-- `gate.yaml` holds the probe sets and thresholds `evals` measures a change against, and the fixed probes of `evals smoke`.
+  the origin labels of the sources, and `prompts/` its prompts, read by the backend from the image.
+- `gate.yaml` (the example profile) holds the probe sets and thresholds `evals` measures a change against, and the fixed probes
+  of `evals smoke`.
 - `deploy/env/<env>.yaml` holds the technical values of one environment (endpoints, hosts, paths); the assistant's own technical
   values are `RAG__…` entries in the backend's compose environment (`deploy/compose.yaml`).
-- A source is a connector registered under the entry point group `rag_core.connectors` (today `folder`, in the indexer: Markdown,
-  text and PDF files of a directory) and named in the profile with `connector:`.
-- A new profile is a folder beside `profiles/example` under `profiles/`, built into the indexer, assistant and evals images with
+- A source is a connector registered under the entry point group `rag_core.connectors` and named in the profile with
+  `connector:`. Today there are three, in the indexer: `folder` (Markdown, text and PDF files of a directory), `tuda_web` (the
+  polite crawler over a host allow-list) and `law_xml` (statutes from the official XML).
+- A new profile is a folder beside the existing ones under `profiles/`, built into the indexer, assistant and evals images with
   `--build-arg PROFILE=<folder>` (the other images carry no profile).
+
+## Licence
+
+All rights reserved; see [`LICENSE`](LICENSE). Third-party models, vendored libraries and data sources are listed in
+[`NOTICE`](NOTICE).
