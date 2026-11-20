@@ -314,7 +314,7 @@ async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir:
         if wrong := not_served(await model_reports(rt)):
             logger.error("[RetrievalEval] the model servers do not serve the profile's pins: %s", "; ".join(wrong))
             return 1
-        async with read_pool(store_conninfo(settings.overlay.database), max_size=1, name="turns") as pool:
+        async with read_pool(store_conninfo(settings.overlay.database), max_size=2, name="retrieval-eval") as pool:
             generation = await TurnStore(pool).live_generation(rt.collection)
         index = await open_index(rt.collection, settings.profile, settings.overlay.database, settings.acronyms)
         try:  # this index serves the analysis' deps only; every row opens its own

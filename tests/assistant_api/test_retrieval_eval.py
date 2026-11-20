@@ -309,6 +309,47 @@ def test_a_run_against_other_models_than_the_pins_stops_with_exit_1(
     assert code == 1 and "reranker: mismatch: other/rerank@abc" in caplog.text
 
 
+def test_the_generation_is_read_through_a_pool_read_pool_accepts(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def reports(rt):
+        return {"embedding": "ok", "reranker": "ok", "llm": "ok"}
+
+    built = []
+
+    class Ctx:
+        async def __aenter__(self):
+            return "pool"
+
+        async def __aexit__(self, *exc):
+            return None
+
+    def pool(*args, **kwargs):
+        built.append(ev_read_pool(*args, **kwargs))  # the real constructor refuses a max_size below its minimum
+        return Ctx()
+
+    class Store:
+        def __init__(self, pool):
+            pass
+
+        async def live_generation(self, collection):
+            return 3
+
+    async def no_index(*args):
+        raise RuntimeError("past the generation")
+
+    ev_read_pool = ev.read_pool
+    settings = SimpleNamespace(overlay=SimpleNamespace(database=SimpleNamespace()), profile=None, acronyms=None)
+    monkeypatch.setattr(ev, "load_settings", lambda environ, secrets_dir=None: settings)
+    monkeypatch.setattr(ev, "build_runtime", lambda *args: SimpleNamespace(collection="example"))
+    monkeypatch.setattr(ev, "model_reports", reports)
+    monkeypatch.setattr(ev, "store_conninfo", lambda db: "host=h port=1 dbname=d user=u password=p")
+    monkeypatch.setattr(ev, "read_pool", pool)
+    monkeypatch.setattr(ev, "TurnStore", Store)
+    monkeypatch.setattr(ev, "open_index", no_index)
+    with pytest.raises(RuntimeError, match="past the generation"):
+        asyncio.run(ev.run(argparse.Namespace(sets=None, limit=None, ablation=False), {}, None))
+    assert len(built) == 1
+
+
 def test_the_example_golds_are_in_their_documents() -> None:
     probes = json.loads((ROOT / "profiles" / "example" / "probes" / "smoke.json").read_text(encoding="utf-8"))
     base = yaml.safe_load(PROFILE.read_text(encoding="utf-8"))["ingest"]["sources"]["gesetze"]["base_url"]
