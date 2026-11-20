@@ -4,11 +4,12 @@ Read-only, run natively with the backend's settings (`rag eval --retrieval-only 
   python -m assistant_api.retrieval_eval [--ablation] [--sets a,b] [--limit N]
 
 A conversation takes part when its first turn carries `"gold": {"url": ..., "heading": ... | "page": N, "quote": ...}`: the hit is
-the gold when its url (a `#` fragment ignored) equals the gold's and, when the gold names a heading or a page, its section path
-contains the heading / its page number equals the page. The rank is the 1-based position of the gold among the sections of the fused
+the gold when its url (a `#` fragment ignored) equals the gold's and the section's text contains the gold's quote (whitespace
+normalised); a gold without a quote falls back to its heading (in the section path or a heading line of the text), then to its page.
+The rank is the 1-based position of the gold among the sections of the fused
 list the reranker is given (a section once, at its best child) and among the reranked sections the retrieval returns. One table goes
 to stdout: hit@1/3/5/10 and MRR per stage (a plain run), or per ablation row after reranking. Never a question, a query or a
-document. Logs go to stderr. A conversation without a gold is counted and left out.
+document. Logs go to stderr. A conversation without a gold, or with one that names no url, is counted and left out.
 
 The analysis runs once per distinct question per run, with the filter readers on (the profile's analysis_temperature is 0); the
 `filters` switch of a row only decides whether the resolved filter is applied. Each ablation row sets the five switches of
@@ -35,6 +36,7 @@ from rag_core.domain.access import ANONYMOUS
 from rag_core.domain.answer_shapes import answer_language
 from rag_core.domain.filters import Filter
 from rag_core.domain.resilience import dispose_engines
+from rag_core.domain.retrieval import Section
 from rag_core.services.retrieval import RetrievalService
 from rag_core.settings import SettingsError
 from rag_core.settings.profile import Profile
@@ -57,26 +59,47 @@ ABLATION: tuple[tuple[str, dict[str, bool]], ...] = tuple(
 PLAIN: tuple[tuple[str, dict[str, bool]], ...] = (("profile", {}),)  # the profile's own switches
 
 
-def gold_of(conversation: Mapping[str, Any]) -> Mapping[str, Any] | None:
-    """The gold of the first turn, None without one."""
-    gold = conversation["turns"][0].get("gold")
-    return gold if isinstance(gold, Mapping) else None
+def gold_of(conversation: Mapping[str, Any]) -> Any:
+    """The gold of the first turn as written, None without one."""
+    return conversation["turns"][0].get("gold")
 
 
-def is_gold(gold: Mapping[str, Any], metadata: Mapping[str, Any]) -> bool:
-    """Whether a section with this metadata is the gold: the url, then the heading in the section path or the page."""
+def valid_gold(gold: Any) -> bool:
+    """A gold names a url; its quote and heading, when given, are texts."""
+    return (
+        isinstance(gold, Mapping)
+        and isinstance(gold.get("url"), str)
+        and bool(gold["url"])
+        and all(isinstance(gold.get(key, ""), str) for key in ("quote", "heading"))
+    )
+
+
+def squeeze(text: str) -> str:
+    """The text with every run of whitespace (line breaks too) as one space."""
+    return " ".join(text.split())
+
+
+def is_gold(gold: Mapping[str, Any], section: Section) -> bool:
+    """Whether the section is the gold. A section holds several paragraphs, so its text decides: the url (a `#` fragment ignored)
+    matches and the section text contains the gold's quote (whitespace-normalised). Without a quote the heading decides, in the
+    section path or as a heading line of the text (leading `#` and spaces ignored); without a heading, the page."""
+    metadata = section.metadata
     if str(metadata.get("url") or "").partition("#")[0] != gold["url"].partition("#")[0]:
         return False
-    if "heading" in gold:
-        return gold["heading"] in str(metadata.get("section_path") or "")
+    if gold.get("quote"):
+        return squeeze(gold["quote"]) in squeeze(section.text)
+    if gold.get("heading"):
+        heading = squeeze(gold["heading"])
+        lines = (squeeze(line.lstrip("# ")) for line in section.text.splitlines())
+        return heading in squeeze(str(metadata.get("section_path") or "")) or heading in lines
     if "page" in gold:
         return metadata.get("page_number") == gold["page"]
     return True
 
 
-def rank_of(gold: Mapping[str, Any], sections: Sequence[Mapping[str, Any]]) -> int | None:
+def rank_of(gold: Mapping[str, Any], sections: Sequence[Section]) -> int | None:
     """The 1-based position of the first gold section, None when it is not in the list."""
-    return next((i for i, metadata in enumerate(sections, 1) if is_gold(gold, metadata)), None)
+    return next((i for i, section in enumerate(sections, 1) if is_gold(gold, section)), None)
 
 
 def summarise(ranks: Sequence[int | None]) -> dict[str, float]:
@@ -103,12 +126,18 @@ class Traced:
         service._rerank = spy  # type: ignore[method-assign]
 
     async def places(self, queries: list[str], filter: Filter | None, **kwargs: Any) -> tuple[list[Any], list[Any]]:
-        """The metadata of the fused list's sections (once each, in order) and of the sections the retrieval returns."""
+        """The sections of the fused list (once each, in order) and of the documents the retrieval returns, both read from the
+        section store by id, so the two stages judge the same unit."""
         self.children = []
         final = await self.service.retrieve(queries, filter, **kwargs)
-        ids = list(dict.fromkeys(i for c in self.children if (i := c.metadata.get("section_id"))))
-        found = await self.service.sections.get_many(ids, None)
-        return [found[i].metadata for i in ids if i in found], [d.metadata for d in final]
+        fused_ids = self._ids(self.children)
+        final_ids = self._ids(final)
+        found = await self.service.sections.get_many(list(dict.fromkeys([*fused_ids, *final_ids])), None)
+        return [found[i] for i in fused_ids if i in found], [found[i] for i in final_ids if i in found]
+
+    @staticmethod
+    def _ids(documents: Sequence[Any]) -> list[str]:
+        return list(dict.fromkeys(i for d in documents if (i := d.metadata.get("section_id"))))
 
 
 OpenRow = Callable[[Mapping[str, bool]], AbstractAsyncContextManager[Traced]]
@@ -161,8 +190,10 @@ async def evaluate(
     conversations = [
         c for name in chosen for c in json.loads(known[name].read_text(encoding="utf-8"))["conversations"][:limit]
     ]
-    golds = [(first_question(c), g) for c in conversations if (g := gold_of(c))]
-    logger.info("[RetrievalEval] %d conversations with a gold, %d without", len(golds), len(conversations) - len(golds))
+    golds = [(first_question(c), gold_of(c)) for c in conversations if valid_gold(gold_of(c))]
+    no_gold = sum(gold_of(c) is None for c in conversations)
+    bad_gold = len(conversations) - len(golds) - no_gold
+    logger.info("[RetrievalEval] %d conversations with a gold, %d without, %d bad", len(golds), no_gold, bad_gold)
     analyses = Analyses(deps)
     tallies: dict[str, Tally] = {}
     for label, overrides in rows:
@@ -189,12 +220,14 @@ async def evaluate(
                     continue
                 tally.fused.append(rank_of(gold, fused))
                 tally.reranked.append(rank_of(gold, final))
-    out.write(table(rows, tallies, len(conversations) - len(golds)))
+    out.write(table(rows, tallies, no_gold, bad_gold))
     out.flush()
     return 0 if any(t.reranked for t in tallies.values()) else 1
 
 
-def table(rows: Sequence[tuple[str, Mapping[str, bool]]], tallies: Mapping[str, Tally], no_gold: int) -> str:
+def table(
+    rows: Sequence[tuple[str, Mapping[str, bool]]], tallies: Mapping[str, Tally], no_gold: int, bad_gold: int
+) -> str:
     """The plain table: one row (a plain run) shows both stages, several (an ablation) the rows after reranking."""
     lines = [("stage", "n", "failed", *(f"hit@{k}" for k in KS), "MRR")]
     for label, _ in rows:
@@ -212,7 +245,8 @@ def table(rows: Sequence[tuple[str, Mapping[str, bool]]], tallies: Mapping[str, 
         "  ".join(cell.ljust(w) if i == 0 else cell.rjust(w) for i, (cell, w) in enumerate(zip(line, widths)))
         for line in lines
     ]
-    return f"{no_gold} conversations without a gold left out\n" + "\n".join(body) + "\n"
+    notes = f"{no_gold} conversations without a gold left out\n{bad_gold} conversations with a bad gold left out\n"
+    return notes + "\n".join(body) + "\n"
 
 
 def row_opener(rt: Runtime) -> OpenRow:
