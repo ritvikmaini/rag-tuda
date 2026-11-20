@@ -253,7 +253,9 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
     if facts.postgres:
         steps.append(Step("say", text="postgres: already running"))
     else:
-        env_file = runtime.compose_env_text(llm, token=state.token, roles_dir=str(state.secrets_dir("roles")))
+        env_file = runtime.compose_env_text(
+            llm, token=state.token, roles_dir=str(state.secrets_dir("roles")), profile=args.profile
+        )
         port = runtime.PORTS["postgres"]
         steps += [
             Step("write", name="compose-env", path=f"{rag}/compose.env", text=env_file),

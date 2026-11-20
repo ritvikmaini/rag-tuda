@@ -279,6 +279,11 @@ def test_postgres_comes_from_the_compose_files_on_the_loopback_port(tmp_path, cu
     )
 
 
+def test_the_native_env_file_names_the_profile(tmp_path, current):
+    steps = {s.name: s for s in stack.plan_up(current, facts(tmp_path, ollama_up=True), args(profile="tu-informatik"))}
+    assert "RAG_PROFILE=tu-informatik\n" in steps["compose-env"].text
+
+
 def test_no_secret_is_on_a_command_line_or_in_a_process_environment(tmp_path, current):
     secret_values = {current.token, *current.passwords.values()}
     for step in stack.plan_up(current, facts(tmp_path, ollama_up=True), args()):
