@@ -174,9 +174,15 @@ Keep the index current with `rag reindex`, on a schedule. It needs Docker and th
 done), and it crawls again, so schedule it rarely. `rag reindex --resume` continues an interrupted crawl; `rag reindex --full`
 adds the full source set and takes hours. `rag rollback` makes the previous generation live again.
 
-One cron line (use the full path of `uv`, from `command -v uv`, and of this folder):
+A scheduled job has a bare environment. It needs `docker` and `uv` on its `PATH`, and with a hosted (`l-groq-...`) card the
+backend restart fails unless `GROQ_API_KEY` is in the job's environment too; `RAG__CRAWL__CONTACT` is optional (`rag reindex`
+only prints a note when it is unset).
+
+One cron line, with a `PATH` (use the full path of `uv`, from `command -v uv`, and of this folder; add `GROQ_API_KEY=...` and
+`RAG__CRAWL__CONTACT=...` lines beside `PATH` when you need them):
 
 ```text
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
 17 3 * * 0  cd /path/to/rag-tuda && /path/to/uv run rag reindex >> .rag/logs/reindex.log 2>&1
 ```
 
@@ -194,6 +200,7 @@ One launchd example for the Mac, `~/Library/LaunchAgents/rag-tuda.reindex.plist`
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- with a hosted card also: <key>GROQ_API_KEY</key><string>...</string> -->
   </dict>
   <key>StartCalendarInterval</key><dict>
     <key>Weekday</key><integer>0</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>17</integer>
