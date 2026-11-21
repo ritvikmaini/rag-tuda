@@ -328,6 +328,16 @@ def test_pdfs_that_vanish_from_intact_pages_are_kept_for_a_few_builds_and_named(
     assert registry(ctx).keys() >= {PO_PDF, APB_ORIGINAL}
 
 
+def test_a_kept_pdf_without_its_list_record_is_not_indexed_for_lacking_its_metadata(tu, make_context, served):
+    ctx = make_context()
+    connector(site(served)).collect(ctx)
+    ctx.state.path(LIST_STATE).unlink()  # the refusal for a corrupt list state tells the user to delete it
+    pages_without = {url: ("text/html", without_pdf_links(FACULTY.get(urlsplit(url).path).text)) for url in (HUB,)}
+    later = connector(site(served, pages_without), TODAY + timedelta(days=1)).collect(ctx)
+    assert PO_PDF not in pdfs(later) and PO_PDF in registry(ctx)  # the file stays, it is not indexed
+    assert {"url": PO_PDF, "missing": ["regulation"]} in later.report["not_indexed"]
+
+
 def test_a_pdf_whose_redirect_ends_outside_its_scope_is_not_indexed_and_is_named(tu, make_context, served):
     elsewhere = f"https://{FB20}/media/informatik/other/x.pdf"
     moved = lambda request: httpx.Response(302, headers={"location": elsewhere})  # noqa: E731

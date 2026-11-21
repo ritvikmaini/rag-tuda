@@ -37,6 +37,7 @@ from indexer.crawl.extract import Extraction, Link, extract
 from indexer.crawl.fetch import Response, Skipped
 from indexer.crawl.manifest import ManifestDoc
 from indexer.crawl.metadata import (
+    PROGRAMME_BOUND,
     Candidate,
     Metadata,
     PageEntry,
@@ -78,6 +79,15 @@ def derived(metadata: Metadata) -> dict[str, Any]:
         "official_url": metadata.official_url,
     }
     return {k: v for k, v in values.items() if v is not None}
+
+
+def lacks(meta: Mapping[str, Any]) -> tuple[str, ...]:
+    """The required fields a PDF's stored metadata lacks: its regulation, and for a PO, module handbook or study plan its
+    programme and PO version. A PDF kept from an earlier build may have lost its metadata with the list state."""
+    regulation = meta.get("regulation")
+    if not regulation:
+        return ("regulation",)
+    return tuple(f for f in ("programme", "po_version") if regulation in PROGRAMME_BOUND and not meta.get(f))
 
 
 class PdfFiles:
@@ -163,11 +173,12 @@ class TudaWeb:
         merged = self._union_scopes({url: p for url, p in crawl.pdfs.items() if url in kept})
         synced = self._sync(ctx, [self._pdf_entry(p) for p in merged.values()], crawl.pdfs)
         pdf_dir = ctx.paths["pdf_dir"]
-        items += [
-            PdfItem(str(path), e.url, file_hash(path), e.meta)
-            for e in synced.entries
-            if (path := local_path(e.url, pdf_dir)).is_file()
-        ]
+        not_indexed = [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed]
+        for e in synced.entries:
+            if missing := lacks(e.meta):
+                not_indexed.append({"url": e.url, "missing": list(missing)})
+            elif (path := local_path(e.url, pdf_dir)).is_file():
+                items.append(PdfItem(str(path), e.url, file_hash(path), e.meta))
         if not ctx.reuse:
             ctx.state.save(
                 CRAWL_RUN, {"started": began.isoformat(), "sources": ctx.options["sources"], "complete": True}
@@ -177,7 +188,7 @@ class TudaWeb:
             "pages": crawl.pages,
             "pdfs_linked": len(crawl.pdfs),
             "empty_pages": crawl.empty_pages,
-            "not_indexed": [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed],
+            "not_indexed": not_indexed,
             "copies": list(selection.copies),
             "skipped": crawl.skipped,
             "hosts_down": [{"host": h, "reason": why} for h, why in fetcher.hosts_down().items()],
