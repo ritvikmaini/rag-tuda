@@ -190,6 +190,31 @@ def test_a_denied_checkpoint_step_is_skipped_with_one_line_and_the_others_run(mo
     )
 
 
+def test_without_tracing_the_trace_step_does_not_apply_and_the_run_is_complete(monkeypatch, capsys):
+    @asynccontextmanager
+    async def pool(*a, **k):
+        yield FakePool(FakeConn([]))
+
+    class Store:
+        def __init__(self, p):
+            pass
+
+        async def ages(self):
+            return AGES
+
+    def no_client(url):
+        raise AssertionError("no tracing client without a tracing url")
+
+    monkeypatch.setattr(retention, "read_pool", pool)
+    monkeypatch.setattr(retention, "store_conninfo", lambda db: "")
+    monkeypatch.setattr(retention, "TurnStore", Store)
+    monkeypatch.setattr(retention, "_trace_client", no_client)
+    settings = SimpleNamespace(overlay=SimpleNamespace(database=None, tracing=SimpleNamespace(url="")))
+    line, complete = asyncio.run(retention.run(settings, True))
+    assert complete and capsys.readouterr().out == ""
+    assert "traces not applicable (tracing is off)" in line
+
+
 def test_main_prints_the_line_and_exits_by_completeness(monkeypatch, capsys):
     async def run(settings, apply):
         return "[Retention] line apply=%s" % apply, apply

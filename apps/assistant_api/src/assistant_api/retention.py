@@ -7,9 +7,15 @@ Without --apply it only reports what would go. One run, in this order:
   3. Langfuse traces with an observation older than TRACE_DAYS, listed through the observations API and deleted through the
      trace API of the client the backend uses (at most MAX_PAGES list pages per run);
   4. one summary line.
-A step that fails or is not allowed prints one line and is skipped; the others still run. Exit 0 when every step ran, 1 when
-one did not. It runs inside the assistant container with the assistant's own settings (rag_app on pgvector):
-docker compose exec backend python -m assistant_api.retention --apply."""
+A step that fails or is not allowed prints one line and is skipped; the others still run. The trace step does not apply
+without a tracing url (tracing is off). Exit 0 when every step that applies ran, 1 when one did not. It runs with the
+assistant's own settings (rag_app on pgvector), inside the running backend container:
+
+  docker compose --env-file .env -f deploy/compose.yaml exec -T backend python -m assistant_api.retention [--apply]
+
+or natively, with the environment the backend runs in (`rag up` starts it with RAG_PROFILE, the card and the secrets folder):
+
+  uv run --frozen --package assistant-api python -m assistant_api.retention [--apply]"""
 
 import argparse
 import asyncio
@@ -116,7 +122,8 @@ def _trace_client(url: str) -> Any:
 
 
 def report(found: dict[str, Any], kept: dict[str, int] | str, apply: bool) -> str:
-    """The summary line. found: conversations (n, turns), checkpoints n, traces n; a step that did not run is a string."""
+    """The summary line. found: conversations (n, turns), checkpoints n, traces n; a step that did not run is a string, traces
+    without tracing None."""
     conv, threads, trace = found["conversations"], found["checkpoints"], found["traces"]
     sign = "-" if apply else ""
     parts = [
@@ -124,7 +131,11 @@ def report(found: dict[str, Any], kept: dict[str, int] | str, apply: bool) -> st
         if isinstance(conv, str)
         else "conversations %s%d (turns %s%d)" % (sign, conv[0], sign, conv[1]),
         "checkpoint threads skipped" if isinstance(threads, str) else "checkpoint threads %s%d" % (sign, threads),
-        "traces skipped" if isinstance(trace, str) else "traces %s%d" % (sign, trace),
+        "traces skipped"
+        if isinstance(trace, str)
+        else "traces not applicable (tracing is off)"
+        if trace is None
+        else "traces %s%d" % (sign, trace),
     ]
     ages = kept if isinstance(kept, str) else ", ".join("%s %d" % (b, kept.get(b, 0)) for b in AGE_BUCKETS)
     if apply:
@@ -145,7 +156,9 @@ async def run(settings: Any, apply: bool) -> tuple[str, bool]:
                 found[name] = "skipped"
                 print("[Retention] %s skipped: %s" % (name, _reason(exc)), flush=True)
 
-        async def trace_step() -> int:
+        async def trace_step() -> int | None:
+            if not settings.overlay.tracing.url:
+                return None
             client = await asyncio.to_thread(_trace_client, settings.overlay.tracing.url)
             try:
                 return await asyncio.to_thread(traces, client, apply)
