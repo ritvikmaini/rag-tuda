@@ -7,6 +7,9 @@ dropped. Text values hold for the question that carries them; the chips are sent
 chip supplied is never carried to a turn whose chips no longer set it (the user cleared the chip); a value from text or the
 term parser is. Regulation and date are carried from the previous turn only when the new question names no value at all.
 
+A degree the question names only inside a compound ("Mastermodule") that contradicts the chips' degree picks no side: the
+question is widened (no degree, programme or chip PO year), and the chips stay for the next question.
+
 Roles are plain data: the dump of roles.yaml (`programmes` with `degree` and `po_versions`, `groups`)."""
 
 import datetime as dt
@@ -110,6 +113,9 @@ DEGREE_WORDS = {
         re.IGNORECASE,
     ),
 }
+# a degree word that continues into a longer word ("Mastermodule", "Bachelorarbeit"), apart from the study forms
+# ("Masterstudent", "Bachelorstudierende") and the plural: such a word names a topic, not the asker's degree
+DEGREE_COMPOUND = re.compile(r"\b(?:bachelor|master)(?!s?\b)(?!stud)\w+", re.IGNORECASE)
 # a document type counts when a preposition names it: "im Modulhandbuch", "laut APB" (a bare "PO-Wechsel" or "Modulhandbuch"
 # names a topic, not where the answer stands)
 _CUE = r"\b(?:im|in\s+(?:der|dem)|laut|gemäß|gemaess|lt\.|in\s+the|according\s+to)\s+(?:der\s+|dem\s+|den\s+)?"
@@ -250,6 +256,13 @@ def resolve_filter(
     }
     current: dict[str, Any] = dict.fromkeys(allowed)
     own = _read(text, roles)
+    chip_degree = chips.degree or (roles.get("programmes", {}).get(chips.programme or "", {}).get("degree"))
+    topical = {n for n in ("bachelor", "master") if DEGREE_WORDS[n].search(text)} - {
+        n for n in ("bachelor", "master") if DEGREE_WORDS[n].search(DEGREE_COMPOUND.sub(" ", text))
+    }
+    widen = bool(chip_degree and topical and set(own.get("degree", ())) <= topical and chip_degree not in topical)
+    if widen:
+        chips, own = Chips(), {k: v for k, v in own.items() if k != "degree"}
     po_source: str | None = None
     from_chips: set[str] = set()
 
@@ -292,6 +305,10 @@ def resolve_filter(
     named = date is not None or any(v is not None for v in current.values())
     carried = "term" if previous.po_source == "term" else "carried"
     take(carry, carried)
+    if widen:  # a PO year stays only when the question wrote it
+        current["degree"] = current["programme"] = None
+        if "po_version" not in own:
+            current["po_version"], po_source = None, None
     if not named:
         take({"regulation": previous.regulation}, carried)
         date = previous.date

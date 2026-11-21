@@ -72,6 +72,22 @@ def test_text_beats_chip_for_this_question() -> None:
     assert (silent.degree, silent.programme, silent.po_version) == (("master",), ("msc-informatik",), (2023,))
 
 
+def test_a_degree_inside_a_compound_widens_instead_of_overriding_the_chip() -> None:
+    chips = Chips(degree="bachelor", programme="bsc-informatik", po=2023)
+    modules = resolve("Kann ich schon Mastermodule belegen?", chips)
+    assert (modules.degree, modules.programme, modules.po_version, modules.po_source) == (None, None, None, None)
+    asked = "Was hat sich zwischen der PO 2015 und der PO 2023 bei der Masterarbeit geändert?"
+    thesis = resolve(asked, chips)
+    assert (thesis.degree, thesis.programme, thesis.po_version) == (None, None, (2015, 2023))
+    # the chip stays: the next question that names nothing gets its values again
+    assert resolve("Wie melde ich mich ab?", chips, previous=modules).programme == ("bsc-informatik",)
+    # a chip of the same degree, standalone words and study forms, and a question without chips are as before
+    assert resolve("Kann ich schon Mastermodule belegen?", Chips(degree="master")).degree == ("master",)
+    assert resolve("Kann ich im Master schon Module belegen?", chips).degree == ("master",)
+    assert resolve("Ich bin Masterstudent: Kann ich Module belegen?", chips).degree == ("master",)
+    assert resolve("Kann ich schon Mastermodule belegen?").degree == ("master",)
+
+
 def test_chip_used_when_text_silent() -> None:
     chips = Chips(degree="master", programme="msc-informatik", po=2015)
     found = resolve("Wie melde ich mich ab?", chips)
@@ -202,8 +218,10 @@ def test_a_po_year_follows_its_degree_and_programme() -> None:
     assert asked.include_archived is False
     # chips: the question names another degree, so the chips' programme and PO year do not apply to it
     chips = Chips("master", "msc-informatik", 2023)
-    thesis = resolve("Kann ich meine Bachelorarbeit anrechnen?", chips)
-    assert (thesis.degree, thesis.programme, thesis.po_version) == (("bachelor",), None, None)
+    thesis = resolve("Kann ich meine Bachelorarbeit anrechnen?", chips)  # a degree word inside a compound: widened
+    assert (thesis.degree, thesis.programme, thesis.po_version, thesis.from_chips) == (None, None, None, frozenset())
+    student = resolve("Ich bin Bachelorstudent und frage mich, ob ich anrechnen kann.", chips)
+    assert (student.degree, student.programme, student.po_version) == (("bachelor",), None, None)  # a study form wins
     # a year that only a programme of another degree has a PO for is no filter
     only_bachelor = {"programmes": {k: v for k, v in ROLES["programmes"].items()}, "groups": {}}
     only_bachelor["programmes"]["bsc-informatik"] = {
