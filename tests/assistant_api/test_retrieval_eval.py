@@ -289,10 +289,16 @@ def test_the_table_comes_after_the_header_line(profile_dir: Path) -> None:
 
 
 def test_only_models_that_are_the_pins_are_served() -> None:
-    ok = {"embedding": "ok", "reranker": "ok", "llm": "unavailable: ConnectError"}  # the LLM is not this eval's
+    ok = {"embedding": "ok", "reranker": "ok", "llm": "ok"}
     assert ev.not_served(ok) == []
+    assert ev.not_served({**ok, "llm": "remote, not probed", "analysis_llm": "ok"}) == []
     assert ev.not_served({**ok, "reranker": "mismatch: other/rerank@abc"}) == ["reranker: mismatch: other/rerank@abc"]
     assert ev.not_served({**ok, "embedding": "unavailable: HTTP 503"}) == ["embedding: unavailable: HTTP 503"]
+    # the analysis falls back to the bare question when its model is down: the table would measure that
+    assert ev.not_served({**ok, "llm": "unavailable: ConnectError"}) == ["llm: unavailable: ConnectError"]
+    assert ev.not_served({**ok, "llm": "remote, not probed", "analysis_llm": "unavailable: HTTP 502"}) == [
+        "analysis_llm: unavailable: HTTP 502"
+    ]
 
 
 def test_a_run_against_other_models_than_the_pins_stops_with_exit_1(

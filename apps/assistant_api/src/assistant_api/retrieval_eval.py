@@ -18,7 +18,8 @@ The analysis runs once per distinct question per run, with the filter readers on
 `ORDER` (`retrieval.switches` of the profile): the first row has all off, each next row turns one more on, in the order of ORDER.
 The retrieval of a row is a service built with those switches; `acronyms` is read when the index is opened, so every row opens its
 own. Exit 0 when a conversation with a gold was scored, 1 when none could be or when a model server does not serve the profile's
-pin (a different model or revision, or no answer): scores of the wrong model would be taken for the profile's."""
+pin (a different model or revision, or no answer) or the local analysis and answer model server does not answer (the
+analysis would fall back to the bare question): scores of the wrong model would be taken for the profile's."""
 
 import argparse
 import asyncio
@@ -272,9 +273,15 @@ def table(
 
 
 def not_served(reports: Mapping[str, str]) -> list[str]:
-    """The embedder and reranker reports (`model_reports`) that are not "ok": a model or revision other than the profile's pin, or
-    a server that does not answer."""
-    return [f"{name}: {reports[name]}" for name in ("embedding", "reranker") if reports[name] != "ok"]
+    """The reports (`model_reports`) that are not "ok": an embedder or reranker other than the profile's pin, or a server
+    that does not answer, and the answer or analysis model server that does not answer (the analysis falls back to the
+    bare question without a word). A remote answer model is not probed and counts as served."""
+    wanted = ("embedding", "reranker", "llm", "analysis_llm")
+    return [
+        f"{name}: {reports[name]}"
+        for name in wanted
+        if name in reports and reports[name] not in ("ok", "remote, not probed")
+    ]
 
 
 def header_line(rt: Runtime, generation: int | None) -> str:
@@ -312,7 +319,7 @@ async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir:
     rt = build_runtime(settings, None, False)  # no Langfuse client: nothing is traced
     try:
         if wrong := not_served(await model_reports(rt)):
-            logger.error("[RetrievalEval] the model servers do not serve the profile's pins: %s", "; ".join(wrong))
+            logger.error("[RetrievalEval] the model servers cannot serve this run: %s", "; ".join(wrong))
             return 1
         async with read_pool(store_conninfo(settings.overlay.database), max_size=2, name="retrieval-eval") as pool:
             generation = await TurnStore(pool).live_generation(rt.collection)
