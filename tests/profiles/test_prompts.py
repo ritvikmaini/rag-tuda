@@ -142,8 +142,31 @@ def test_only_the_verified_counselling_contacts_are_named(overlay: str) -> None:
         assert "@" not in text, name  # no e-mail address
         if name != "question-rewriting":  # its examples carry a made-up Matrikelnummer
             numbers = set(re.findall(r"\b\d{3,}\b", text)) - {"2015", "2023", "2026", "2027", "150", "250"}
-            assert numbers <= (EMERGENCY_NUMBERS | {"06151", "1627015"} if name == "direct-reply" else {"112"}), name
+            assert numbers <= (
+                EMERGENCY_NUMBERS | {"06151", "1627015"} if name == "direct-reply" else EMERGENCY_NUMBERS
+            ), name
         assert ("06151" in text) == (name == "direct-reply"), name
+
+
+CRISIS_LINES = ("112", "110", "0800 111 0 111", "0800 111 0 222", "116 123", "TelefonSeelsorge")
+ZSB_LINES = ("06151 1627015", "https://tu-darmstadt.assisto.online/")
+
+
+@pytest.mark.parametrize("overlay", OVERLAYS)
+def test_every_crisis_reply_names_every_number_in_german_and_english(overlay: str) -> None:
+    """The urgent reply of the direct prompt in both languages, and the base rule of the prompts a crisis message reaches
+    when its analysis failed (a search with no result, an answer from sources)."""
+    direct = _system("direct-reply", overlay)
+    german, english = direct.split("Auf Englisch" if overlay == "small" else "Schreibt die Person auf Englisch")
+    english = english.split("Antworte ruhig")[0]
+    for number in (*CRISIS_LINES, *ZSB_LINES):
+        assert number in german.split("urgent:")[1].split("Antworte ruhig")[0] and number in english, (overlay, number)
+    for name in ("no-docs-found", "rag-generation"):
+        rule = _system(name, overlay).split("# Notfall\n")[1].split("\n\n")[0]
+        german, english = rule.split(" If the message")
+        for number in CRISIS_LINES:
+            assert number in german and number in english, (name, number)
+        assert "06151" not in rule  # the ZSB contact stays in the direct reply
 
 
 @pytest.mark.parametrize("overlay", OVERLAYS)

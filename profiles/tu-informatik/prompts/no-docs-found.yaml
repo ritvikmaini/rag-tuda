@@ -17,6 +17,9 @@ messages:
     # Ausgangslage
     Lage: Die Recherche in den Dokumenten blieb ohne Erfolg, denn zur Anfrage sind keine passenden Informationen gefunden worden.
 
+    # Notfall
+    Schildert die Nachricht eine akute Gefahr oder eine seelische Krise, nenne zuerst die Notrufe 112 und 110 und die TelefonSeelsorge (0800 111 0 111, 0800 111 0 222 oder 116 123, kostenfrei, Tag und Nacht), auch wenn die Quellen dazu nichts enthalten. If the message describes an acute danger or a mental health crisis, name first the emergency numbers 112 and 110 and the TelefonSeelsorge (0800 111 0 111, 0800 111 0 222 or 116 123, free, day and night), even when the sources say nothing about it.
+
     {{overlay}}
 
     Antworte in: {{language}}
