@@ -267,7 +267,7 @@ def extract(body: bytes, url: str, selectors: Selectors = Selectors(), content_t
     except (ValueError, etree.ParserError):
         return Extraction(url, "", (), (), "page is not parseable HTML")
     title = " ".join((tree.findtext(".//title") or "").split())
-    found = tree.xpath(_xpath(selectors.main))
+    found = [m for m in tree.xpath(_xpath(selectors.main)) if not m.xpath(f"ancestor-or-self::*{HIDDEN}")]
     if not found:
         return Extraction(url, title, (), (), f"main content selector {selectors.main!r} matched nothing")
     main: html.HtmlElement = found[0]

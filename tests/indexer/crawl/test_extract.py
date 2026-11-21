@@ -169,6 +169,16 @@ def test_hidden_markers_match_in_any_case_and_whitespace():
     assert result.documents[0].markdown == "Sichtbar"
 
 
+def test_a_main_element_inside_a_hidden_ancestor_is_skipped_for_the_visible_one():
+    page = (
+        "<html><body><div style='display:none'><div class='main-column'><p>Versteckt</p></div></div>"
+        "<div class='main-column'><p>Sichtbar</p></div></body></html>"
+    )
+    assert extract(page.encode(), HUB_URL).documents[0].markdown == "Sichtbar"
+    own = page.replace("<div class='main-column'><p>Sichtbar", "<div class='main-column' hidden><p>Sichtbar")
+    assert extract(own.replace("display:none", "display:block").encode(), HUB_URL).documents[0].markdown == "Versteckt"
+
+
 def test_comments_noscript_and_template_never_reach_the_markdown():
     result = _inline(
         "<p>Text</p><!-- Kommentar --><noscript>Ohne Skript</noscript><template><p>Vorlage</p></template><?pi x?>"
