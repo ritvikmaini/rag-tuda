@@ -56,7 +56,7 @@ def test_the_backend_environment_loads_with_the_services_settings(tmp_path):
     settings = load_settings(env)
     assert settings.card.answer.model == "rag-m-qwen3.6-35b-a3b"
     assert settings.card.answer.url.startswith("http://127.0.0.1")
-    assert settings.overlay.database.port == 55432 and settings.overlay.http.cors_domain == ""
+    assert settings.overlay.database.port == 55432
 
 
 def test_the_indexer_environment_loads_with_the_indexers_settings(tmp_path):

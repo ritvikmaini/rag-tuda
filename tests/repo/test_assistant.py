@@ -23,7 +23,6 @@ STACK = {  # the stack's values as RAG__ entries
     "RAG__TIMEOUTS__RETRIEVAL_S": "10",
     "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
     "RAG__TIMEOUTS__RERANKER_S": "15",
-    "RAG__HTTP__CORS_DOMAIN": "example.org",
     "RAG__TRACING__URL": "",
 }
 CI_ONLY = {"RAG__COMPUTE__SLOT_WAIT_S": "3", "RAG__SERVER__RATE_LIMIT": "100000/minute"}
@@ -125,14 +124,13 @@ def test_the_stack_environment_holds_the_expected_values() -> None:
 
 def test_the_stack_sets_the_slot_and_timeout_values_the_code_does_not_default() -> None:
     """A wrong default would change answers under load without a test failing: the pipeline slot wait is 30 s in the stack (the
-    settings model has no default for it), CORS for example.org. The slots, request deadline and idle limit are the card's."""
+    settings model has no default for it). The slots, request deadline and idle limit are the card's."""
     env = environment(backend("deploy/compose.yaml"))
     expected = {
         "RAG__COMPUTE__SLOT_WAIT_S": "30",
         "RAG__TIMEOUTS__RETRIEVAL_S": "10",
         "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
         "RAG__TIMEOUTS__RERANKER_S": "15",
-        "RAG__HTTP__CORS_DOMAIN": "example.org",
     }
     assert {key: env[key] for key in expected} == expected
 

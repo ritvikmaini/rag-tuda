@@ -124,7 +124,6 @@ def test_the_backend_environment():
         "RAG__TIMEOUTS__RETRIEVAL_S": "10",
         "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
         "RAG__TIMEOUTS__RERANKER_S": "15",
-        "RAG__HTTP__CORS_DOMAIN": "",
         "RAG__TRACING__URL": "",
         "OPENAI_API_KEY": "not-needed",
         "GUNICORN_BIND": "127.0.0.1:8700",

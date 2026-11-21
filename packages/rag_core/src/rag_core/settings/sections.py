@@ -39,12 +39,6 @@ class Timeouts(OverlaySection):
     reranker_s: float = Field(gt=0)
 
 
-class Http(OverlaySection):
-    cors_domain: str = (
-        ""  # origins on this domain (and its subdomains) get CORS headers; empty: CORS off (the page is same-origin)
-    )
-
-
 class Tracing(OverlaySection):
     url: str  # the Langfuse server; empty: tracing is off
 

@@ -75,7 +75,6 @@ STACK = {
     "RAG__TIMEOUTS__RETRIEVAL_S": "10",
     "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
     "RAG__TIMEOUTS__RERANKER_S": "15",
-    "RAG__HTTP__CORS_DOMAIN": "example.org",
     "RAG__TRACING__URL": "",
 }
 MESSAGES = {
@@ -183,7 +182,7 @@ def test_the_environment_supplies_the_technical_values(secrets: Path) -> None:
     assert (overlay.timeouts.retrieval_s, overlay.timeouts.parent_lookup_s, overlay.timeouts.reranker_s) == (10, 5, 15)
     assert overlay.model_servers.reranker_url == "http://reranker_service:8003"
     assert (overlay.database.host, overlay.database.port) == ("pgvector", 5432)
-    assert (overlay.http.cors_domain, overlay.tracing.url) == ("example.org", "")
+    assert overlay.tracing.url == ""
 
 
 def test_a_profile_key_in_the_environment_is_refused(secrets: Path) -> None:

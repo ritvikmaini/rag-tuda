@@ -159,7 +159,6 @@ def test_every_line_of_a_question_carries_its_ref(monkeypatch) -> None:
             ),
             overlay=types.SimpleNamespace(
                 server=types.SimpleNamespace(token=SecretStr("t")),
-                http=types.SimpleNamespace(cors_domain="example.org"),
             ),
             profile=types.SimpleNamespace(guard=types.SimpleNamespace(max_question_chars=2000)),
         ),

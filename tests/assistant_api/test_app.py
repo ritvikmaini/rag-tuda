@@ -33,7 +33,6 @@ def app_with(chain: object = None, token: str = "t0k"):
         settings=types.SimpleNamespace(
             overlay=types.SimpleNamespace(
                 server=types.SimpleNamespace(token=SecretStr(token)),
-                http=types.SimpleNamespace(cors_domain="example.org"),
             )
         ),
     )
@@ -95,23 +94,12 @@ def test_the_chat_route_keeps_its_parameters() -> None:
     ]
 
 
-def test_security_headers_and_cors_follow_the_settings() -> None:
-    client, rt = app_with()
-    plain = client.get("/healthz")
-    assert plain.headers["X-Frame-Options"] == "DENY" and "Access-Control-Allow-Origin" not in plain.headers
-    for origin, allowed in (
-        ("https://www.example.org", True),  # the overlay's cors_domain and its subdomains
-        ("http://localhost:3000", False),  # the page is same-origin: no origin gets headers unless the settings name it
-        ("http://127.0.0.1:8700", False),
-        ("https://evil.example", False),
-    ):
+def test_every_response_carries_the_security_headers_and_no_origin_gets_cors_headers() -> None:
+    client, _ = app_with()
+    for origin in ("https://www.example.org", "http://localhost:3000", "https://evil.example"):
         reply = client.get("/healthz", headers={"Origin": origin})
-        assert (reply.headers.get("Access-Control-Allow-Origin") == origin) is allowed, origin
-    rt.settings.overlay.http.cors_domain = ""  # the default: CORS off
-    reply = client.get("/healthz", headers={"Origin": "https://www.example.org"})
-    assert (
-        "Access-Control-Allow-Origin" not in reply.headers and "Access-Control-Allow-Credentials" not in reply.headers
-    )
+        assert reply.headers["X-Frame-Options"] == "DENY" and reply.headers["X-Content-Type-Options"] == "nosniff"
+        assert not [h for h in reply.headers if h.lower().startswith("access-control-")], origin  # same-origin page
 
 
 def test_the_chat_route_makes_a_turn_record_for_a_question_and_ends_it_through_the_guard(monkeypatch) -> None:
@@ -223,7 +211,7 @@ def test_the_answer_stream_carries_the_security_headers_and_every_frame(monkeypa
     )
     assert reply.status_code == 200 and reply.headers["content-type"].startswith("text/event-stream")
     assert reply.headers["X-Frame-Options"] == "DENY"
-    assert reply.headers["Access-Control-Allow-Origin"] == "https://www.example.org"
+    assert "Access-Control-Allow-Origin" not in reply.headers
     sent = [json.loads(line[len("data: ") :]) for line in reply.text.split("\n") if line.startswith("data: ")]
     assert [frame["type"] for frame in sent] == ["meta", "chunk", "done"]
 

@@ -32,7 +32,6 @@ def app_with(card: Path = FAKE_CARD, roles: Roles | None = None) -> tuple[TestCl
         settings=types.SimpleNamespace(
             overlay=types.SimpleNamespace(
                 server=types.SimpleNamespace(token=SecretStr("t0k")),
-                http=types.SimpleNamespace(cors_domain="example.org"),
             ),
             card=load_card(card),
             roles=roles,

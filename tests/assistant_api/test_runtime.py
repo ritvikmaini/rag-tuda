@@ -242,7 +242,6 @@ ENV = {
     "RAG__TIMEOUTS__RETRIEVAL_S": "10",
     "RAG__TIMEOUTS__PARENT_LOOKUP_S": "5",
     "RAG__TIMEOUTS__RERANKER_S": "15",
-    "RAG__HTTP__CORS_DOMAIN": "example.org",
     "RAG__TRACING__URL": "",
 }
 

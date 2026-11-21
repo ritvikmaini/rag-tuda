@@ -21,7 +21,7 @@ from rag_core.domain.resilience import dispose_engines
 
 from assistant_api.api import chat, ops, profile
 from assistant_api.api.deps import limiter, set_chat_rate
-from assistant_api.api.middleware import security_headers_and_cors
+from assistant_api.api.middleware import security_headers
 from assistant_api.chat.turns_store import TurnStore, store_conninfo
 from assistant_api.runtime import build_runtime, heal, reload, stop_retiring
 from assistant_api.settings import AssistantSettings, load_settings
@@ -57,7 +57,7 @@ def create_app(settings: AssistantSettings | None = None) -> FastAPI:
     app.state.runtime = None
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
-    app.middleware("http")(security_headers_and_cors)
+    app.middleware("http")(security_headers)
     app.include_router(ops.router)
     app.include_router(chat.router)
     app.include_router(profile.router)

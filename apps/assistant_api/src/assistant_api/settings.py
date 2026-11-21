@@ -23,7 +23,7 @@ from rag_core.settings.card import (
     with_local_url,
 )
 from rag_core.settings.profile import Acronyms, Guard, Profile, Roles
-from rag_core.settings.sections import Compute, DatabaseSection, Http, ModelServersSection, Server, Timeouts, Tracing
+from rag_core.settings.sections import Compute, DatabaseSection, ModelServersSection, Server, Timeouts, Tracing
 
 
 class AssistantOverlay(OverlaySection):
@@ -32,7 +32,6 @@ class AssistantOverlay(OverlaySection):
     model_servers: ModelServersSection = ModelServersSection()
     compute: Compute
     timeouts: Timeouts
-    http: Http
     tracing: Tracing
     server: Server = Server()
 
