@@ -1,8 +1,10 @@
 """The `.rag/` state directory: the API token, the database passwords, the secret files of each native process, the pid files
 and logs, and `state.json`; and the secret files of the CI compose stack (`ci_secrets`).
 
-Everything private is created with mode 0600 inside a 0700 directory; every writer is idempotent and never rotates a secret
-that already exists. The passwords live once, in `secrets/roles/` under the names compose reads (`<name>.txt`); each native
+Everything private is created with mode 0600 inside a 0700 directory, except the files compose bind-mounts into
+containers that do not run as root (the role passwords, the CI secrets): they are 0644 inside their 0700 directory, since
+a 0600 file owned by the host user is unreadable to the container user on Linux. Every writer is idempotent and never
+rotates a secret that already exists. The passwords live once, in `secrets/roles/` under the names compose reads (`<name>.txt`); each native
 process gets its own folder of copies under the names the service opens (RAG_SECRETS_DIR), the way compose maps a service's
 role onto them."""
 
@@ -46,11 +48,14 @@ def _private_dir(path: Path) -> None:
     path.chmod(0o700)  # the mkdir mode is cut by the umask and ignored for an existing directory
 
 
-def _write_new(path: Path, text: str) -> None:
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+MOUNTED = 0o644  # the mode of a file that a container reads; its folder is 0700
+
+
+def _write_new(path: Path, text: str, mode: int = 0o600) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(text)
-    path.chmod(0o600)
+    path.chmod(mode)
 
 
 def write_private(path: Path, text: str) -> None:
@@ -59,13 +64,13 @@ def write_private(path: Path, text: str) -> None:
     _write_new(path, text)
 
 
-def _secret(path: Path, make=lambda: secrets.token_urlsafe(32)) -> str:
+def _secret(path: Path, make=lambda: secrets.token_urlsafe(32), mode: int = 0o600) -> str:
     """The file's content, or `make()` written to it when it is missing or empty."""
     value = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
     if not value:
         value = make()
-        _write_new(path, value)
-    path.chmod(0o600)
+        _write_new(path, value, mode)
+    path.chmod(mode)
     return value
 
 
@@ -83,9 +88,9 @@ def ensure(root: str | Path) -> State:
     token = _secret(rag / "token")
     roles = rag / "secrets" / "roles"
     _private_dir(roles)
-    passwords = {name: _secret(roles / f"{name}.txt") for name in PASSWORDS}
-    _secret(roles / "pgdatabase.txt", lambda: DATABASE)
-    _secret(roles / "vector_user.txt", lambda: BOOTSTRAP_ROLE)
+    passwords = {name: _secret(roles / f"{name}.txt", mode=MOUNTED) for name in PASSWORDS}
+    _secret(roles / "pgdatabase.txt", lambda: DATABASE, MOUNTED)
+    _secret(roles / "vector_user.txt", lambda: BOOTSTRAP_ROLE, MOUNTED)
     # one folder per native process: backend and indexer open the same file names, each holding its own role
     for service, role in SERVICE_ROLES.items():
         folder = rag / "secrets" / service
@@ -106,8 +111,8 @@ def ensure(root: str | Path) -> State:
 
 
 def ci_secrets(root: str | Path) -> None:
-    """The files deploy/compose.ci.yaml reads, under `root`: `secrets/*.txt`, `backend_token.txt` and `ci.env` (the
-    backend token). The database name and the bootstrap role are fixed names; every other value is random."""
+    """The files deploy/compose.ci.yaml reads, under `root`: `secrets/*.txt` (the compose secrets, 0644 in the 0700
+    folder, the backend token among them) and `ci.env` (the backend token, 0600). The database name and the bootstrap role are fixed names; every other value is random."""
     root = Path(root)
     _private_dir(root / "secrets")
 
@@ -115,10 +120,10 @@ def ci_secrets(root: str | Path) -> None:
         return secrets.token_hex(32)
 
     for name, value in {"pgdatabase": "vector_db", "vector_user": "vector_user"}.items():
-        _secret(root / "secrets" / f"{name}.txt", lambda value=value: value)
+        _secret(root / "secrets" / f"{name}.txt", lambda value=value: value, MOUNTED)
     for name in ("pg_vector_password", "rag_indexer_password", "rag_app_password", "rag_migrator_password"):
-        _secret(root / "secrets" / f"{name}.txt", hex64)
-    backend = _secret(root / "backend_token.txt", hex64)
+        _secret(root / "secrets" / f"{name}.txt", hex64, MOUNTED)
+    backend = _secret(root / "secrets" / "backend_token.txt", hex64, MOUNTED)
     env = root / "ci.env"
     if not env.is_file() or not env.read_text(encoding="utf-8").strip():
         _write_new(env, f"BACKEND_REFRESH_TOKEN={backend}\n")

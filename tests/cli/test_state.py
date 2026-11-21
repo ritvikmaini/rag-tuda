@@ -83,15 +83,19 @@ def test_secret_file_modes(tmp_path):
         assert mode(folder) == 0o700, folder
     files = [p for p in rag.rglob("*") if p.is_file()]
     assert len(files) >= 16
+    roles = rag / "secrets" / "roles"
     for f in files:
-        assert mode(f) == 0o600, f
+        # the role files are the ones compose bind-mounts into non-root containers
+        assert mode(f) == (0o644 if f.parent == roles else 0o600), f
 
 
 @posix
 def test_nothing_is_group_or_world_accessible(tmp_path):
     state.ensure(tmp_path)
+    roles = tmp_path / ".rag" / "secrets" / "roles"
     for p in (tmp_path / ".rag").rglob("*"):
-        assert mode(p) & 0o077 == 0, p
+        if p.parent != roles:
+            assert mode(p) & 0o077 == 0, p
 
 
 @posix
@@ -170,17 +174,18 @@ def test_state_init_writes_ci_secrets(tmp_path):
     values = {name: (tmp_path / name).read_text(encoding="utf-8") for name in CI_SECRET_FILES}
     assert all(values.values()), values.keys()
     if sys.platform != "win32":
-        for name in [*CI_SECRET_FILES, "ci.env"]:
-            assert mode(tmp_path / name) == 0o600, name
+        for name in CI_SECRET_FILES:
+            assert mode(tmp_path / name) == 0o644, name
+        assert mode(tmp_path / "ci.env") == 0o600
         assert mode(tmp_path / "secrets") == 0o700
     # database name and bootstrap role are fixed (compose and the init scripts name them); every other value is random
     assert values["secrets/pgdatabase.txt"] == "vector_db"
     assert values["secrets/vector_user.txt"] == "vector_user"
     passwords = [values[f"secrets/{n}_password.txt"] for n in ("pg_vector", "rag_indexer", "rag_app", "rag_migrator")]
     assert all(HEX64.fullmatch(p) for p in passwords)
-    assert len({*passwords, values["backend_token.txt"]}) == 5
+    assert len({*passwords, values["secrets/backend_token.txt"]}) == 5
     env = dict(line.split("=", 1) for line in (tmp_path / "ci.env").read_text(encoding="utf-8").splitlines())
-    assert env["BACKEND_REFRESH_TOKEN"] == values["backend_token.txt"]
+    assert env["BACKEND_REFRESH_TOKEN"] == values["secrets/backend_token.txt"]
     assert list(env) == ["BACKEND_REFRESH_TOKEN"]
     # a second run never rotates what exists
     state.main(["init", "--root", str(tmp_path)])

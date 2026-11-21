@@ -23,7 +23,6 @@ deploy/ci/.generated/
 
 # Credential files: `python -m rag_tuda.state init|userlist` writes them under its --root (the repo root included), never committed
 /.rag/
-/backend_token.txt
 /ci.env
 secrets/*
 /.env.*

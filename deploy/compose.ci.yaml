@@ -145,4 +145,4 @@ secrets:
   rag_migrator_password: {file: ./ci/.generated/secrets/rag_migrator_password.txt}
   rag_indexer_user: {file: ./pgvector/roles/rag_indexer.txt}
   rag_app_user: {file: ./pgvector/roles/rag_app.txt}
-  backend_token: {file: ./ci/.generated/backend_token.txt}
+  backend_token: {file: ./ci/.generated/secrets/backend_token.txt}
