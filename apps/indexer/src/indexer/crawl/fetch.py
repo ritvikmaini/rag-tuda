@@ -25,6 +25,7 @@ sends no request at all, not even for robots.txt: it answers a URL from the cach
 
 import hashlib
 import logging
+import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -140,7 +141,7 @@ def blocking_meta(body: bytes) -> str | None:
         return None
     for meta in tree.iter("meta"):
         if (meta.get("name") or "").strip().lower() in ("robots", "rag-tuda"):
-            tokens = {t.strip().lower() for t in (meta.get("content") or "").split(",")}
+            tokens = set(re.split(r"[\s,]+", (meta.get("content") or "").lower()))
             if found := sorted(tokens & BLOCKING_META):
                 return found[0]
     return None

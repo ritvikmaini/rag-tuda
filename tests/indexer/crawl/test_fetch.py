@@ -14,7 +14,7 @@ from rag_testing import serve
 from rag_testing.minisite import pages
 
 from indexer.crawl.cache import Cache
-from indexer.crawl.fetch import Fetcher, Response, Skipped, user_agent
+from indexer.crawl.fetch import Fetcher, Response, Skipped, blocking_meta, user_agent
 from indexer.crawl.manifest import ManifestDoc, snapshots_dir, write_manifest
 from indexer.crawl.robots import Robots
 
@@ -128,6 +128,15 @@ def test_meta_noai_skips_page():
     result = fetcher(net).get(f"http://{FACULTY}{pages.NOAI_PAGE}")
     assert isinstance(result, Skipped) and result.reason == "meta robots"
     assert "noai" in result.detail
+
+
+@pytest.mark.parametrize(
+    ("content", "token"),
+    [("noindex nofollow", "noindex"), ("index,\tnoai", "noai"), ("NONE", "none"), ("index, follow", None)],
+)
+def test_meta_robots_tokens_split_at_spaces_and_commas(content, token):
+    page = f'<html><head><meta name="robots" content="{content}"></head><body></body></html>'.encode()
+    assert blocking_meta(page) == token
 
 
 def test_user_agent_carries_contact_when_set():
