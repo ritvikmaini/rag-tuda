@@ -194,8 +194,10 @@ def _ask(args: argparse.Namespace) -> int:
 
 
 def _add(args: argparse.Namespace) -> int:
+    if (root := _at_root()) is None:
+        return 1
     try:
-        source = sources.register(Path.cwd(), args.target, name=args.name)
+        source = sources.register(root, args.target, name=args.name)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 1

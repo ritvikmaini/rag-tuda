@@ -10,6 +10,9 @@ FIX = Path(__file__).parent / "fixtures"
 
 @pytest.fixture
 def project(tmp_path, monkeypatch):
+    """A repository root: the folder with deploy/compose.yaml."""
+    (tmp_path / "deploy").mkdir()
+    (tmp_path / "deploy" / "compose.yaml").write_text("name: rag-tuda\n")
     monkeypatch.chdir(tmp_path)
     return tmp_path
 
@@ -35,6 +38,15 @@ def test_add_registers_and_points_to_reindex(project, capsys):
     assert "house" in out and "rag reindex" in out
     reg = sources.load(project)
     assert [s.name for s in reg] == ["house"]
+
+
+def test_add_from_a_subfolder_registers_nothing(project, monkeypatch, capsys):
+    """The stack reads only the root's .rag/sources.json: a file written beside the subfolder would never be indexed."""
+    (project / "docs").mkdir()
+    monkeypatch.chdir(project / "docs")
+    assert cli.main(["add", str(FIX / "sample_docs")]) == 1
+    assert "root of the repository" in capsys.readouterr().err
+    assert not (project / "docs" / ".rag").exists() and not (project / ".rag").exists()
 
 
 @pytest.mark.parametrize("flags", [["--only"], ["--topic", "x"]])
