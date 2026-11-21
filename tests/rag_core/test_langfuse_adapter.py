@@ -2,6 +2,7 @@
 check failed is still returned (it traces once Langfuse answers)."""
 
 import logging
+import os
 
 from rag_core.adapters import langfuse as lf
 
@@ -26,6 +27,13 @@ def test_missing_key_files_mean_no_client(tmp_path, caplog) -> None:
     caplog.set_level(logging.WARNING)
     assert lf.init_langfuse("http://langfuse:3000", secrets_dir=tmp_path) == (None, False)
     assert "Langfuse setup failed" in caplog.text
+
+
+def test_an_empty_url_means_tracing_is_off_even_with_key_files(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(lf, "Langfuse", FakeLangfuse)
+    monkeypatch.delenv("LANGFUSE_HOST", raising=False)
+    assert lf.init_langfuse("", secrets_dir=keys(tmp_path)) == (None, False)
+    assert "LANGFUSE_HOST" not in os.environ
 
 
 def test_an_authenticated_client(tmp_path, monkeypatch, caplog) -> None:

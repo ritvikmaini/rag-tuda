@@ -16,8 +16,11 @@ def init_langfuse(
     url: str, secrets_dir: str | Path | None = None, max_retries: int = 5, retry_delay: float = 2.0
 ) -> tuple[Any | None, bool]:
     """(client, authenticated). A client whose auth check failed is still returned: it traces once Langfuse answers.
-    None only when the setup failed (no key files). The key files are read from secrets_dir, else RAG_SECRETS_DIR, else
+    None when the tracing url is empty (tracing is off: the key files are not read and the environment is not touched) or
+    when the setup failed (no key files). The key files are read from secrets_dir, else RAG_SECRETS_DIR, else
     /run/secrets."""
+    if not url:
+        return None, False
     client: Any | None = None
     try:
         folder = secrets_path(os.environ, secrets_dir)
