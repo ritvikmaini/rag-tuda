@@ -88,6 +88,19 @@ def test_a_degree_inside_a_compound_widens_instead_of_overriding_the_chip() -> N
     assert resolve("Kann ich schon Mastermodule belegen?").degree == ("master",)
 
 
+def test_the_previous_turn_carries_only_when_the_question_names_nothing_itself() -> None:
+    history = resolve("Was stand in der alten PO zum Freiversuch?")
+    assert history.include_archived is True
+    assert resolve("Und wie viele Versuche habe ich?", previous=history).include_archived is True  # names nothing
+    named = resolve("Wann ist die Anmeldefrist im Master?", previous=history)
+    assert named.degree == ("master",) and named.include_archived is False
+    # a chip's value is not the question's word: the regulation is carried although a chip is set
+    chips = Chips(programme="bsc-informatik")
+    first = resolve("Was steht im Modulhandbuch zu Algorithmen?", chips)
+    assert first.regulation == ("mhb",)
+    assert resolve("Und zu Analysis?", chips, previous=first).regulation == ("mhb",)
+
+
 def test_chip_used_when_text_silent() -> None:
     chips = Chips(degree="master", programme="msc-informatik", po=2015)
     found = resolve("Wie melde ich mich ab?", chips)

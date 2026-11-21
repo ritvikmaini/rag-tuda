@@ -5,7 +5,8 @@ A value comes from the first source that gives one, in this order: explicit text
 filter. A source's value that contradicts one already taken (a programme of another degree, a PO year the programme lacks) is
 dropped. Text values hold for the question that carries them; the chips are sent with every question and so stay. A field a
 chip supplied is never carried to a turn whose chips no longer set it (the user cleared the chip); a value from text or the
-term parser is. Regulation and date are carried from the previous turn only when the new question names no value at all.
+term parser is. Regulation, date and a history request are carried from the previous turn only when the new question's
+own words name no value at all (a chip's or the analysis' value does not count).
 
 A degree the question names only inside a compound ("Mastermodule") that contradicts the chips' degree picks no side: the
 question is widened (no degree, programme or chip PO year), and the chips stay for the next question.
@@ -302,7 +303,7 @@ def resolve_filter(
     take(from_analysis | {"po_version": [_int(v) for v in from_analysis["po_version"] or ()]}, "analysis")
     date = _text_date(text, today or dt.date.today())
     history = bool(HISTORY.search(text))
-    named = date is not None or any(v is not None for v in current.values())
+    named = date is not None or bool(own)  # the question's own words: a chip's or the analysis' value does not count
     carried = "term" if previous.po_source == "term" else "carried"
     take(carry, carried)
     if widen:  # a PO year stays only when the question wrote it
@@ -312,9 +313,12 @@ def resolve_filter(
     if not named:
         take({"regulation": previous.regulation}, carried)
         date = previous.date
-    # a carried history request counts; a carried True that came from a PO year does not (the PO is carried or dropped itself)
+    # a carried history request counts, like the regulation and the date, when the question names none of them; a carried True
+    # that came from a PO year does not (the PO is carried or dropped itself)
     archived = (
-        history or current["po_version"] is not None or (previous.include_archived and previous.po_version is None)
+        history
+        or current["po_version"] is not None
+        or (not named and previous.include_archived and previous.po_version is None)
     )
     return Filter(
         current["degree"],
