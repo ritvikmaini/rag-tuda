@@ -77,6 +77,9 @@ ReadPool = AsyncConnectionPool[AsyncConnection[TupleRow]]  # strict typing needs
 # The hard filter's conditions, over the typed columns of both views. A NULL column passes every filter on it; a row bound
 # to a PO version (po_version set) is kept for a date only once its valid_from has come. Values are bound parameters.
 ARCHIVED: LiteralString = "archived = false"
+ARCHIVED_OF_PO: LiteralString = (
+    "(archived = false OR po_version && %(f_po_version)s::int[])"  # a PO filter admits its archive
+)
 DEGREE: LiteralString = "(degree && %(f_degree)s::text[] OR degree IS NULL)"
 PROGRAMME: LiteralString = "(programme && %(f_programme)s::text[] OR programme IS NULL)"
 PO_VERSION: LiteralString = "(po_version && %(f_po_version)s::int[] OR po_version IS NULL)"
@@ -86,10 +89,13 @@ VALID_FROM: LiteralString = "(valid_from <= %(f_date)s::date OR valid_from IS NU
 
 def where_of(filter: Filter | None, lead: LiteralString = " AND") -> tuple[LiteralString, dict[str, Any]]:
     """The filter's conditions as one clause starting with `lead` (" AND" after a WHERE, " WHERE" without one) and the
-    parameters it binds; None (no filtering) gives no clause. An empty Filter keeps archived rows out."""
+    parameters it binds; None (no filtering) gives no clause. An empty Filter keeps archived rows out; a PO filter admits
+    the archived rows of its versions (not those without a version), and a history request (include_archived) all of them."""
     if filter is None:
         return "", {}
-    conditions: list[LiteralString] = [] if filter.include_archived else [ARCHIVED]
+    conditions: list[LiteralString] = []
+    if not filter.include_archived:
+        conditions.append(ARCHIVED if filter.po_version is None else ARCHIVED_OF_PO)
     params: dict[str, Any] = {}
     wanted: tuple[tuple[LiteralString, str, Any], ...] = (
         (DEGREE, "f_degree", filter.degree),

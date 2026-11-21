@@ -117,7 +117,7 @@ def test_status_frame_carries_applied_filter(ready: None, assistant: harness.Ass
         "po_version": [2015],
         "regulation": None,
         "date": None,
-        "include_archived": True,  # a PO filter keeps the archived versions in
+        "include_archived": False,  # a PO filter admits the archived rows of its version without a history request
         "po_source": "chip",
         "from_chips": ["degree", "po_version", "programme"],  # not carried once the chips are cleared
     }

@@ -85,7 +85,7 @@ def test_the_statements_read_the_typed_views():
 def test_a_filter_binds_its_values_into_both_legs_and_the_section_lookup():
     flt = Filter(po_version=(2023,), regulation=("mhb",), date=dt.date(2026, 10, 1))
     where = (
-        " AND archived = false"
+        " AND (archived = false OR po_version && %(f_po_version)s::int[])"
         " AND (po_version && %(f_po_version)s::int[] OR po_version IS NULL)"
         " AND (regulation = ANY(%(f_regulation)s::text[]) OR regulation IS NULL)"
         " AND (valid_from <= %(f_date)s::date OR valid_from IS NULL OR po_version IS NULL)"
@@ -114,6 +114,9 @@ def test_no_filter_adds_no_condition_and_an_empty_filter_only_leaves_archived_ro
     assert pg_index.where_of(None) == ("", {})
     assert pg_index.where_of(Filter()) == (" AND archived = false", {})
     assert pg_index.where_of(Filter(include_archived=True)) == ("", {})
+    assert pg_index.where_of(Filter(po_version=(2015,), include_archived=True))[0].startswith(
+        " AND (po_version &&"
+    )  # a history request keeps archived rows without a PO version
     assert pg_index.where_of(Filter(degree=("master",)), " WHERE") == (
         " WHERE archived = false AND (degree && %(f_degree)s::text[] OR degree IS NULL)",
         {"f_degree": ["master"]},

@@ -893,7 +893,7 @@ def test_the_analysis_step_resolves_the_filter_from_the_question_the_chips_and_t
     from rag_core.domain.filters import Chips, Filter
 
     own = filtered_state("Was gilt in der PO 2015?", Chips(degree="master"))["filter"]
-    assert (own.degree, own.po_version, own.include_archived) == (("master",), (2015,), True)
+    assert (own.degree, own.po_version, own.include_archived) == (("master",), (2015,), False)
     previous = Filter(programme=("msc-informatik",))
     followed = filtered_state("Und die Frist?", Chips(), previous=previous)["filter"]
     assert followed == previous  # the question names nothing: the previous turn's filter stays

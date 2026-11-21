@@ -28,7 +28,8 @@ REGULATIONS = ("po", "mhb", "spp", "apb", "eso", "promotion", "residence", "info
 @dataclass(frozen=True)
 class Filter:
     """What the retrieval narrows by; None = the field is not filtered. NULL rows (documents that apply to all) pass every
-    filtered field. `date` keeps rows with valid_from <= date. Rows marked archived are left out unless include_archived."""
+    filtered field. `date` keeps rows with valid_from <= date. Rows marked archived are left out unless include_archived (the
+    question asks for an old version); a PO filter admits the archived rows of its own versions."""
 
     degree: tuple[str, ...] | None = None
     programme: tuple[str, ...] | None = None
@@ -313,13 +314,8 @@ def resolve_filter(
     if not named:
         take({"regulation": previous.regulation}, carried)
         date = previous.date
-    # a carried history request counts, like the regulation and the date, when the question names none of them; a carried True
-    # that came from a PO year does not (the PO is carried or dropped itself)
-    archived = (
-        history
-        or current["po_version"] is not None
-        or (not named and previous.include_archived and previous.po_version is None)
-    )
+    # a history request is carried, like the regulation and the date, when the question names none of them
+    archived = history or (not named and previous.include_archived)
     return Filter(
         current["degree"],
         current["programme"],

@@ -156,8 +156,8 @@ def test_previous_filter_carried_when_nothing_named() -> None:
 
 def test_archived_lifted_when_po_set() -> None:
     assert resolve("Wie melde ich mich ab?").include_archived is False
-    assert resolve("Was gilt in der PO 2015?").include_archived is True
-    assert resolve("Wie melde ich mich ab?", Chips(po=2023)).include_archived is True
+    assert resolve("Was gilt in der PO 2015?").include_archived is False  # the PO filter admits its own archive
+    assert resolve("Was gilt in der alten PO 2015?").include_archived is True
     assert resolve("Was stand in der alten Prüfungsordnung zur Abmeldung?").include_archived is True
     assert resolve("What did the previous version of the regulations say?").include_archived is True
     assert resolve("Wie alt darf ich sein?").include_archived is False

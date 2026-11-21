@@ -119,6 +119,11 @@ def test_filter_returns_2023_and_null_from_both_legs(conninfo):
     assert found(conninfo, Filter(po_version=(2015,), include_archived=True)) == ({"s15", "sinfo", "sold"},) * 3
 
 
+def test_a_po_filter_admits_the_archive_of_its_version_but_not_archived_rows_without_one(conninfo):
+    assert found(conninfo, Filter(po_version=(2015,))) == ({"s15", "sinfo"},) * 3  # not "sold": archived, no PO version
+    assert found(conninfo, Filter(po_version=(2023,))) == ({"s23", "smhb", "sinfo"},) * 3
+
+
 def test_an_empty_filter_hides_archived_rows(conninfo):
     assert found(conninfo, Filter()) == ({"s23", "smhb", "sinfo"},) * 3
 
