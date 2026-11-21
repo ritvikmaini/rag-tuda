@@ -236,3 +236,4 @@ def test_just_runs_the_model_servers_tests_offline_and_checks_their_locks():
     for server in SERVERS:
         assert "uv lock --check --project model_servers/%s" % server in justfile
         assert "cd model_servers/%s && HF_HUB_OFFLINE=1 uv run --frozen pytest -q" % server in justfile
+    assert "uv lock --check --project web/page/tests/e2e" in justfile  # the page job runs that project with --frozen

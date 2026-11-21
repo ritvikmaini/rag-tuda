@@ -37,6 +37,7 @@ lock:
     uv lock --check
     uv lock --check --project model_servers/embedding
     uv lock --check --project model_servers/reranker
+    uv lock --check --project web/page/tests/e2e
 
 ruff:
     {{uv}} ruff check
