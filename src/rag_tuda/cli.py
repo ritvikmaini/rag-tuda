@@ -152,12 +152,12 @@ def _eval(args: argparse.Namespace) -> int:
         card = cards.named(name)
         facts = stack.gather(root, current, card, doctor.gather(), up)
         steps = [] if same else stack.plan_up(current, facts, up)
-        if not _confirm(steps, args.yes):
-            return 1
-        steps += rag_eval.plan(
+        job = rag_eval.plan(  # its checks come first: nothing is confirmed for a run that cannot happen
             current, facts, up, retrieval_only=args.retrieval_only, ablation=args.ablation, check_ready=same
         )
-        stack.execute(steps, stack.System())
+        if not _confirm(steps, args.yes):
+            return 1
+        stack.execute(steps + job, stack.System())
     except (ValueError, stack.StackError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
