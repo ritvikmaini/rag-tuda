@@ -4,7 +4,8 @@
 # which first writes deploy/ci/.generated/ (secrets and tokens by `python -m rag_tuda.state init`). Paths are
 # relative to this file. Production's resource limits are not copied. In a linked worktree `just harness` sets the project
 # (rag-ci-<id>), the image tags (RAG_CI_TAG = :ci-<id>) and empty RAG_CI_*_PORT (Docker picks the host ports), so two
-# worktrees' harnesses run at once; unset, the plain names and Docker-chosen ports apply.
+# worktrees' harnesses run at once; with the variables unset the ports are 25432 (pgvector), 28000 (the LLM fake) and 28002
+# (the backend), with a variable empty Docker chooses.
 name: rag-ci
 
 x-fake: &fake

@@ -21,7 +21,7 @@ node_modules/
 deploy/ci/.generated/
 .claude/settings.local.json
 
-# Credential files: `python -m rag_tuda.state init|userlist` writes them under its --root (the repo root included), never committed
+# Credential files: `python -m rag_tuda.state init` writes them under its --root (the repo root included), never committed
 /.rag/
 /ci.env
 secrets/*
