@@ -70,7 +70,7 @@ REF_LIMIT = 10  # the sections one reference may bring
 PING: LiteralString = "SELECT 1 FROM {} LIMIT 1"
 CHILD_PROBE: LiteralString = 'SELECT "content", "section_id", "embedding" FROM {} LIMIT 0'
 FREQUENT_SHARE = 0.05  # a term in more than 5 % of the children is left out of the OR fallback
-READ_POOL_MAX = 20  # two pools live 120 s per reload
+READ_POOL_MAX = 20  # the index reads' pool size; a reload's old pool stays open until its retire grace has passed
 ReadPool = AsyncConnectionPool[AsyncConnection[TupleRow]]  # strict typing needs the pool's type argument
 
 
@@ -358,7 +358,7 @@ class IndexHandles:
     vector: PgVectorStore
     full_text: PgFullText
     sections: PgSections
-    # (the pool,): closed a request deadline (120 s) after the next reload's swap, or at shutdown (dispose_engines)
+    # (the pool,): closed the card's deadline_s after the next reload's swap, or at shutdown (dispose_engines)
     engines: tuple[Any, ...]
 
 

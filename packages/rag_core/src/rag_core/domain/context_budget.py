@@ -133,10 +133,10 @@ class CharsPerTokenCounter:
 
 @dataclass(frozen=True)
 class ContextBudget:
-    reserve: int  # budget.answer_tokens: the answer's tokens
-    margin: int  # guard.safety_margin
-    window_chars: int  # guard.source_window_chars
-    full_sources: int  # guard.full_sources
+    reserve: int  # card.budget.answer_tokens: the answer's tokens
+    margin: int  # profile.guard.safety_margin
+    window_chars: int  # profile.guard.source_window_chars
+    full_sources: int  # card.budget.full_sources
 
 
 def rank_score(doc: Doc) -> float:
@@ -158,7 +158,7 @@ async def fit_context(
     Fit history and sources into the window.
 
     fixed_prompt: the rendered generation prompt with an empty context and no history.
-    history: the earlier turns chosen by conversation_history.select_turns, oldest first (counted, never trimmed).
+    history: the earlier turns chosen by history.select_turns, oldest first (counted, never trimmed).
     candidates: ranked parent documents in the order they should appear (grouped_raw_docs).
     Returns {"history": kept messages, "context": formatted sources, "report": numbers}.
     """
@@ -169,14 +169,14 @@ async def fit_context(
     fixed = await counter.count_chat(to_chat_dicts(fixed_prompt))
     window = counter.max_model_len
 
-    # 1. History: chosen before this call (conversation_history.select_turns: whole earlier turns within
-    #    HISTORY_MAX_TOKENS); counted here, never trimmed.
+    # 1. History: chosen before this call (history.select_turns: whole earlier turns within the card's
+    #    budget.history_tokens); counted here, never trimmed.
     history = list(history)
     counts = await asyncio.gather(*(counter.count_text(str(m.content)) for m in history))
     kept: List[Message] = history
     history_tokens = sum(n + MESSAGE_OVERHEAD_TOKENS for n in counts)
 
-    # 2. Sources, breadth first: the top FULL_SOURCES in full, every further candidate as a
+    # 2. Sources, breadth first: the top `full_sources` in full, every further candidate as a
     #    window around its matched passage, then windows upgraded to full parents while budget remains.
     available = window - reserve - margin - fixed - history_tokens - CONTEXT_LEAD_TOKENS
     full_min = budget.full_sources
