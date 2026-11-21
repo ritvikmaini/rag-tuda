@@ -126,7 +126,7 @@ def test_the_checks_of_the_run_come_before_the_download_confirmation(repo, monke
     monkeypatch.setattr(stack, "System", lambda: system)
     monkeypatch.setattr(stack, "gather", lambda root, current, card, hardware, a, *r: facts(repo, card, ollama_up=True))
     asked = []
-    monkeypatch.setattr(cli, "_confirm", lambda steps, yes: asked.append(steps) or True)
+    monkeypatch.setattr(cli, "_confirm", lambda steps, yes, profile: asked.append(steps) or True)
     assert cli.main(["eval", "--card", S35["name"], "--retrieval-only"]) == 1
     assert "native stack" in capsys.readouterr().err and asked == [] and system.ran == []
 

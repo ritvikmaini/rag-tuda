@@ -415,6 +415,7 @@ def test_up_lists_downloads_and_needs_a_yes(repo, monkeypatch, capsys):
     assert cli.main(["up"]) == 1  # no terminal, no --yes
     captured = capsys.readouterr()
     assert "This will download:" in captured.out and "total about 6 GB" in captured.out
+    assert "EasyOCR" in captured.out  # a bare `rag up` is the tu-informatik profile
     assert "downloads need your yes" in captured.err and system.ran == []
     assert cli.main(["up", "--yes"]) == 0 and system.ran
 

@@ -1064,17 +1064,24 @@ def gather_down(root: Path, rag: Path, hardware) -> DownFacts:
     return DownFacts(str(root), bool(hardware.docker.ok), pid_files)
 
 
-def confirm_text(steps: list[Step]) -> str | None:
-    """The downloads of a plan, one per line, with the total; None when there are none."""
+def confirm_text(steps: list[Step], profile: str = "example") -> str | None:
+    """The downloads of a plan, one per line, with the total; None when there are none. A profile that reads PDFs adds
+    the models its indexer fetches by itself."""
     downloads = [s for s in steps if s.is_download]
     if not downloads:
         return None
     lines = [f"  {s.text}" for s in downloads]
     total = sum(s.gb for s in downloads)
+    more = (
+        ["  and the docling layout and table models and the EasyOCR weights (fetched by the indexer at the first PDF)"]
+        if profile != "example"
+        else []
+    )
     return "\n".join(
         [
             "This will download:",
             *lines,
             f"  total about {total:g} GB (sizes the cards state; the model servers' first start also installs their Python environments)",
+            *more,
         ]
     )

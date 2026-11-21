@@ -210,6 +210,16 @@ def test_a_download_names_its_host_its_size_and_its_pinned_revision(tmp_path, cu
     listing = stack.confirm_text(steps) or ""
     assert "total about 6 GB" in listing and TAG in listing
     assert stack.confirm_text([s for s in steps if not s.is_download]) is None
+    assert "docling" not in listing  # the example profile reads no PDF
+
+
+def test_a_profile_that_reads_pdfs_names_the_models_its_indexer_fetches(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, ollama_up=True), args(profile="tu-informatik"))
+    listing = stack.confirm_text(steps, "tu-informatik") or ""
+    assert (
+        "docling layout and table models and the EasyOCR weights (fetched by the indexer at the first PDF)" in listing
+    )
+    assert listing.index("total about") < listing.index("docling")
 
 
 def test_ollama_must_be_running_and_says_how_to_start_it(tmp_path, current):

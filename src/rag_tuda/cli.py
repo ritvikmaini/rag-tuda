@@ -27,9 +27,9 @@ def _doctor(args: argparse.Namespace) -> int:
     return 1 if doctor.problems(facts) else 0
 
 
-def _confirm(steps: list[stack.Step], yes: bool) -> bool:
+def _confirm(steps: list[stack.Step], yes: bool, profile: str) -> bool:
     """The downloads of a plan are listed once and need a yes (--yes, or an answer at the terminal)."""
-    text = stack.confirm_text(steps)
+    text = stack.confirm_text(steps, profile)
     if text is None:
         return True
     print(text)
@@ -66,7 +66,7 @@ def _up(args: argparse.Namespace) -> int:
             )
         up = stack.Args(card["name"], args.mode or doctor.default_mode(hardware), profile, args.model, args.llm_url)
         steps = stack.plan_up(current, stack.gather(root, current, card, hardware, up), up)
-        if not _confirm(steps, args.yes):
+        if not _confirm(steps, args.yes, profile):
             return 1
         stack.execute(steps, stack.System())
     except (ValueError, stack.StackError) as exc:
@@ -159,7 +159,7 @@ def _eval(args: argparse.Namespace) -> int:
         job = rag_eval.plan(  # its checks come first: nothing is confirmed for a run that cannot happen
             current, facts, up, retrieval_only=args.retrieval_only, ablation=args.ablation, check_ready=same
         )
-        if not _confirm(steps, args.yes):
+        if not _confirm(steps, args.yes, up.profile):
             return 1
         stack.execute(steps + job, stack.System())
     except (ValueError, stack.StackError) as exc:
