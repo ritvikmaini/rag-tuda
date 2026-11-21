@@ -6,6 +6,8 @@ import types
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
+from fastapi.staticfiles import StaticFiles
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from rag_core.settings import load_profile
@@ -87,6 +89,21 @@ def test_the_page_serves_no_dotfiles_tests_listings_or_files_outside(page: Path)
         "/ui/%2e%2e/%2e%2e/secret.txt",
     ):
         assert client.get(path).status_code == 404, path
+
+
+def test_the_unserved_folders_match_in_any_case(page: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    reached: list[str] = []
+
+    async def record(self, path, scope):  # a case-insensitive file system would serve /Tests/ from tests/
+        reached.append(path)
+        raise HTTPException(status_code=404)
+
+    monkeypatch.setattr(StaticFiles, "get_response", record)
+    client, _ = app_with()
+    for path in ("/Tests/page.test.mjs", "/NODE_MODULES/x.js", "/TESTS/page.test.mjs"):
+        assert client.get(path).status_code == 404 and reached == [], path
+    client.get("/ui/start.js")
+    assert reached == ["ui/start.js"]
 
 
 def test_without_a_page_folder_the_app_serves_the_api_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

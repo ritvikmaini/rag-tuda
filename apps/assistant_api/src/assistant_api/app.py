@@ -37,7 +37,7 @@ class Page(StaticFiles):
         parts = path.split("/")
         if (
             scope["method"] not in ("GET", "HEAD")
-            or parts[0] in self.NOT_SERVED
+            or parts[0].lower() in self.NOT_SERVED
             or any(p.startswith(".") and p != "." for p in parts)
         ):
             raise HTTPException(status_code=404)
