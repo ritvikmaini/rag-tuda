@@ -67,6 +67,17 @@ def test_the_evals_job_is_a_profile_service_that_starts_nothing_else():
     assert "OPENAI_API_KEY=not-needed" in evals["environment"]
 
 
+def test_the_harness_keeps_the_containers_data_in_a_named_volume_not_a_host_folder():
+    """The backend and indexer run as root: files they create in a bind-mounted host folder could not be removed by the
+    user who starts the next harness leg (Linux). `down -v` removes the volume."""
+    found = services("deploy/compose.ci.yaml")
+    for name in ("backend", "indexer"):
+        mounts = [v for v in found[name]["volumes"] if v.endswith(":/app/data")]
+        assert [m.split(":")[0] for m in mounts] == ["ci-data"], name
+    with open(os.path.join(ROOT, "deploy/compose.ci.yaml"), encoding="utf-8") as fh:
+        assert "ci-data" in yaml.safe_load(fh)["volumes"]
+
+
 def test_the_backend_token_reaches_the_evals_job_as_a_file_not_a_variable():
     with open(os.path.join(ROOT, "deploy/compose.yaml"), encoding="utf-8") as fh:
         compose = yaml.safe_load(fh)

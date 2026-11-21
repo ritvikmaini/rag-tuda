@@ -39,7 +39,7 @@ services:
     image: rag-ci-backend${RAG_CI_TAG:-}
     networks: [ci]
     volumes:
-      - ./ci/.generated/data:/app/data
+      - ci-data:/app/data   # a named volume: the containers run as root, a host folder would keep their files
       - ./env/ci-fake-card.toml:/app/card.toml:ro
     ports: ["127.0.0.1:${RAG_CI_BACKEND_PORT-28002}:8000"]
     env_file: [{path: ./ci/.generated/ci.env, required: false}]
@@ -91,7 +91,7 @@ services:
     image: rag-ci-indexer${RAG_CI_TAG:-}
     networks: [ci]
     volumes:
-      - ./ci/.generated/data:/app/data
+      - ci-data:/app/data   # a named volume: the containers run as root, a host folder would keep their files
       - ./env/ci.yaml:/app/overlay.yaml:ro
     env_file: [{path: ./ci/.generated/ci.env, required: false}]
     environment:
@@ -134,6 +134,9 @@ services:
 
 networks:
   ci: {}
+
+volumes:
+  ci-data: {}
 
 secrets:
   pg_vector_password: {file: ./ci/.generated/secrets/pg_vector_password.txt}

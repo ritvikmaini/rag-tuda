@@ -152,7 +152,7 @@ harness profile="example":
     if [ -n "$RAG_CI_TAG" ]; then export RAG_CI_PG_PORT= RAG_CI_LLM_PORT= RAG_CI_BACKEND_PORT=; fi
     compose --profile evals --profile build down -v --remove-orphans >/dev/null 2>&1 || true
     if [ "${HARNESS_KEEP:-}" != 1 ]; then trap 'compose --profile evals --profile build down -v --remove-orphans >/dev/null 2>&1 || true' EXIT; fi
-    rm -rf "$G" && mkdir -p "$G/data"
+    rm -rf "$G" && mkdir -p "$G"
     PYTHONPATH=src {{uv}} python -m rag_tuda.state init --root "$G" >/dev/null
     if [ "{{profile}}" = tu ]; then {{uv}} python -m rag_testing.tu_profile profiles/tu-informatik "$G/tu-profile"; fi
     compose up -d --wait pgvector
