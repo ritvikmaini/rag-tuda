@@ -4,7 +4,8 @@ with a cache of what it fetched.
 A URL is fetched only when its host is on the caller's allow-list and not one of the hosts that are never crawled, when the
 host's robots.txt allows it for this user agent, and (for a page) when its `<meta name="robots">` carries none of `noindex`,
 `noai` or `none`. Requests to one host are at least `interval` seconds apart; the clock and the sleep are injected. A
-server error or a dropped connection is retried `retries` times, each retry through the rate limit. Redirects are followed
+server error or a dropped connection is retried `retries` times, each retry through the rate limit. After a 429 or 503
+the host's interval becomes its Retry-After seconds (at most 120; 30 without the header) for the rest of the crawl. Redirects are followed
 by hand, and every hop passes the same checks as the first URL. Host names are compared lower-cased, in their IDNA form and
 without a trailing dot. A fetcher is for one thread: the rate limit and the robots rules are plain dictionaries.
 
@@ -48,6 +49,8 @@ MAX_REDIRECTS = 5
 PAGE_LIMIT = 5 * 1024 * 1024
 PDF_LIMIT = 100 * 1024 * 1024
 DEADLINE = 120.0
+RETRY_AFTER_CAP = 120.0
+RETRY_AFTER_DEFAULT = 30.0  # the slower interval after a 429 or 503 that names none
 PDF_MAGIC = b"%PDF-"
 log = logging.getLogger(__name__)
 
@@ -143,6 +146,14 @@ def blocking_meta(body: bytes) -> str | None:
     return None
 
 
+def _retry_after(value: str | None) -> float:
+    """The seconds a Retry-After header asks for, capped; a missing or non-numeric one (a date) counts as the default."""
+    try:
+        return min(max(float(value), 0.0), RETRY_AFTER_CAP) if value else RETRY_AFTER_DEFAULT
+    except ValueError:
+        return RETRY_AFTER_DEFAULT
+
+
 class Fetcher:
     def __init__(
         self,
@@ -169,6 +180,7 @@ class Fetcher:
         self._client = client or httpx.Client(timeout=timeout)
         self._clock, self._sleep, self._interval, self._retries = clock, sleep, interval, retries
         self._last_request: dict[str, float] = {}
+        self._intervals: dict[str, float] = {}  # a host that asked to slow down
         self._robots: dict[str, Robots] = {}
         self._deadline, self._page_limit, self._pdf_limit, self._monotonic = deadline, page_limit, pdf_limit, monotonic
         self._cache, self._since, self._today, self._offline = cache, since, today, offline
@@ -317,9 +329,9 @@ class Fetcher:
 
     def _wait(self, host: str) -> None:
         now = self._clock()
-        last = self._last_request.get(host)
-        if last is not None and now - last < self._interval:
-            self._sleep(self._interval - (now - last))
+        last, interval = self._last_request.get(host), self._intervals.get(host, self._interval)
+        if last is not None and now - last < interval:
+            self._sleep(interval - (now - last))
             now = self._clock()
         self._last_request[host] = now
 
@@ -335,6 +347,8 @@ class Fetcher:
                 continue
             except _Refused as exc:
                 return str(exc)
+            if last.status in (429, 503):
+                self._intervals[_host(url)] = max(self._interval, _retry_after(last.headers.get("retry-after")))
             if last.status < 500 and last.status != 429:
                 break
         return last or "unreachable"

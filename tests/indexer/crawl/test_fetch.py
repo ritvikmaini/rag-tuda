@@ -253,6 +253,28 @@ def test_a_server_error_is_retried_then_skipped():
     assert isinstance(result, Skipped) and result.reason == "http 503"
 
 
+@pytest.mark.parametrize(
+    ("status", "retry_after", "wait"), [(429, "7", 7.0), (503, None, 30.0), (429, "9999", 120.0), (503, "soon", 30.0)]
+)
+def test_a_host_that_asks_to_slow_down_keeps_that_interval_for_the_crawl(status, retry_after, wait):
+    calls = []
+    headers = {"retry-after": retry_after} if retry_after else {}
+
+    def slow(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(status, headers=headers)
+        return httpx.Response(200, text="<html></html>", headers={"content-type": "text/html"})
+
+    clock = Clock()
+    f = fetcher(Net({HUB: slow}, clock=clock), clock, retries=1)
+    assert isinstance(f.get(HUB), Response)
+    assert wait in clock.slept  # the retry waited
+    clock.slept.clear()
+    assert isinstance(f.get(f"http://{FACULTY}{pages.STUDIENBUERO}/index.de.jsp"), Response)
+    assert clock.slept == [pytest.approx(wait)]  # and so does every later request to the host
+
+
 def test_a_missing_page_is_skipped():
     result = fetcher(Net()).get(f"http://{FACULTY}/nothing.de.jsp")
     assert isinstance(result, Skipped) and result.reason == "http 404"
