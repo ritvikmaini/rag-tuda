@@ -168,6 +168,17 @@ def test_the_adapters_failure_is_logged_in_the_backends_words(caplog) -> None:
     assert expected in caplog.text
 
 
+def test_a_failed_query_is_logged_by_its_class_only(caplog) -> None:
+    caplog.set_level(logging.ERROR)
+    with pytest.raises(RuntimeError):
+        asyncio.run(
+            make_service(vector=Vector(CHILDREN, fail=True), full_text=FullText({}, fail=True)).retrieve(
+                ["q1"], question="q"
+            )
+        )
+    assert "retrieval query 1/1 failed: RuntimeError" in caplog.text and "db down" not in caplog.text
+
+
 def test_every_query_failing_is_an_error() -> None:
     with pytest.raises(RuntimeError, match="retrieval unavailable: every query failed"):
         asyncio.run(
@@ -237,7 +248,7 @@ def test_a_failing_parent_text_lookup_scores_the_children_alone(caplog) -> None:
     caplog.set_level(logging.ERROR)
     docs = retrieve(FailingSections(PARENTS, batch=True), {"child one": 0.9, "child two": 0.8, "child three": 0.7})
     assert [d.page_content for d in docs][:3] == ["Parent 1", "Parent 2", "Parent 3"]
-    assert "parent texts for reranking unavailable: RuntimeError db down" in caplog.text
+    assert "parent texts for reranking unavailable: RuntimeError" in caplog.text and "db down" not in caplog.text
 
 
 def test_a_timed_out_parent_lookup_answers_from_the_chunks(caplog) -> None:

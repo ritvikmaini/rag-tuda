@@ -14,7 +14,7 @@ async def gather_bounded(
     """Run the awaitables concurrently, each limited to timeout_s seconds.
 
     Returns (results, errors): results in input order with None for every call that
-    failed or timed out; errors as (index, reason) pairs. Cancelling the caller
+    failed or timed out; errors as (index, reason) pairs, a reason being the exception's class (never its message). Cancelling the caller
     still cancels everything."""
     awaitables = list(awaitables)
     if not awaitables:
@@ -32,7 +32,7 @@ async def gather_bounded(
             errors.append((index, f"TimeoutError after {timeout_s:g} s"))
         elif isinstance(outcome, BaseException):
             results.append(None)
-            errors.append((index, f"{type(outcome).__name__}: {outcome}"))
+            errors.append((index, type(outcome).__name__))  # the class only: a message may carry the question
         else:
             results.append(outcome)
     return results, errors

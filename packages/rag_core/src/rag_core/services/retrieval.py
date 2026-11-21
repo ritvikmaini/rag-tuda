@@ -179,7 +179,7 @@ class RetrievalService:
                     cut = int(CUT_PARENT_TOKENS * self.chars_per_token)
                     parent_text_by_section = {s: text[:cut] for s, text in parent_text_by_section.items()}
             except Exception as e:
-                logger.error(f"[DocumentRetriever] parent texts for reranking unavailable: {type(e).__name__} {e}")
+                logger.error(f"[DocumentRetriever] parent texts for reranking unavailable: {type(e).__name__}")
             logger.info(
                 f"[DocumentRetriever] reranking {len(unique_docs)} children with {len(parent_text_by_section)} parent texts"
             )

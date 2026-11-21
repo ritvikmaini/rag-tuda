@@ -18,7 +18,7 @@ def test_results_keep_their_order_and_failures_become_none():
     results, errors = asyncio.run(rs.gather_bounded([ok("a"), ok("b", 5), boom()], timeout_s=0.1))
     assert results == ["a", None, None]
     assert [i for i, _ in errors] == [1, 2]
-    assert errors[0][1].startswith("TimeoutError") and errors[1][1] == "ConnectionError: database down"
+    assert errors[0][1].startswith("TimeoutError") and errors[1][1] == "ConnectionError"
 
 
 def test_all_succeed_without_errors():
