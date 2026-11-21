@@ -364,6 +364,11 @@ def test_the_pool_prepares_nothing_and_checks_connections():
     assert pool.max_idle == 240.0 and pool.timeout == 10.0 and pool._check is not None
 
 
+def test_a_pool_smaller_than_two_is_built_with_its_own_minimum():
+    pool = pg_index.read_pool("host=pgvector port=5432 dbname=d user=u password=p", max_size=1)
+    assert (pool.min_size, pool.max_size) == (1, 1)
+
+
 def test_the_pool_check_sweeps_every_dead_idle_connection_on_the_first_failure(monkeypatch):
     class RecordingPool:
         swept = 0

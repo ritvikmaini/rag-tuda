@@ -136,7 +136,6 @@ async def run(settings: Any, apply: bool) -> tuple[str, bool]:
     """(the summary line, whether every step ran). A skipped step prints its own line first."""
     found: dict[str, Any] = {}
     kept: dict[str, int] | str = "unknown"
-    # max_size 2: read_pool opens min_size=2, and psycopg_pool refuses max_size < min_size
     async with read_pool(store_conninfo(settings.overlay.database), max_size=2, name="retention") as pool:
 
         async def step(name: str, work: Awaitable[Any]) -> None:

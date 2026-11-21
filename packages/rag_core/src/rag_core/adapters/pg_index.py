@@ -373,7 +373,7 @@ def read_pool(conninfo: str, *, max_size: int = READ_POOL_MAX, name: str = "inde
 
     pool: ReadPool = AsyncConnectionPool(
         conninfo,
-        min_size=2,
+        min_size=min(2, max_size),
         max_size=max_size,
         open=False,
         timeout=10.0,
