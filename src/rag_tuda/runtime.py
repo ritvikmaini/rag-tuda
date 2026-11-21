@@ -203,9 +203,16 @@ def overlay_text(root: str, profile: str, folders: dict[str, str]) -> str | None
 
 
 def compose_env_text(
-    llm: Llm, *, token: str, roles_dir: str, profile: str = "example", overlay: str | None = None
+    llm: Llm,
+    *,
+    token: str,
+    roles_dir: str,
+    profile: str = "example",
+    overlay: str | None = None,
+    hf_home: str | None = None,
 ) -> str:
-    """`.rag/compose.env`: what deploy/compose.yaml reads from its env file."""
+    """`.rag/compose.env`: what deploy/compose.yaml reads from its env file. `hf_home` is the Hugging Face home the
+    containers mount, the one whose hub cache the plan checks."""
     values = {
         "RAG__CARD": llm.card,
         "OLLAMA_CONTEXT_LENGTH": str(llm.window),
@@ -215,4 +222,6 @@ def compose_env_text(
     }
     if overlay:
         values["RAG_INDEXER_OVERLAY"] = overlay
+    if hf_home:
+        values["RAG_HF_CACHE"] = hf_home
     return "".join(f"{key}={value}\n" for key, value in values.items())

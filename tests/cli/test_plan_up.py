@@ -394,6 +394,9 @@ def test_compose_takes_the_profile_from_the_env_file_and_writes_the_indexers_ove
     }
     env = dict(line.split("=", 1) for line in steps["compose-env"].text.splitlines())
     assert env["RAG_PROFILE"] == "example" and env["RAG_INDEXER_OVERLAY"] == f"{current.dir}/indexer-overlay.yaml"
+    assert "RAG_HF_CACHE" not in env  # the facts name no home
+    home = stack.plan_up(current, facts(tmp_path, hf=ALL_HF, hf_home="/h/hf"), args(mode="compose"))
+    assert "RAG_HF_CACHE=/h/hf\n" in next(s.text for s in home if s.name == "compose-env")
     assert steps["indexer-overlay"].path == env["RAG_INDEXER_OVERLAY"]
     assert json.loads(steps["indexer-overlay"].text) == {
         "connectors": {"gesetze": {"dir": "/app/profiles/example/documents"}}

@@ -67,6 +67,19 @@ def test_the_evals_job_is_a_profile_service_that_starts_nothing_else():
     assert "OPENAI_API_KEY=not-needed" in evals["environment"]
 
 
+def test_every_container_that_reads_models_mounts_the_cache_the_cli_checked():
+    """`rag up --mode compose` writes RAG_HF_CACHE (the Hugging Face home of the cache it checks) into compose.env."""
+    mount = "${RAG_HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface"
+    for name, service in (
+        ("deploy/compose.yaml", "embedding_service"),
+        ("deploy/compose.yaml", "reranker_service"),
+        ("deploy/compose.yaml", "indexer"),
+        ("deploy/compose.vllm.yaml", "vllm"),
+    ):
+        assert mount in services(name)[service]["volumes"], (name, service)
+        assert "~/.cache/huggingface:/root" not in str(services(name)[service]["volumes"]), (name, service)
+
+
 def test_the_harness_keeps_the_containers_data_in_a_named_volume_not_a_host_folder():
     """The backend and indexer run as root: files they create in a bind-mounted host folder could not be removed by the
     user who starts the next harness leg (Linux). `down -v` removes the volume."""

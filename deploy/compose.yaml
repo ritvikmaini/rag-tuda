@@ -103,7 +103,7 @@ services:
       context: ../model_servers/embedding
     logging: *default-logging
     volumes:
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ${RAG_HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
     environment:
       - PYTHONUNBUFFERED=1
       - HF_HUB_DISABLE_XET=1
@@ -127,7 +127,7 @@ services:
       context: ../model_servers/reranker
     logging: *default-logging
     volumes:
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ${RAG_HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
     environment:
       - PYTHONUNBUFFERED=1
       - TZ=Europe/Berlin
@@ -212,7 +212,7 @@ services:
       - ../.rag/crawl:/app/data/crawl
       - ../.rag/snapshots:/app/data/snapshots
       - ../logs:/app/logs
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - ${RAG_HF_CACHE:-~/.cache/huggingface}:/root/.cache/huggingface
       - ~/.cache/docling:/root/.cache/docling
       - ~/.EasyOCR:/root/.EasyOCR
       # the profile's own files (the folder sources read them) and the overlay that names the folders

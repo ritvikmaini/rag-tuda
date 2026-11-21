@@ -202,6 +202,22 @@ def test_the_hugging_face_cache_follows_the_environment(tmp_path):
     assert stack.hf_cache({}) == Path.home() / ".cache" / "huggingface" / "hub"
 
 
+def test_compose_mounts_the_home_of_the_cache_it_checks(tmp_path, scenario):
+    assert stack.hf_home({"HF_HOME": "/h"}) == Path("/h")
+    assert stack.hf_home({"HF_HUB_CACHE": "/h/hub"}) == Path("/h")
+    with pytest.raises(stack.StackError, match="HF_HUB_CACHE .*must end in /hub"):
+        stack.hf_home({"HF_HUB_CACHE": "/elsewhere"})
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf")}, default=(0, "refused"))
+    system.output = docker_output
+    found = stack.gather(tmp_path, current, S4B, hardware, stack.Args(S4B["name"], mode="compose"), system)
+    assert found.hf_home == str(tmp_path / "hf")
+    native = stack.gather(tmp_path, current, S4B, hardware, stack.Args(S4B["name"]), system)
+    assert native.hf_home == ""
+
+
 def snapshot_of(cache, pin, weights=True):
     folder = cache / f"models--{pin.repo.replace('/', '--')}" / "snapshots" / pin.revision
     folder.mkdir(parents=True, exist_ok=True)

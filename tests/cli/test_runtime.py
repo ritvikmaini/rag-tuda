@@ -177,8 +177,11 @@ def test_compose_env_names_the_card_the_window_the_token_the_roles_folder_and_th
         "RAG_ROLES_DIR": "/repo/.rag/secrets/roles",
         "RAG_PROFILE": "example",
     }
-    other = runtime.compose_env_text(llm, token="t", roles_dir="/r", profile="p", overlay="/r/overlay.yaml")
+    other = runtime.compose_env_text(
+        llm, token="t", roles_dir="/r", profile="p", overlay="/r/overlay.yaml", hf_home="/h/hf"
+    )
     assert "RAG_PROFILE=p\n" in other and "RAG_INDEXER_OVERLAY=/r/overlay.yaml\n" in other
+    assert "RAG_HF_CACHE=/h/hf\n" in other and "RAG_HF_CACHE" not in text
 
 
 def test_a_remote_card_without_its_own_analysis_block_is_refused():

@@ -123,6 +123,7 @@ class Facts:
     ollama_models: frozenset[str] = frozenset()
     ollama_derived: Mapping[str, Mapping[str, str]] = field(default_factory=dict)  # name -> parameters it has
     hf: frozenset[str] = frozenset()  # "repo@revision" snapshots in the Hugging Face cache
+    hf_home: str = ""  # compose mode: the Hugging Face home the containers mount (RAG_HF_CACHE)
     alive: frozenset[str] = frozenset()  # native processes with a live pid
     ready: frozenset[str] = frozenset()  # services answering /readyz
     postgres: bool = False
@@ -473,6 +474,7 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
         roles_dir=str(state.secrets_dir("roles")),
         profile=args.profile,
         overlay=f"{rag}/indexer-overlay.yaml",
+        hf_home=facts.hf_home or None,
     )
     steps = [
         Step("write", name="indexer-overlay", path=f"{rag}/indexer-overlay.yaml", text=overlay),
@@ -943,6 +945,16 @@ def hf_cache(environ: Mapping[str, str]) -> Path:
     return Path(environ.get("HF_HOME") or Path.home() / ".cache" / "huggingface") / "hub"
 
 
+def hf_home(environ: Mapping[str, str]) -> Path:
+    """The Hugging Face home that holds the hub cache `hf_cache` checks: what the compose containers mount."""
+    cache = hf_cache(environ)
+    if cache.name != "hub":
+        raise StackError(
+            f"compose mode mounts the Hugging Face home: HF_HUB_CACHE ({cache}) must end in /hub (or set HF_HOME)"
+        )
+    return cache.parent
+
+
 def parse_tags(text: str) -> frozenset[str]:
     try:
         return frozenset(m["name"] for m in json.loads(text)["models"])
@@ -1026,6 +1038,7 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
         ollama_models=models,
         ollama_derived=derived,
         hf=hf,
+        hf_home=str(hf_home(system.environ)) if args.mode == "compose" else "",
         alive=alive,
         ready=ready,
         postgres=bool(running and running.strip()),
