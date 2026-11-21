@@ -373,6 +373,9 @@ def test_gather_on_a_bare_machine_finds_nothing_present(tmp_path, scenario):
 def repo(tmp_path, monkeypatch, scenario):
     (tmp_path / "deploy").mkdir()
     (tmp_path / "deploy" / "compose.yaml").write_text("name: rag-tuda\n")
+    for profile in ("example", "tu-informatik"):
+        (tmp_path / "profiles" / profile).mkdir(parents=True)
+        (tmp_path / "profiles" / profile / "profile.yaml").write_text("{}\n")
     monkeypatch.chdir(tmp_path)
     hardware = scenario("m2_16")
     hardware.docker.ok = True
@@ -690,3 +693,14 @@ def test_a_purge_that_leaves_files_behind_names_the_path_and_the_remedy(repo, mo
     finally:
         locked.chmod(0o700)
     assert cli.main(["down", "--purge", "--yes"]) == 0 and not (current.dir / "crawl").exists()
+
+
+def test_up_refuses_a_profile_that_does_not_exist_before_any_step(repo, monkeypatch, capsys):
+    """A typo must not stop the running backend or start a crawl: the plan is never made."""
+    system = FakeSystem()
+    monkeypatch.setattr(stack, "System", lambda: system)
+    monkeypatch.setattr(stack, "plan_up", lambda *a: pytest.fail("no plan for an unknown profile"))
+    assert cli.main(["up", "--yes", "--profile", "exmaple"]) == 1
+    err = capsys.readouterr().err
+    assert "'exmaple'" in err and "profiles/exmaple/profile.yaml" in err and "example, tu-informatik" in err
+    assert system.ran == [] and system.popened == []

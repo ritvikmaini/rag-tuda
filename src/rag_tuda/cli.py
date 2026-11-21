@@ -60,6 +60,10 @@ def _up(args: argparse.Namespace) -> int:
             print(f"warning: {warning}", file=sys.stderr)
         current = state.ensure(root)
         profile = args.profile or current.data.get("profile") or DEFAULT_PROFILE
+        if profile not in (known := sorted(p.parent.name for p in (root / "profiles").glob("*/profile.yaml"))):
+            raise stack.StackError(
+                f"no profile {profile!r}: profiles/{profile}/profile.yaml does not exist (the profiles are {', '.join(known)})"
+            )
         up = stack.Args(card["name"], args.mode or doctor.default_mode(hardware), profile, args.model, args.llm_url)
         steps = stack.plan_up(current, stack.gather(root, current, card, hardware, up), up)
         if not _confirm(steps, args.yes):
