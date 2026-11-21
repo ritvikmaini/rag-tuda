@@ -52,7 +52,8 @@ def stored(db: psycopg.Connection[Any], user: str) -> list[Any]:
 def test_followup_after_failed_analysis_keeps_filter(
     ready: None, assistant: harness.Assistant, llm: harness.FakeLLM, user: str
 ) -> None:
-    llm.script(FAIL_ANALYSIS)
+    cited = "Die Dauer steht in den Quellen " + " ".join(f"[{n}]" for n in range(1, 10))
+    llm.script(FAIL_ANALYSIS, {"purpose": "answer", "match": FOLLOW_UP, "reply": cited})
     first = assistant.ask(THESIS_2015, user, turn_id=new_id())  # the PO is named in the text: no chips needed
     assert PO_2015 in urls(first) and not {PO_2023, PO_2023_PDF} & urls(first)
     second = assistant.ask(FOLLOW_UP, user, turn_id=new_id())
@@ -61,6 +62,8 @@ def test_followup_after_failed_analysis_keeps_filter(
     assert second.path == harness.LOOKUP
     assert applied(second)["po_version"] == [2015] and applied(second)["po_source"] == "carried"
     assert not {PO_2023, PO_2023_PDF} & urls(second)
+    # the appended line does not depend on the analysis: it names the version of the cited sources
+    assert second.text.endswith("Grundlage: Prüfungsordnung 2015 des B.Sc. Informatik")
     # without the earlier turn the same question reaches the PO 2023 sources: the carry-over is what narrowed it
     control = assistant.ask(FOLLOW_UP, "harness-" + new_id()[:12])
     assert {PO_2023, PO_2023_PDF} & urls(control)

@@ -38,7 +38,7 @@ UPGRADE = (
 )""",
     "CREATE INDEX turns_conversation ON chat.turns (conversation_id, created_at)",
     "COMMENT ON COLUMN chat.turns.conversation_id IS 'any client id, p-<uuid> from the v2 page, c-<uuid> from older tabs, the "
-    "evals runner''s probe ids (assistant sub-spec 15 #14)'",
+    "evals runner''s probe ids'",
     "COMMENT ON COLUMN chat.turns.answer IS 'the original answer; the versions are in turn_versions'",
     """CREATE TABLE chat.turn_versions (
   turn_id uuid REFERENCES chat.turns,
