@@ -550,7 +550,6 @@ def builder(tmp_path, monkeypatch, served):
             f"RAG__PATHS__{k.upper()}": str(tmp_path / v)
             for k, v in {
                 "crawl_dir": "crawl",
-                "manifest_dir": "state/documents",
                 "state_dir": "state",
                 "extracted_dir": "extracted",
                 "pdf_dir": "pdfs",

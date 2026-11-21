@@ -52,7 +52,6 @@ def make_context(tmp_path: Path, profile_dir: Path):
     def make(options=None, **changes) -> Context:
         paths = {
             "crawl_dir": str(tmp_path / "crawl"),
-            "manifest_dir": str(tmp_path / "state" / "documents"),
             "state_dir": str(tmp_path / "state"),
             "extracted_dir": str(tmp_path / "extracted"),
             "pdf_dir": str(tmp_path / "pdfs"),

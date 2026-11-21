@@ -37,7 +37,6 @@ def moved(tmp_path):
     """Every folder of the settings under tmp_path, as {key: path}."""
     names = {
         "crawl_dir": "crawl",
-        "manifest_dir": "state/documents",
         "state_dir": "state",
         "extracted_dir": "extracted",
         "pdf_dir": "pdfs",

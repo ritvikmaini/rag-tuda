@@ -16,7 +16,6 @@ def test_the_defaults_are_the_compose_paths(profile):
     paths = load_settings({"RAG_PROFILE": profile, "RAG_OVERLAY": CI}).overlay.paths
     assert paths.model_dump() == {
         "crawl_dir": "/app/data/crawl",
-        "manifest_dir": "/app/data/vector_database_contents/documents",
         "state_dir": "/app/data/vector_database_contents",
         "extracted_dir": "/app/data/extracted",
         "pdf_dir": "/app/data/pdfs",

@@ -48,7 +48,6 @@ class PathsSection(OverlaySection):
     """The folders the indexer reads and writes; the defaults are the compose container's."""
 
     crawl_dir: str = "/app/data/crawl"
-    manifest_dir: str = "/app/data/vector_database_contents/documents"
     state_dir: str = "/app/data/vector_database_contents"  # the registry, the list state and the build stats
     extracted_dir: str = "/app/data/extracted"  # the PDF extraction cache
     pdf_dir: str = "/app/data/pdfs"

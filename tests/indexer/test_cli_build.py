@@ -114,6 +114,13 @@ def test_build_command_swaps_generation_and_prints_counts(run):
     assert (stats["profile"], stats["sources"]) == ("example", BUILT["source_set"])
 
 
+def test_a_build_whose_stats_could_not_be_written_says_so(run):
+    run.stats.mkdir()  # the file cannot be replaced
+    code, lines = run()
+    assert code == 0
+    assert lines[-1] == "warning: the build stats were not written; the next build has no size gate"
+
+
 def test_a_skipped_size_gate_is_said_once(run, monkeypatch):
     skipped = {**BUILT["gates"]["size"], "skipped": "the last build was of another profile or source set"}
     monkeypatch.setitem(BUILT, "gates", {"size": skipped})

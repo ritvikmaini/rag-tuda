@@ -255,7 +255,6 @@ def test_each_process_gets_its_own_secret_folder_and_the_indexers_folders(tmp_pa
             "PDF_DIR",
             "EXTRACTED_DIR",
             "STATE_DIR",
-            "MANIFEST_DIR",
             "SKIPPED_PDFS_LOG",
             "USER_SOURCES",
         )

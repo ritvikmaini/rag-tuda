@@ -145,7 +145,6 @@ def test_the_indexer_gets_the_six_folders_under_rag():
         "RAG__PATHS__PDF_DIR": "/repo/.rag/crawl/pdfs",
         "RAG__PATHS__EXTRACTED_DIR": "/repo/.rag/crawl/extracted",
         "RAG__PATHS__STATE_DIR": "/repo/.rag/state",
-        "RAG__PATHS__MANIFEST_DIR": "/repo/.rag/state/documents",
         "RAG__PATHS__SKIPPED_PDFS_LOG": "/repo/.rag/state/skipped_pdfs_page_limit.json",
         "RAG__PATHS__USER_SOURCES": "/repo/.rag/sources.json",
     }

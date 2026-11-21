@@ -153,6 +153,21 @@ def test_a_failed_stats_record_after_a_rollback_is_a_warning(run, monkeypatch):
     assert code == 0 and lines[-1] == "warning: the build stats were not updated: database gone"
 
 
+def test_a_rollback_or_publish_whose_stats_could_not_be_written_says_so(run, monkeypatch):
+    run.stats.mkdir(parents=True)  # the file cannot be replaced
+    warning = "warning: the build stats were not written; the next build has no size gate"
+    monkeypatch.setattr(gen, "rollback", lambda conn, target: {"live": 1, "previous": 2})
+    monkeypatch.setattr(gen, "generations", lambda conn, target: rows("live", "previous"))
+    code, lines = run("rollback")
+    assert code == 0 and lines[-1] == warning
+    monkeypatch.setattr(gen, "generations", lambda conn, target: rows("live", "staging"))
+    monkeypatch.setattr(gen, "verify", lambda conn, target, n: {"children": 9, "parents": 7})
+    monkeypatch.setattr(gen, "publish", lambda conn, target, n: (1, 0.5))
+    monkeypatch.setattr(gen, "annotate", lambda *a, **k: None)
+    code, lines = run("publish", "2")
+    assert code == 0 and lines[0] == warning
+
+
 def test_publish_still_records_the_stats_when_annotate_fails_after_the_commit(run, monkeypatch):
     monkeypatch.setattr(gen, "generations", lambda conn, target: rows("live", "staging"))
     monkeypatch.setattr(gen, "verify", lambda conn, target, n: {"children": 9, "parents": 7})

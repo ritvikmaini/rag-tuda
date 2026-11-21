@@ -48,6 +48,7 @@ def build_options(args: list[str]) -> dict[str, Any] | None:
     return options
 
 
+STATS_NOT_WRITTEN = "the build stats were not written; the next build has no size gate"
 LISTED = 20  # lines of one kind the summary prints before it counts the rest
 
 
@@ -154,7 +155,7 @@ def build_index(
         warnings: list[str] = []
         if swap:
             warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
-            gates.record_build_stats(
+            recorded = gates.record_build_stats(
                 settings.overlay.paths.state_dir,
                 {
                     "parents": built["parents"],
@@ -164,6 +165,7 @@ def build_index(
                     "sources": built["source_set"],
                 },
             )
+            warnings += [] if recorded else [STATS_NOT_WRITTEN]
     except gen.BuildBusy as exc:
         out(f"busy: {exc}")
         return 1
@@ -238,9 +240,10 @@ def publish(
         return 1
     finally:
         lock.release()
-    gates.record_build_stats(
+    if not gates.record_build_stats(
         state_dir, {"parents": counts["parents"], "children": counts["children"], "profile": profile}
-    )
+    ):
+        out(f"warning: {STATS_NOT_WRITTEN}")
     out(f"published generation {n} (previous {previous}) in {seconds} s")
     return 0
 
@@ -310,16 +313,17 @@ def _dispatch(
         target=wiring.target,
         connect_fn=wiring.connect,
         out=out,
-        on_rollback=lambda conn: record_live_stats(conn, wiring),
+        on_rollback=lambda conn: record_live_stats(conn, wiring, out),
     )
 
 
-def record_live_stats(conn: Any, wiring: Wiring) -> None:
+def record_live_stats(conn: Any, wiring: Wiring, out: Callable[[str], None]) -> None:
     """After a rollback: the stats become those of the generation that is live again, so the next build is not measured
     against the build that was rolled back. The generation's source set is not known, so that build is not size-gated."""
     live = next((r for r in gen.generations(conn, wiring.target) if r["status"] == "live"), None)
     counts = (live or {}).get("counts") or {}
-    gates.record_build_stats(
+    if not gates.record_build_stats(
         wiring.settings.overlay.paths.state_dir,
         {k: counts[k] for k in ("parents", "children") if k in counts} | {"profile": wiring.settings.profile_name},
-    )
+    ):
+        out(f"warning: {STATS_NOT_WRITTEN}")
