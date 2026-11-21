@@ -351,6 +351,23 @@ def test_a_pdf_whose_redirect_ends_outside_its_scope_is_not_indexed_and_is_named
     )
 
 
+def test_a_pdf_this_crawl_excluded_on_purpose_is_not_kept_while_a_vanished_one_is(tu, make_context, served):
+    ctx = make_context()
+    connector(site(served)).collect(ctx)
+    elsewhere = f"https://{FB20}/media/informatik/other/x.pdf"
+    moved = lambda request: httpx.Response(302, headers={"location": elsewhere})  # noqa: E731
+    net = site(served, {PO_PDF: moved, elsewhere: ("application/pdf", pages.PO_2023)})
+    later = connector(net, TODAY + timedelta(days=1)).collect(ctx)
+    assert PO_PDF not in pdfs(later) and PO_PDF not in later.report["pdf_sync"]["retained"]  # the APB is unaffected
+    assert APB_ORIGINAL in pdfs(later)
+    vanished = {
+        url: ("text/html", without_pdf_links((FACULTY if FB20 in url else UNIVERSITY).get(urlsplit(url).path).text))
+        for url in (HUB, INTERN_INDEX)
+    }
+    gone = connector(site(served, vanished), TODAY + timedelta(days=2)).collect(ctx)
+    assert sorted(gone.report["pdf_sync"]["retained"]) == sorted([PO_PDF, APB_ORIGINAL])
+
+
 MSC_HUB = f"https://{FB20}{pages.ORDNUNGEN}/ordnungen_msc_informatik.de.jsp"
 MSC_PDF = (
     f"https://{FB20}/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/"

@@ -51,6 +51,15 @@ from indexer.sync.registry import REGISTRY, file_hash, local_path
 from indexer.sync.safeguard import LIST_STATE
 
 CRAWL_RUN = "crawl_run.json"  # in the state store: when the last crawl began and whether it finished
+# why a URL is skipped on purpose (a host or page the crawl may not use), against a failure that may pass
+EXCLUDED_ON_PURPOSE = (
+    "robots",
+    "meta robots",
+    "host not allowed",
+    "host never fetched",
+    "not an http url",
+    "redirected out of scope",
+)
 DOC_TYPES = {
     "po": "Prüfungsordnung",
     "mhb": "Modulhandbuch",
@@ -174,7 +183,10 @@ class TudaWeb:
         synced = self._sync(ctx, [self._pdf_entry(p) for p in merged.values()], crawl.pdfs)
         pdf_dir = ctx.paths["pdf_dir"]
         not_indexed = [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed]
-        for e in synced.entries:
+        excluded = {url for url, _ in selection.not_indexed} | set(selection.copies)
+        excluded |= {s["url"] for s in crawl.skipped if s["reason"] in EXCLUDED_ON_PURPOSE}
+        retained = [e for e in synced.retained if e.url not in excluded]  # absence keeps its grace, exclusion does not
+        for e in [e for e in synced.entries if e not in synced.retained] + retained:
             if missing := lacks(e.meta):
                 not_indexed.append({"url": e.url, "missing": list(missing)})
             elif (path := local_path(e.url, pdf_dir)).is_file():
@@ -200,7 +212,7 @@ class TudaWeb:
             "failed": synced.failed,
             "missing": synced.missing,
             "removed": synced.removed,
-            "retained": [e.url for e in synced.retained],
+            "retained": [e.url for e in retained],
             "list_check": synced.check,
         }
         return SourceResult(items, report, expected_minimum=int(ctx.settings.get("min_documents", 0)))
