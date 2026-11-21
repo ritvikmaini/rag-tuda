@@ -257,6 +257,9 @@ def test_the_vllm_overlay_replaces_ollama_with_the_cards_server():
         command = " ".join(rendered["vllm"]["command"]) + " "
         assert f"--model {card.answer.model} " in command and "ports" not in rendered["vllm"]
         assert f"--max-model-len {card.answer.context_window} " in command
+        assert {"VLLM_NO_USAGE_STATS": "1", "DO_NOT_TRACK": "1"}.items() <= rendered["vllm"]["environment"].items(), (
+            files
+        )
     assert "vllm" not in json.loads(render(BASE).stdout)["services"]
 
 

@@ -31,6 +31,8 @@ services:
     environment:
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
       - HF_HUB_OFFLINE=1
+      - VLLM_NO_USAGE_STATS=1  # no usage report to the vLLM project
+      - DO_NOT_TRACK=1
     deploy:
       resources:
         reservations:
