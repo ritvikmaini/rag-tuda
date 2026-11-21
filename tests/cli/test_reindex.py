@@ -117,6 +117,17 @@ def test_rollback_is_the_same_job_with_another_command(tmp_path):
     assert next(s for s in steps if s.name == "rollback").inherit == ()
 
 
+def test_rollback_across_profiles_is_refused(tmp_path):
+    """The index was last built for another profile than the one the stack runs: its previous generation is not this one's."""
+    a = stack.Args(S4B["name"], profile="tu-informatik")
+    other = first_run(tmp_path, stack.Args(S4B["name"]))
+    current = state.State(other.dir, other.token, other.passwords, {**other.data, "index_profile": "example"})
+    with pytest.raises(stack.StackError, match="holds the example profile, not tu-informatik.*rag up --profile"):
+        stack.plan_rollback(current, running(tmp_path), a)
+    same = state.State(other.dir, other.token, other.passwords, {**other.data, "index_profile": "tu-informatik"})
+    assert "run:rollback" in names(stack.plan_rollback(same, running(tmp_path), a))
+
+
 # --- the commands -----------------------------------------------------------------------------------------------------------
 
 

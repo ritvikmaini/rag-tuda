@@ -72,6 +72,7 @@ def test_up_from_nothing_runs_the_steps_in_order(tmp_path, current):
         "run:migrate",
         "write:overlay",
         "run:index-build",
+        "write:state-index",
         "request:derived-model",
         "spawn:backend",
         "wait:backend",
@@ -357,6 +358,7 @@ def test_compose_builds_then_migrates_then_ups(tmp_path, current):
         f"run:pull-{TAG}",
         "write:state-models",
         "run:index-build",
+        "write:state-index",
         "run:up",
         "run:warm-up",
         "write:state",
@@ -471,14 +473,25 @@ def test_a_server_the_user_runs_is_noted_as_not_having_its_window_set(tmp_path, 
     assert not [s for s in stack.plan_up(current, facts(tmp_path, ollama_up=True), args()) if "num_ctx" in s.text]
 
 
-def test_a_changed_profile_builds_the_index_again(tmp_path, current):
+def test_an_index_that_is_not_built_for_the_profile_is_built_and_recorded(tmp_path, current):
+    """`index_built` is read for the profile asked for (see test_stack): a plan builds when it is false, and records
+    which profile the index holds right after the build, and again with the final state."""
     for mode in ("native", "compose"):
-        before = args(mode=mode)
+        a = args(mode=mode, profile="tu-informatik")
         extra = {"compose_images": True} if mode == "compose" else {}
-        done = settled(tmp_path, **extra) if mode == "native" else facts(tmp_path, hf=ALL_HF, index_built=True, **extra)
-        assert "run:index-build" not in names(stack.plan_up(settle(current, before), done, before))
-        after = args(mode=mode, profile="tu-informatik")
-        assert "run:index-build" in names(stack.plan_up(settle(current, before), done, after))
+        todo = (settled if mode == "native" else facts)(tmp_path, hf=ALL_HF, index_built=False, **extra)
+        steps = stack.plan_up(settle(current, args(mode=mode)), todo, a)
+        order = names(steps)
+        assert "run:index-build" in order and order[order.index("run:index-build") + 1] == "write:state-index"
+        recorded = json.loads(next(s.text for s in steps if s.name == "state-index"))
+        assert recorded["index_profile"] == "tu-informatik"
+        assert json.loads(next(s.text for s in steps if s.name == "state"))["index_profile"] == "tu-informatik"
+
+
+def test_a_built_index_is_not_built_or_recorded_again(tmp_path, current):
+    a = args()
+    steps = stack.plan_up(settle(current, a), settled(tmp_path), a)
+    assert not [s for s in steps if s.name in ("index-build", "state-index")]
 
 
 def test_compose_builds_the_indexer_and_evals_images_with_the_others(tmp_path, current):

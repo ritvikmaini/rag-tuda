@@ -16,6 +16,7 @@ import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO
 
@@ -30,6 +31,8 @@ CRAWL_CONTACT = (
 )  # the user's own contact for the crawler's user agent: passed to the index build, never stored
 KEYS = ("GROQ_API_KEY",)  # provider keys: only a step that names one gets it
 KEEP_RAG_ENV = ("RAG_DEVICE",)  # the one RAG_ variable a child inherits; every other is set by the plan
+DB_VOLUME = f"{PROJECT}_db-data"  # the compose project's Postgres volume
+STATS_FILE = "corpus_build_stats.json"  # the indexer's record of its last published build
 READY_WAIT_S = {"embedding": 900, "reranker": 900, "backend": 180}
 SERVICES = {"embedding": runtime.PORTS["embedding"], "reranker": runtime.PORTS["reranker"]}
 # the profiles whose folder sources read a folder of the profile (source name -> folder in the profile); the TU profile
@@ -196,8 +199,16 @@ def _signature(args: Args) -> dict:
     return {"mode": args.mode, "card": args.card, "profile": args.profile, "model": args.model, "llm_url": args.llm_url}
 
 
-def _record(state: State, args: Args, llm: runtime.Llm) -> list[Step]:
+def _index_recorded(state: State, args: Args) -> Step:
+    """Right after a build: which profile the index holds, so a later step that fails does not lose it."""
+    text = json.dumps({**state.data, "index_profile": args.profile}, indent=2) + "\n"
+    return Step("write", name="state-index", path=f"{state.dir}/state.json", text=text)
+
+
+def _record(state: State, args: Args, llm: runtime.Llm, built: bool) -> list[Step]:
     new = {**state.data, **_signature(args), "first_run_done": True}
+    if built:
+        new["index_profile"] = args.profile
     if args.mode == "compose":  # what the compose Ollama volume holds, for the next up after a down
         new["compose_models"] = sorted({*state.data.get("compose_models", ()), *llm.pulls})
     if new == state.data:
@@ -234,7 +245,7 @@ def plan_up(state: State, facts: Facts, args: Args) -> list[Step]:
         steps += _CONTACT_NOTE
     plan = _plan_native if args.mode == "native" else _plan_compose
     steps += plan(state, facts, args, llm)
-    return steps + _record(state, args, llm)
+    return steps + _record(state, args, llm, any(s.name == "index-build" for s in steps))
 
 
 def _profile_changed(state: State, args: Args) -> bool:
@@ -299,7 +310,7 @@ def _plan_native(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> li
                 env=runtime.migrate_env(str(state.secrets_dir("migrate"))),
             )
         )
-    if not facts.index_built or _profile_changed(state, args):
+    if not facts.index_built:
         steps += _build_index(state, facts, args)
     created = False
     for body, window in (
@@ -352,6 +363,7 @@ def _build_index(state: State, facts: Facts, args: Args) -> list[Step]:
     return [
         *_crawl_estimate(args, "core"),
         *_indexer_job(state, facts, args, "index-build", ("build",), text, CRAWL_CONTACT),
+        _index_recorded(state, args),
     ]
 
 
@@ -514,8 +526,8 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
             models = sorted(recorded | set(llm.pulls))
             text = json.dumps({**state.data, "compose_models": models}, indent=2) + "\n"
             steps.append(Step("write", name="state-models", path=f"{state.dir}/state.json", text=text))
-    if not facts.index_built or profile_changed:
-        steps.append(
+    if not facts.index_built:
+        steps += [
             Step(
                 "run",
                 name="index-build",
@@ -523,8 +535,9 @@ def _plan_compose(state: State, facts: Facts, args: Args, llm: runtime.Llm) -> l
                 argv=(*compose, "--profile", "build", "run", "--rm", "indexer", "build"),
                 cwd=root,
                 inherit=CRAWL_CONTACT,  # compose.yaml hands it on to the indexer container
-            )
-        )
+            ),
+            _index_recorded(state, args),
+        ]
     steps.append(
         Step(
             "run", name="up", text="starting the stack", argv=(*compose, "up", "-d", "--wait"), cwd=root, timeout_s=900
@@ -586,7 +599,14 @@ def plan_reindex(state: State, facts: Facts, args: Args, full: bool = False, res
 
 
 def plan_rollback(state: State, facts: Facts, args: Args) -> list[Step]:
-    """The previous index generation goes live again, then a backend restart."""
+    """The previous index generation goes live again, then a backend restart. Refused when the index was built for
+    another profile than the one the stack runs."""
+    built_for = state.data.get("index_profile")
+    if built_for and built_for != args.profile:
+        raise StackError(
+            f"the index holds the {built_for} profile, not {args.profile}: a rollback would not fit "
+            f"the {args.profile} stack; run `rag up --profile {args.profile}` to build its index"
+        )
     return _index_job(
         state, facts, args, "rollback", ("rollback",), "rolling the index back (indexer rollback)", [], ()
     )
@@ -981,6 +1001,11 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
         else None
     )
     index = state.dir / "state" if args.mode == "native" else root / "data" / "vector_database_contents"
+    volume = (
+        system.output(("docker", "volume", "inspect", DB_VOLUME, "--format", "{{.CreatedAt}}"))
+        if hardware.docker.ok
+        else None
+    )
     return Facts(
         root=str(root),
         card=card,
@@ -993,7 +1018,7 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
         alive=alive,
         ready=ready,
         postgres=bool(running and running.strip()),
-        index_built=(index / "corpus_build_stats.json").is_file(),
+        index_built=index_built(index / STATS_FILE, args.profile, volume),
         compose_images={f"{PROJECT}-backend", f"{PROJECT}-embedding_service", f"{PROJECT}-reranker_service"} <= names,
         compose_ollama_models=frozenset(
             line.split()[0] for line in (ollama_list or "").splitlines()[1:] if line.split()
@@ -1003,6 +1028,24 @@ def gather(root: Path, state: State, card: dict, hardware, args: Args, system: S
         crawl_contact=bool(system.environ.get("RAG__CRAWL__CONTACT")),
         groq_key=bool(system.environ.get("GROQ_API_KEY", "").strip()),
     )
+
+
+def index_built(stats_file: Path, profile: str, volume_created: str | None) -> bool:
+    """The index counts as built when the indexer's stats exist and name this profile, and the database volume exists
+    and is older than the stats: a volume removed or reset since leaves stats that describe a database that is gone. A
+    creation time that cannot be read is trusted."""
+    try:
+        stats = json.loads(stats_file.read_text(encoding="utf-8"))
+        written = datetime.fromtimestamp(stats_file.stat().st_mtime, UTC)
+    except (OSError, ValueError):
+        return False
+    if not isinstance(stats, dict) or stats.get("profile") != profile or not volume_created:
+        return False
+    try:
+        created = datetime.fromisoformat(volume_created.strip())
+    except ValueError:
+        return True
+    return created.replace(tzinfo=created.tzinfo or UTC) <= written
 
 
 def gather_down(root: Path, rag: Path, hardware) -> DownFacts:

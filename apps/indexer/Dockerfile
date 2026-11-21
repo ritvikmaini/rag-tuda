@@ -39,7 +39,7 @@ WORKDIR /app
 ARG PROFILE=example
 # the profile is data baked into the image: the image tag fixes every value that decides the index
 COPY profiles/${PROFILE}/ /app/profile/
-ENV RAG_PROFILE=/app/profile/profile.yaml
+ENV RAG_PROFILE=/app/profile/profile.yaml RAG_PROFILE_NAME=${PROFILE}
 RUN mkdir -p /app/data/vector_database_contents
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1

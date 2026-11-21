@@ -156,7 +156,13 @@ def build_index(
             warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
             gates.record_build_stats(
                 settings.overlay.paths.state_dir,
-                {"parents": built["parents"], "children": built["children"], "documents": documents},
+                {
+                    "parents": built["parents"],
+                    "children": built["children"],
+                    "documents": documents,
+                    "profile": built["profile"],
+                    "sources": built["source_set"],
+                },
             )
     except gen.BuildBusy as exc:
         out(f"busy: {exc}")
@@ -177,6 +183,8 @@ def build_index(
         out(f"source {name}: {count} documents")
         for line in summary_lines(name, built["sources"][name]):
             out(line)
+    if skipped := built["gates"]["size"].get("skipped"):
+        out(f"note: no size gate: {skipped}")
     counts, embeddings, changes = published["index_counts"], published["embeddings"], published["changes"]
     state = f"published (previous {published['previous_generation'] or 'none'})" if swap else "staged (not published)"
     out(
@@ -191,10 +199,15 @@ def build_index(
 
 
 def publish(
-    target: gen.Target, n: int, connect_fn: Callable[..., Any], out: Callable[[str], None], state_dir: str
+    target: gen.Target,
+    n: int,
+    connect_fn: Callable[..., Any],
+    out: Callable[[str], None],
+    state_dir: str,
+    profile: str = "",
 ) -> int:
     """A staging generation goes live: verify again, publish, annotate, record the stats. No housekeeping here; the next
-    build housekeeps."""
+    build housekeeps. The stats name the profile but no source set: the next build is not size-gated."""
     lock = gen.BuildLock(target, f"cli publish {n}", connect_fn)
     try:
         lock.acquire()
@@ -225,7 +238,9 @@ def publish(
         return 1
     finally:
         lock.release()
-    gates.record_build_stats(state_dir, {"parents": counts["parents"], "children": counts["children"]})
+    gates.record_build_stats(
+        state_dir, {"parents": counts["parents"], "children": counts["children"], "profile": profile}
+    )
     out(f"published generation {n} (previous {previous}) in {seconds} s")
     return 0
 
@@ -282,5 +297,29 @@ def _dispatch(
         if len(args) != 2 or not args[1].isdigit():
             out(USAGE)
             return 2
-        return publish(wiring.target, int(args[1]), wiring.connect, out, wiring.settings.overlay.paths.state_dir)
-    return gen.main(args, target=wiring.target, connect_fn=wiring.connect, out=out)
+        return publish(
+            wiring.target,
+            int(args[1]),
+            wiring.connect,
+            out,
+            wiring.settings.overlay.paths.state_dir,
+            wiring.settings.profile_name,
+        )
+    return gen.main(
+        args,
+        target=wiring.target,
+        connect_fn=wiring.connect,
+        out=out,
+        on_rollback=lambda conn: record_live_stats(conn, wiring),
+    )
+
+
+def record_live_stats(conn: Any, wiring: Wiring) -> None:
+    """After a rollback: the stats become those of the generation that is live again, so the next build is not measured
+    against the build that was rolled back. The generation's source set is not known, so that build is not size-gated."""
+    live = next((r for r in gen.generations(conn, wiring.target) if r["status"] == "live"), None)
+    counts = (live or {}).get("counts") or {}
+    gates.record_build_stats(
+        wiring.settings.overlay.paths.state_dir,
+        {k: counts[k] for k in ("parents", "children") if k in counts} | {"profile": wiring.settings.profile_name},
+    )

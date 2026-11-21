@@ -1,8 +1,10 @@
 """The executor, the facts and the pins behind plan_up, and the `up` and `down` commands, with a fake machine."""
 
 import json
+import os
 import stat
 import sys
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -209,6 +211,13 @@ def snapshot_of(cache, pin, weights=True):
     return folder
 
 
+def docker_output(argv):
+    """What Docker answers on a machine with a running Postgres and its volume made long ago."""
+    if "volume" in argv:
+        return "2020-01-01T00:00:00Z\n"
+    return "abc\n" if "pgvector" in argv else None
+
+
 def machine(scenario):
     return scenario("m2_16")
 
@@ -221,7 +230,7 @@ def test_gather_reads_the_machine_and_plans_nothing_for_a_settled_one(tmp_path, 
     for pin in stack.PINNED.values():
         snapshot_of(cache, pin)
     (current.dir / "state").mkdir()
-    (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
+    (current.dir / "state" / "corpus_build_stats.json").write_text('{"profile": "example"}')
     live = FakeSystem(environ={"HF_HOME": str(tmp_path / "hf"), "RAG__CRAWL__CONTACT": "me@example.org"})
     for name in ("embedding", "reranker", "backend"):
         (current.dir / "pids" / f"{name}.pid").write_text("4242\nWed 18 Nov 12:00:00 2026\n")
@@ -238,7 +247,7 @@ def test_gather_reads_the_machine_and_plans_nothing_for_a_settled_one(tmp_path, 
             json.dumps({"parameters": "num_ctx 8000\ntemperature 0.1\ntop_p 0.9"}),
         ),
     }
-    live.output = lambda argv: "abc\n" if "pgvector" in argv else None
+    live.output = docker_output
     a = stack.Args(S4B["name"])
     found = stack.gather(tmp_path, current, S4B, hardware, a, live)
     assert found.ollama_up and found.hf == {pin.key for pin in stack.PINNED.values()}
@@ -322,7 +331,7 @@ def test_a_settled_hosted_card_plans_nothing_through_gather(tmp_path, scenario):
     for pin in stack.PINNED.values():
         snapshot_of(cache, pin)
     (current.dir / "state").mkdir()
-    (current.dir / "state" / "corpus_build_stats.json").write_text("{}")
+    (current.dir / "state" / "corpus_build_stats.json").write_text('{"profile": "example"}')
     for name in ("embedding", "reranker", "backend"):
         (current.dir / "pids" / f"{name}.pid").write_text("4242\nWed 18 Nov 12:00:00 2026\n")
     analysis = "rag-l-groq-gpt-oss-120b-analysis"
@@ -338,7 +347,7 @@ def test_a_settled_hosted_card_plans_nothing_through_gather(tmp_path, scenario):
             json.dumps({"parameters": "num_ctx 8000\ntemperature 0.1\ntop_p 0.9"}),
         ),
     }
-    system.output = lambda argv: "abc\n" if "pgvector" in argv else None
+    system.output = docker_output
     found = stack.gather(tmp_path, current, groq, hardware, a, system)
     assert found.groq_key and found.ollama_derived[analysis]["num_ctx"] == "8000"
     settled = state.State(
@@ -609,3 +618,55 @@ def test_up_takes_the_profile_from_the_flag_then_the_recorded_one_then_the_tu_pr
     assert cli.main(["up", "--yes", *flags]) == 0
     assert seen == [expected]
     assert json.loads((repo / ".rag" / "state.json").read_text())["profile"] == expected
+
+
+def write_stats(path, profile="example", age_s=0):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"profile": profile, "parents": 3}))
+    if age_s:
+        os.utime(path, (path.stat().st_atime, path.stat().st_mtime - age_s))
+    return path
+
+
+def test_the_index_counts_as_built_for_the_profile_whose_stats_and_volume_say_so(tmp_path):
+    stats = write_stats(tmp_path / "state" / "corpus_build_stats.json", "tu-informatik")
+    volume = "2020-01-01T00:00:00Z"
+    assert stack.index_built(stats, "tu-informatik", volume)
+    assert not stack.index_built(stats, "example", volume)  # the other profile's index is not this one's
+    assert not stack.index_built(tmp_path / "none.json", "example", volume)
+    assert not stack.index_built(stats, "tu-informatik", None)  # no volume: the database is gone
+    stats.write_text("{}")  # stats written before they named a profile
+    assert not stack.index_built(stats, "tu-informatik", volume)
+    stats.write_text("{broken")
+    assert not stack.index_built(stats, "tu-informatik", volume)
+
+
+def test_a_volume_made_after_the_stats_means_the_database_was_lost(tmp_path):
+    stats = write_stats(tmp_path / "corpus_build_stats.json", age_s=3600)
+    written = datetime.fromtimestamp(stats.stat().st_mtime, UTC)
+    older, newer = written - timedelta(minutes=5), written + timedelta(minutes=5)
+    assert stack.index_built(stats, "example", older.isoformat())
+    assert not stack.index_built(stats, "example", newer.isoformat())
+    assert not stack.index_built(stats, "example", newer.astimezone(timezone(timedelta(hours=-5))).isoformat())
+    assert stack.index_built(stats, "example", "no time")  # an unreadable creation time is trusted
+
+
+def test_gather_reads_the_index_for_the_profile_asked_for_and_the_volume(tmp_path, scenario):
+    hardware = machine(scenario)
+    hardware.docker.ok = True
+    current = state.ensure(tmp_path)
+    write_stats(current.dir / "state" / "corpus_build_stats.json", "tu-informatik")
+    system = FakeSystem(environ={"HF_HOME": str(tmp_path)}, default=(0, "refused"))
+    asked = []
+    system.output = lambda argv: asked.append(argv) or docker_output(argv)
+
+    def built(profile):
+        return stack.gather(
+            tmp_path, current, S4B, hardware, stack.Args(S4B["name"], profile=profile), system
+        ).index_built
+
+    assert built("tu-informatik") and not built("example")
+    volume = next(a for a in asked if "volume" in a)
+    assert volume == ("docker", "volume", "inspect", "rag-tuda_db-data", "--format", "{{.CreatedAt}}")
+    system.output = lambda argv: None if "volume" in argv else docker_output(argv)  # `docker volume rm`, a Colima reset
+    assert not built("tu-informatik")

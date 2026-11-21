@@ -74,6 +74,7 @@ class Settings:
     overlay: Overlay
     endpoints: Mapping[str, Endpoint]  # every source of the profile, in its order
     profile_dir: Path  # the folder of the profile file, where sources.yaml and roles.yaml are
+    profile_name: str = ""  # the profile's folder name (`example`, `tu-informatik`); RAG_PROFILE_NAME in the image
 
     @property
     def collection(self) -> str:
@@ -150,7 +151,8 @@ def load_settings(environ: Mapping[str, str] = os.environ, secrets_dir: str | No
         ingest = profile.ingest.model_copy(update={"sources": {**profile.ingest.sources, **added}})
         profile = profile.model_copy(update={"ingest": ingest})
         endpoints |= {name: Endpoint(dir=target) for name, target in folders.items()}
-    return Settings(profile, overlay, endpoints, Path(profile_path).parent)
+    profile_dir = Path(profile_path).parent
+    return Settings(profile, overlay, endpoints, profile_dir, environ.get("RAG_PROFILE_NAME") or profile_dir.name)
 
 
 @dataclass(frozen=True)

@@ -15,6 +15,8 @@ BUILT = {
     "sources": {"web": {"documents": 3}, "pdfs": {"documents": 5, "with_documents": 2}, "maps": {"documents": 2}},
     "gates": {"size": {"count": 7, "last": None, "ratio": 0.7, "passed": True}},
     "parents": 7,
+    "profile": "example",
+    "source_set": {"set": "core", "names": ["maps", "pdfs", "web"]},
     "units": ["p"] * 7,
     "children": 9,
     "embedding": None,
@@ -109,6 +111,14 @@ def test_build_command_swaps_generation_and_prints_counts(run):
     stats = json.loads(run.stats.read_text())
     assert (stats["parents"], stats["children"]) == (7, 9)
     assert stats["documents"] == {"web": 3, "pdfs": 5, "maps": 2}
+    assert (stats["profile"], stats["sources"]) == ("example", BUILT["source_set"])
+
+
+def test_a_skipped_size_gate_is_said_once(run, monkeypatch):
+    skipped = {**BUILT["gates"]["size"], "skipped": "the last build was of another profile or source set"}
+    monkeypatch.setitem(BUILT, "gates", {"size": skipped})
+    code, lines = run()
+    assert code == 0 and lines.count("note: no size gate: the last build was of another profile or source set") == 1
 
 
 def test_build_command_exits_1_and_swaps_nothing_when_busy_refused_or_failed(run):

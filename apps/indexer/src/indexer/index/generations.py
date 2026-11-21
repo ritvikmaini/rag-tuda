@@ -735,8 +735,9 @@ def compare_lines(report, a, b):
 USAGE = "usage: indexer build [--sources core|full] [--resume] [--reuse-inputs] [--no-swap] | status | housekeep [--stale] | rollback | compare <a> <b> | publish <n>"
 
 
-def main(argv, *, target, connect_fn, out=print):
-    """status, housekeep, rollback and compare with their output; indexer.cli adds publish and wires the arguments."""
+def main(argv, *, target, connect_fn, out=print, on_rollback=None):
+    """status, housekeep, rollback and compare with their output; indexer.cli adds publish and wires the arguments.
+    `on_rollback(conn)` runs after a rollback, still under the build lock."""
     args = list(argv)
     command = args[0] if args else ""
     if (
@@ -784,6 +785,11 @@ def main(argv, *, target, connect_fn, out=print):
             else:
                 moved = rollback(conn, target)
                 out(f"rollback: generation {moved['live']} live, generation {moved['previous']} previous")
+                if on_rollback:
+                    try:
+                        on_rollback(conn)
+                    except Exception as exc:  # the views have moved: the stats are the only thing left undone
+                        out(f"warning: the build stats were not updated: {exc}")
         finally:
             conn.close()
     except GenerationError as exc:

@@ -1,9 +1,9 @@
-"""The build gates: the size reference of the last swapped build."""
+"""The build gates: the size reference of the last swapped build of the same profile and source set."""
 
 import json
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
 
@@ -30,15 +30,30 @@ def previous_stats(state_dir: str):
     return stats
 
 
+def source_set(options: Mapping[str, Any] | None, names: Iterable[str]) -> dict[str, Any]:
+    """What a build covered: the source set asked for (core or full) and the sources it ran, the registered folders
+    among them."""
+    return {"set": (options or {}).get("sources", "core"), "names": sorted(names)}
+
+
+def comparable(previous: Mapping[str, Any], profile: str, sources: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The previous stats when they describe a build of this profile and source set, else none: a build of another
+    size is no reference."""
+    same = previous.get("profile") == profile and previous.get("sources") == sources
+    return previous if same else {}
+
+
 def record_build_stats(state_dir: str, result):
-    """Called after a successful swap; the next build is compared against these counts.
+    """Called after a successful swap, a publish or a rollback; the next build of the same profile and source set is
+    compared against these counts (`result` names them: parents, children, documents, profile and sources; a
+    publish or a rollback does not know its source set). The file also marks the index as built.
     Returns False (and logs) when the file cannot be written: the swap has happened, so
     the reply must not fail because of the stats file."""
     try:
         os.makedirs(state_dir, exist_ok=True)  # a native first build starts without the folder
         write_json_atomic(
             os.path.join(state_dir, STATS_NAME),
-            {k: result[k] for k in ("parents", "children", "documents") if k in result}
+            {k: result[k] for k in ("parents", "children", "documents", "profile", "sources") if k in result}
             | {"built_at": datetime.now().isoformat()},
         )
         return True

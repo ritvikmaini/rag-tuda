@@ -32,6 +32,13 @@ def test_stats_are_written_atomically(tmp_path):
     assert sorted(p.name for p in tmp_path.iterdir()) == ["corpus_build_stats.json"]
 
 
+def test_stats_name_the_profile_and_the_source_set(tmp_path):
+    sources = {"set": "core", "names": ["web"]}
+    gates.record_build_stats(str(tmp_path), {"parents": 3, "profile": "tu", "sources": sources, "other": 1})
+    stats = gates.previous_stats(str(tmp_path))
+    assert (stats["profile"], stats["sources"]) == ("tu", sources) and "other" not in stats
+
+
 def test_build_corpus_refuses_before_any_download_when_the_stats_file_is_corrupt(settings, fakes):
     fakes.stats.write_text("{broken", encoding="utf-8")
     source, embedding = fakes.Source(), fakes.Embedding(None)

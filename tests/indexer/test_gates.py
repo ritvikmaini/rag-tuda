@@ -23,6 +23,16 @@ def test_no_stats_file_means_no_size_gate(tmp_path):
     )
 
 
+def test_stats_are_a_reference_only_for_the_same_profile_and_source_set():
+    core = gates.source_set({"sources": "core"}, ["web", "docs"])
+    assert core == {"set": "core", "names": ["docs", "web"]} == gates.source_set(None, ("docs", "web"))
+    stats = {"parents": 100, "profile": "tu", "sources": core}
+    assert gates.comparable(stats, "tu", core) == stats
+    assert gates.comparable(stats, "example", core) == {}
+    assert gates.comparable(stats, "tu", gates.source_set({"sources": "full"}, ["web", "docs"])) == {}
+    assert gates.comparable({"parents": 100}, "tu", core) == {}  # written before the stats named them
+
+
 def test_the_first_failed_gate_names_itself_and_says_swap_refused():
     web = gates.source_gate("web", 5, 200, "documents")
     pdfs = gates.source_gate("pdfs", 1, 9, "pdfs")

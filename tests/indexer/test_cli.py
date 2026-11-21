@@ -43,6 +43,7 @@ def run(db_settings, monkeypatch, tmp_path):
         return code, lines
 
     call.stats = tmp_path / "state" / gates.STATS_NAME
+    call.profile = db_settings.profile_name
     return call
 
 
@@ -91,6 +92,7 @@ def test_compare_housekeep_and_rollback_keep_their_output_and_exit_codes(run, mo
     assert run("housekeep")[0] == 0
 
     monkeypatch.setattr(gen, "rollback", lambda conn, target: {"live": 3, "previous": 4})
+    monkeypatch.setattr(gen, "generations", lambda conn, target: rows("previous", "previous", "live"))
     assert run("rollback") == (0, ["rollback: generation 3 live, generation 4 previous"])
     monkeypatch.setattr(
         gen, "rollback", lambda conn, target: (_ for _ in ()).throw(gen.RollbackRefused("no previous generation"))
@@ -128,7 +130,27 @@ def test_publish_puts_a_staging_generation_live_and_does_not_housekeep(run, monk
     ]
     assert lines == ["published generation 5 (previous 4) in 0.123 s"]
     stats = json.loads(run.stats.read_text())
-    assert (stats["parents"], stats["children"]) == (7, 9)
+    assert (stats["parents"], stats["children"]) == (7, 9) and stats["profile"] == run.profile
+
+
+def test_rollback_records_the_stats_of_the_generation_it_makes_live(run, monkeypatch):
+    run.stats.parent.mkdir(exist_ok=True)
+    run.stats.write_text(json.dumps({"parents": 900, "children": 3000, "profile": "other"}), encoding="utf-8")
+    generations = rows("live", "previous")
+    generations[0]["counts"] = {"parents": 120, "children": 400}
+    monkeypatch.setattr(gen, "rollback", lambda conn, target: {"live": 1, "previous": 2})
+    monkeypatch.setattr(gen, "generations", lambda conn, target: generations)
+    assert run("rollback")[0] == 0
+    stats = json.loads(run.stats.read_text())
+    assert (stats["parents"], stats["children"], stats["profile"]) == (120, 400, run.profile)
+    assert "sources" not in stats  # the generation's source set is not known: the next build is not size-gated
+
+
+def test_a_failed_stats_record_after_a_rollback_is_a_warning(run, monkeypatch):
+    monkeypatch.setattr(gen, "rollback", lambda conn, target: {"live": 1, "previous": 2})
+    monkeypatch.setattr(gen, "generations", lambda conn, target: (_ for _ in ()).throw(RuntimeError("database gone")))
+    code, lines = run("rollback")
+    assert code == 0 and lines[-1] == "warning: the build stats were not updated: database gone"
 
 
 def test_publish_still_records_the_stats_when_annotate_fails_after_the_commit(run, monkeypatch):

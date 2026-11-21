@@ -97,7 +97,9 @@ def build_corpus(
     before any download on a corrupt stats file or connector state and on an embedding server that serves another model.
     Builds with limit are never published and therefore not gated. `options` go to every source's context."""
     started = time.monotonic()
-    previous = gates.previous_stats(settings.overlay.paths.state_dir)
+    last = gates.previous_stats(settings.overlay.paths.state_dir)
+    built_set = gates.source_set(options, sources)
+    previous = gates.comparable(last, settings.profile_name, built_set)
     contexts = {name: context(settings, name, limit, reuse_inputs, options) for name in sources}
     for name, source in sources.items():
         for state_file in source.state_files:
@@ -163,6 +165,8 @@ def build_corpus(
     children = sum(len(p.children) for p in parents)
     checks["hosts"] = gates.hosts_gate(reports)
     checks["size"] = gates.size_gate(len(parents), previous, ingest.collections[settings.collection].min_build_ratio)
+    if last and not previous:
+        checks["size"]["skipped"] = "the last build was of another profile or source set"
     refused = None if limit else gates.refusal(checks)
     if refused:
         raise BuildRefused(refused, reports)
@@ -174,6 +178,8 @@ def build_corpus(
         "parents": len(parents),
         "units": parents,  # the Parents themselves; "parents" is their count
         "children": children,
+        "profile": settings.profile_name,
+        "source_set": built_set,
         "embedding": info,
         "minutes": {k: round(v / 60, 1) for k, v in minutes.items()},
         "minutes_total": round((time.monotonic() - started) / 60, 1),

@@ -55,6 +55,11 @@ def stub_pdfs(monkeypatch, documents=True):
     return calls
 
 
+def same_build(settings):
+    """The profile and source set `three_sources` is built under, as the stats file names them."""
+    return {"profile": settings.profile_name, "sources": gates.source_set(None, ("web", "pdfs", "maps"))}
+
+
 def three_sources(fakes, web_minimum=0, pdf_minimum=0):
     return {
         "web": fakes.Source([page("web1"), page("web2")], {"crawl": "kept", "crawl_pages": 2}, web_minimum),
@@ -149,9 +154,38 @@ def test_a_limit_build_skips_the_gates(settings, fakes, monkeypatch):
 def test_each_gate_refusal_says_swap_refused(settings, fakes, monkeypatch, case, message):
     stub_pdfs(monkeypatch, documents=case != "pdfs")
     if case == "size":
-        fakes.stats.write_text(json.dumps({"parents": 100}), encoding="utf-8")
+        fakes.stats.write_text(json.dumps({"parents": 100, **same_build(settings)}), encoding="utf-8")
         monkeypatch.setattr(build, "chunk_documents", lambda docs, **kwargs: [Parent()])
     sources = three_sources(fakes, web_minimum=200 if case == "web" else 0, pdf_minimum=1)
     with pytest.raises(RuntimeError) as refused:
         build.build_corpus(settings, sources, embedding=fakes.Embedding(None))
     assert str(refused.value) == message
+
+
+@pytest.mark.parametrize(
+    "last",
+    [
+        {"profile": "tu-informatik"},  # another profile, the same source set
+        {"sources": {"set": "full", "names": ["maps", "pdfs", "web"]}},  # the full set after a core build
+        {"sources": {"set": "core", "names": ["docs", "maps", "pdfs", "web"]}},  # a registered folder came or went
+        {"profile": None, "sources": None},  # stats written before they named either
+    ],
+)
+def test_a_smaller_build_of_another_profile_or_source_set_is_not_size_gated(settings, fakes, monkeypatch, last):
+    stub_pdfs(monkeypatch)
+    monkeypatch.setattr(build, "chunk_documents", lambda docs, **kwargs: [Parent()])
+    fakes.stats.write_text(json.dumps({"parents": 100, **same_build(settings), **last}), encoding="utf-8")
+    result = build.build_corpus(settings, three_sources(fakes), embedding=fakes.Embedding(None))
+    assert result["gates"]["size"]["passed"] and result["gates"]["size"]["skipped"]
+    assert result["profile"] == settings.profile_name
+    assert result["source_set"] == {"set": "core", "names": ["maps", "pdfs", "web"]}
+
+
+def test_the_source_set_asked_for_is_the_one_the_gate_compares(settings, fakes, monkeypatch):
+    stub_pdfs(monkeypatch)
+    monkeypatch.setattr(build, "chunk_documents", lambda docs, **kwargs: [Parent()])
+    fakes.stats.write_text(json.dumps({"parents": 100, **same_build(settings)}), encoding="utf-8")
+    result = build.build_corpus(
+        settings, three_sources(fakes), options={"sources": "full"}, embedding=fakes.Embedding(None)
+    )
+    assert result["gates"]["size"]["skipped"] and result["source_set"]["set"] == "full"
