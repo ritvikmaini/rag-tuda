@@ -736,9 +736,9 @@ class System:
         except subprocess.TimeoutExpired:
             raise StackError(f"{' '.join(argv[:3])} ...: no end after {timeout_s:g} s") from None
 
-    def output(self, argv: tuple[str, ...]) -> str | None:
+    def output(self, argv: tuple[str, ...], extra: Mapping[str, str] | None = None) -> str | None:
         try:
-            done = subprocess.run(argv, capture_output=True, text=True, timeout=30, env=self.child_env({}))
+            done = subprocess.run(argv, capture_output=True, text=True, timeout=30, env=self.child_env(extra or {}))
         except (OSError, subprocess.SubprocessError):
             return None
         return done.stdout if done.returncode == 0 else None
@@ -792,8 +792,9 @@ class System:
         return True
 
     def start_time(self, pid: int) -> str:
-        """When the process started, as `ps` prints it; a recycled pid has another start time."""
-        return (self.output(("ps", "-o", "lstart=", "-p", str(pid))) or "").strip()
+        """When the process started, as `ps` prints it; a recycled pid has another start time. The text is read in the C
+        locale and UTC, so a start time recorded in one environment (a terminal, cron, launchd) matches in another."""
+        return (self.output(("ps", "-o", "lstart=", "-p", str(pid)), {"LC_ALL": "C", "TZ": "UTC"}) or "").strip()
 
     def signal_group(self, pid: int, sig: int) -> None:
         try:
@@ -869,8 +870,12 @@ def _request(step: Step, system: System, out: Callable[[str], None]) -> None:
 
 def _stop(step: Step, system: System, out: Callable[[str], None]) -> None:
     found = read_pid(step.path)
-    # a pid that now has another start time is another process: only the file goes
-    if found and system.alive(found[0]) and found[1] and found[1] == system.start_time(found[0]):
+    if found and system.alive(found[0]) and (not found[1] or found[1] != system.start_time(found[0])):
+        # the process behind the pid may still be ours: it is not signalled, and its file stays as the way to find it
+        out(f"{step.name}: pid {found[0]} is running but its start time does not match {step.path}; not stopped")
+        out(f"  if it is not ours, delete {step.path}; if it is, stop pid {found[0]} by hand")
+        return
+    if found and system.alive(found[0]):
         pid = found[0]
         system.signal_group(pid, signal.SIGTERM)
         deadline = system.clock() + 20
