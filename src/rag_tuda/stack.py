@@ -907,7 +907,18 @@ def _stop(step: Step, system: System, out: Callable[[str], None]) -> None:
 
 
 def _remove(step: Step, system: System, out: Callable[[str], None]) -> None:
-    shutil.rmtree(step.path, ignore_errors=True)
+    path = Path(step.path)
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        return
+    except OSError:
+        pass  # what is left is named below
+    if path.exists():
+        raise StackError(
+            f"{path} could not be deleted completely (files a container wrote as root?): "
+            f"run `sudo rm -rf {path}`, or `docker run --rm -v {path.parent}:/x alpine rm -rf /x/{path.name}`"
+        )
 
 
 _STEPS: dict[str, Callable[[Step, System, Callable[[str], None]], None]] = {

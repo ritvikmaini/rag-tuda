@@ -670,3 +670,23 @@ def test_gather_reads_the_index_for_the_profile_asked_for_and_the_volume(tmp_pat
     assert volume == ("docker", "volume", "inspect", "rag-tuda_db-data", "--format", "{{.CreatedAt}}")
     system.output = lambda argv: None if "volume" in argv else docker_output(argv)  # `docker volume rm`, a Colima reset
     assert not built("tu-informatik")
+
+
+@posix
+@pytest.mark.skipif(sys.platform != "win32" and os.geteuid() == 0, reason="root can delete anything")
+def test_a_purge_that_leaves_files_behind_names_the_path_and_the_remedy(repo, monkeypatch, capsys):
+    """On Linux the compose indexer writes the crawl as root: the user's delete fails and must not report success."""
+    monkeypatch.setattr(stack, "System", lambda: FakeSystem())
+    current = state.ensure(repo)
+    locked = current.dir / "crawl" / "www.example.org"
+    locked.mkdir(parents=True)
+    (locked / "page.json").write_text("{}")
+    locked.chmod(0o500)  # a folder its owner cannot unlink from
+    try:
+        assert cli.main(["down", "--purge", "--yes"]) == 1
+        err = capsys.readouterr().err
+        assert str(current.dir / "crawl") in err and f"sudo rm -rf {current.dir / 'crawl'}" in err
+        assert (locked / "page.json").exists()
+    finally:
+        locked.chmod(0o700)
+    assert cli.main(["down", "--purge", "--yes"]) == 0 and not (current.dir / "crawl").exists()
