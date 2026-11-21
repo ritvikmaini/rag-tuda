@@ -190,6 +190,13 @@ def test_build_request_carries_the_filters_the_page_sends():
     assert query["po"] == ["2023"] and query["lang"] == ["de"]
 
 
+def opened_by(monkeypatch, fn):
+    """The request goes through an opener whose `open` is `fn(request, timeout=...)`."""
+    monkeypatch.setattr(
+        ask.urllib.request, "build_opener", lambda *handlers: type("Opener", (), {"open": staticmethod(fn)})
+    )
+
+
 def test_a_refused_filter_shows_the_backends_reason(monkeypatch):
     import io
     import urllib.error
@@ -198,7 +205,7 @@ def test_a_refused_filter_shows_the_backends_reason(monkeypatch):
         body = b'{"detail": "unknown filter: programme inf-x"}'
         raise urllib.error.HTTPError(req.full_url, 422, "Unprocessable", {}, io.BytesIO(body))
 
-    monkeypatch.setattr(ask.urllib.request, "urlopen", refused)
+    opened_by(monkeypatch, refused)
     with pytest.raises(ask.AskError, match="unknown filter: programme inf-x"):
         list(ask.stream("http://127.0.0.1:8700", "t", "q", "c", filters={"programme": "inf-x"}))
 
@@ -224,7 +231,7 @@ def test_stream_reads_lines_from_opener(monkeypatch):
         seen["auth"] = req.get_header("Authorization")
         return Resp()
 
-    monkeypatch.setattr(ask.urllib.request, "urlopen", fake_open)
+    opened_by(monkeypatch, fake_open)
     got = list(ask.stream("http://127.0.0.1:8700", "tok", "q", "cli"))
     assert seen["auth"] == "Bearer tok"
     assert got[0]["type"] == "meta" and got[-1]["type"] == "done"
@@ -238,13 +245,41 @@ def test_stream_turns_http_errors_into_ask_errors(monkeypatch):
     def boom(req, timeout=None):
         raise urllib.error.HTTPError(req.full_url, 401, "Unauthorized", {}, io.BytesIO(b""))
 
-    monkeypatch.setattr(ask.urllib.request, "urlopen", boom)
+    opened_by(monkeypatch, boom)
     with pytest.raises(ask.AskError, match="token"):
         list(ask.stream("http://127.0.0.1:8700", "bad", "q", "c"))
 
     def refused(req, timeout=None):
         raise urllib.error.URLError(ConnectionRefusedError())
 
-    monkeypatch.setattr(ask.urllib.request, "urlopen", refused)
+    opened_by(monkeypatch, refused)
     with pytest.raises(ask.AskError, match="rag up"):
         list(ask.stream("http://127.0.0.1:8700", "t", "q", "c"))
+
+
+def test_the_request_never_goes_through_a_proxy(monkeypatch):
+    """With HTTP_PROXY set and no no_proxy, urllib's default opener sends a loopback request to the proxy."""
+    import http.server
+    import threading
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            self.wfile.write(b'data: {"type": "done"}\n\n')
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    for name in ("no_proxy", "NO_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+    for name in ("http_proxy", "HTTP_PROXY"):
+        monkeypatch.setenv(name, "http://127.0.0.1:9")  # nothing listens there
+    try:
+        assert list(ask.stream(f"http://127.0.0.1:{server.server_port}", "tok", "q", "c")) == [{"type": "done"}]
+    finally:
+        server.shutdown()
+        server.server_close()

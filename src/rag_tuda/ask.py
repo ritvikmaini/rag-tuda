@@ -151,8 +151,11 @@ def stream(
     filters: Mapping[str, str | int] | None = None,
 ) -> Iterator[Frame]:
     req = build_request(base_url, token, question, conversation_id, formats, filters)
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({})
+    )  # the token and the question never go to a proxy
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT_S) as resp:
+        with opener.open(req, timeout=TIMEOUT_S) as resp:
             yield from parse(line.decode("utf-8") for line in resp)
     except urllib.error.HTTPError as exc:
         if exc.code in (401, 403):
