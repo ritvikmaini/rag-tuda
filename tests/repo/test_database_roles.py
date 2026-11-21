@@ -125,7 +125,8 @@ def test_the_init_script_names_the_password_file_it_misses():
 
 def test_the_init_script_never_logs_a_password_and_can_run_twice():
     sql = text("deploy/pgvector/init/01-init-roles.sql")
-    first = sql.index("CREATE ROLE")
+    first = sql.index("SELECT length(:'pw_indexer')")  # the first statement that carries a password literal
+    assert first < sql.index("CREATE ROLE")
     assert sql.index("SET log_min_error_statement = 'panic';") < first
     assert sql.index("SET log_statement = 'none';") < first
     for role, flag in (("rag_indexer", "new_indexer"), ("rag_app", "new_app"), ("rag_migrator", "new_migrator")):
