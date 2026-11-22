@@ -145,27 +145,18 @@ def test_a_reranker_failure_keeps_the_search_order_unscored(caplog) -> None:
     caplog.set_level(logging.ERROR)
     docs = asyncio.run(make_service(reranker=Reranker(None)).retrieve(["q"], question="q"))
     assert docs and all(d.metadata.get("rerank_failed") and d.metadata["cross_encoder_score"] == 0.0 for d in docs)
-    assert (
-        "Error calling reranker multi-query service: HTTPStatusError boom. Falling back to original documents."
-        in caplog.text
-    )
+    assert "Error calling reranker multi-query service: RerankError. Falling back to original documents." in caplog.text
+    assert "boom" not in caplog.text  # the class only, never the reranker's message
 
 
-def test_the_adapters_failure_is_logged_in_the_backends_words(caplog) -> None:
-    # the log line reads f"...service: {type(e).__name__} {e}. Falling back..." for the exception httpx raised
+def test_the_adapters_failure_is_logged_by_its_class_only(caplog) -> None:
     caplog.set_level(logging.ERROR)
-    request = httpx.Request("POST", "http://reranker_service:8003/v2/rerank")
-    with pytest.raises(httpx.HTTPStatusError) as raised:
-        httpx.Response(503, request=request).raise_for_status()
-    old = raised.value
-    expected = (
-        f"Error calling reranker multi-query service: {type(old).__name__} {old}. Falling back to original documents."
-    )
     client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(503)))
     asyncio.run(
         make_service(reranker=RerankerHttp("http://reranker_service:8003", client)).retrieve(["q"], question="q")
     )
-    assert expected in caplog.text
+    assert "reranker multi-query service: RerankError. Falling back" in caplog.text
+    assert "503" not in caplog.text and "reranker_service" not in caplog.text  # neither status nor URL
 
 
 def test_a_failed_query_is_logged_by_its_class_only(caplog) -> None:

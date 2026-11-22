@@ -178,7 +178,8 @@ def test_a_failing_lookup_or_reranker_adds_nothing(caplog) -> None:
     assert ids(docs) == ["p1"] and "reference lookup failed" in caplog.text
     caplog.clear()
     docs, _, _ = hop(by_ref, {"Anerkennung": 0.9}, "Siehe § 22 APB.", hop_fails=True)
-    assert ids(docs) == ["p1"] and "reference rerank failed" in caplog.text
+    assert ids(docs) == ["p1"] and "reference rerank failed: RerankError" in caplog.text
+    assert "boom" not in caplog.text  # the class only, never the reranker's message
 
 
 def test_the_hop_is_scored_against_the_standalone_question_not_the_first_search_query() -> None:

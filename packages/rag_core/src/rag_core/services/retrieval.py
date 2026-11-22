@@ -283,7 +283,7 @@ class RetrievalService:
         try:
             scored = await self.reranker.rerank([question], list(texts.values()), self.timeouts.reranker_s)
         except RerankError as e:
-            logger.error(f"[ReferenceHop] reference rerank failed: {e}")
+            logger.error(f"[ReferenceHop] reference rerank failed: {type(e).__name__}")
             return []
         score_of = {text: score for score, text in scored}
         threshold = self.retrieval.rerank.threshold
@@ -323,7 +323,9 @@ class RetrievalService:
         try:
             reranked_results = await self.reranker.rerank(queries, page_contents, self.timeouts.reranker_s)
         except RerankError as e:
-            logger.error(f"Error calling reranker multi-query service: {e}. Falling back to original documents.")
+            logger.error(
+                f"Error calling reranker multi-query service: {type(e).__name__}. Falling back to original documents."
+            )
             return mark_unscored(documents)
         logger.info(
             f"[DocumentRetriever] rerank call {time.monotonic() - started:.2f}s for {len(page_contents)} texts "
