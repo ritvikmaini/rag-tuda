@@ -1,11 +1,11 @@
-import { takeToken } from "../api/auth.js";
+import { followNewToken, takeToken } from "../api/auth.js";
 import { ASSISTANT_NAME, TEXT } from "../config.js";
 import { toggleTick } from "../features/tasks.js";
 import { LANG_KEY, applyStatic, detectLang, getLang, setLang } from "../i18n.js";
 import { h } from "../render/dom.js";
 import { hideTip, onTipScroll, showTip } from "../render/tooltip.js";
 import { stopLive } from "./ask.js";
-import { startChips } from "./chips.js";
+import { loadProfile, startChips } from "./chips.js";
 import { autosize, cancelEdit, onKeyDown, onSubmit, updateSend } from "./composer.js";
 import { onScroll, readerNearEnd, scrollToEnd, updateJump, userScrolled } from "./scroll.js";
 import { state, ui } from "./state.js";
@@ -35,6 +35,7 @@ function switchLang() {
 
 export function init() {
     takeToken(window);
+    followNewToken(window, loadProfile);
     setLang(detectLang(storedLang(), window.navigator.language));
     document.documentElement.lang = getLang();
     applyStatic(document, { name: ASSISTANT_NAME });

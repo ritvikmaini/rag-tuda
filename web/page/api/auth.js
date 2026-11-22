@@ -26,6 +26,24 @@ export function takeToken(win) {
     return token;
 }
 
+// A link opened again in the tab that already holds the page changes only the fragment: the browser does not reload, so the
+// page takes the new token here. It reloads (the profile it asked for before had no token), unless the token could not be stored
+// (blocked storage: a reload would lose it), then `again` asks for what failed once more.
+export function followNewToken(win, again) {
+    win.addEventListener("hashchange", () => {
+        if (win.location.hash.length <= 1) return;
+        const taken = takeToken(win);
+        let stored = "";
+        try {
+            stored = win.sessionStorage.getItem(TOKEN_KEY) || "";
+        } catch (error) {
+            // blocked: kept in memory only
+        }
+        if (stored === taken) win.location.reload();
+        else again();
+    });
+}
+
 // The init object of a fetch to /api/: the token when the tab has one, plus the caller's options.
 export function withToken(options) {
     return token ? Object.assign({}, options, { headers: { Authorization: "Bearer " + token } }) : options;

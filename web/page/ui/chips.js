@@ -107,7 +107,7 @@ function cleanProfile(data) {
     };
 }
 
-async function loadProfile() {
+export async function loadProfile() {
     try {
         const response = await fetch(PROFILE_PATH, withToken({ cache: "no-store" }));
         if (!response.ok) return;

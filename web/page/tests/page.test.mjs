@@ -538,3 +538,41 @@ test("sanitiser: class survives only on code (a forged mind-map box or citation 
     assert.equal(calls[0][1], "uponSanitizeAttribute");
     assert.equal(calls[1][1], page.SANITIZE_CONFIG);
 });
+
+// A window that fires hashchange when the test sets a new fragment; a reload is counted.
+function linkWindow(stored, blocked) {
+    const win = fakeWindow("", stored, blocked);
+    const listeners = [];
+    win.reloads = 0;
+    win.location.reload = () => { win.reloads += 1; };
+    win.addEventListener = (type, listener) => { if (type === "hashchange") listeners.push(listener); };
+    win.open = hash => {
+        win.location.hash = hash;
+        listeners.forEach(listener => listener());
+    };
+    return win;
+}
+
+test("a #token link opened again in the same tab is taken and the page reloads", () => {
+    const win = linkWindow("");
+    page.takeToken(win);
+    let again = 0;
+    page.followNewToken(win, () => { again += 1; });
+    win.open("#fresh");
+    assert.equal(win.kept.get("assistant-token-v1"), "fresh");
+    assert.deepEqual(win.replaced, [[null, "", "/?m=nh"]]);   // the token leaves the address bar
+    assert.equal(page.withToken({}).headers.Authorization, "Bearer fresh");
+    assert.deepEqual([win.reloads, again], [1, 0]);
+    win.open("");   // a change without a token is none of its business
+    win.open("#");
+    assert.deepEqual([win.reloads, again], [1, 0]);
+});
+
+test("with blocked storage a new #token link asks again instead of reloading", () => {
+    const win = linkWindow("", true);
+    let again = 0;
+    page.followNewToken(win, () => { again += 1; });
+    win.open("#in-memory");
+    assert.equal(page.withToken({}).headers.Authorization, "Bearer in-memory");
+    assert.deepEqual([win.reloads, again], [0, 1]);
+});
