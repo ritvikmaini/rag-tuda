@@ -71,8 +71,9 @@ export function tickKey(active, index) {
     return (active || "original") + ":" + index;
 }
 
-// A table cell as a number: German thousands and decimals, %, €, Tsd./Mio./Mrd., [n] removed; anything else is null.
-export function parseGermanNumber(cell) {
+// A table cell reduced to the digits of its number: [n], units (%, €, EUR) and the words Tsd/Mio/Mrd removed, the factor of
+// that word beside it. null for an empty cell.
+function numberText(cell) {
     let s = String(cell === null || cell === undefined ? "" : cell).replace(CITATION_PATTERN, "").replace(/ /g, " ").trim();
     if (!s) return null;
     let factor = 1;
@@ -80,10 +81,45 @@ export function parseGermanNumber(cell) {
     else if (/\bMio\b/i.test(s)) factor = 1e6;
     else if (/\bTsd\b/i.test(s)) factor = 1e3;
     s = s.replace(/\b(Mrd|Mio|Tsd)\.?/gi, "").replace(/€|%|\bEUR\b|\bEuro\b/gi, "").replace(/\s+/g, " ").trim();
+    return s ? { s, factor } : null;
+}
+
+// A table cell as a number: German thousands and decimals, %, €, Tsd./Mio./Mrd., [n] removed; anything else is null.
+export function parseGermanNumber(cell) {
+    const n = numberText(cell);
+    if (!n) return null;
     // spaces only as thousands separators ("58 316"); a leading zero is a phone number or an id, not a value
-    if (!/^[-+−]?(?:\d{1,3}(?:\.\d{3})+|\d{1,3}(?: \d{3})+|\d+)(?:,\d+)?$/.test(s) || /^[-+−]?0\d/.test(s)) return null;
-    const value = Number(s.replace("−", "-").replace(/[. ]/g, "").replace(",", "."));
-    return Number.isFinite(value) ? value * factor : null;
+    if (!/^[-+−]?(?:\d{1,3}(?:\.\d{3})+|\d{1,3}(?: \d{3})+|\d+)(?:,\d+)?$/.test(n.s) || /^[-+−]?0\d/.test(n.s)) return null;
+    const value = Number(n.s.replace("−", "-").replace(/[. ]/g, "").replace(",", "."));
+    return Number.isFinite(value) ? value * n.factor : null;
+}
+
+// The same for English numbers: commas as thousands, a point as the decimal separator.
+export function parseEnglishNumber(cell) {
+    const n = numberText(cell);
+    if (!n) return null;
+    if (!/^[-+−]?(?:[1-9]\d{0,2}(?:,\d{3})+|\d+)(?:\.\d+)?$/.test(n.s) || /^[-+−]?0\d/.test(n.s)) return null;
+    const value = Number(n.s.replace("−", "-").replace(/,/g, ""));
+    return Number.isFinite(value) ? value * n.factor : null;
+}
+
+// "1,500" is 1.5 in German and 1500 in English.
+const AMBIGUOUS_NUMBER = /^[-+−]?[1-9]\d{0,2},\d{3}$/;
+
+// The numbers of one table column, read in one language: one cell in the English form only ("1,234.5", "12.5") makes it an
+// English column, one in the German form only ("1,5", "1.234,5") a German one. A mixed column, one whose only evidence is
+// "1,500" cells and one with a cell that is no number have no safe reading: null.
+export function parseColumn(cells) {
+    const german = cells.map(parseGermanNumber);
+    const english = cells.map(parseEnglishNumber);
+    const only = (own, other) => own.some((v, i) => v !== null && other[i] === null);
+    const isGerman = only(german, english);
+    const isEnglish = only(english, german);
+    if (isGerman && isEnglish) return null;
+    const values = isEnglish ? english : german;
+    if (values.some(v => v === null)) return null;
+    const ambiguous = cells.some(cell => { const n = numberText(cell); return n && AMBIGUOUS_NUMBER.test(n.s); });
+    return ambiguous && !isGerman && !isEnglish ? null : values;
 }
 
 // Chart data from a table: the first column gives the labels, up to three columns whose every cell is a number give the
@@ -95,8 +131,8 @@ export function chartSpec(header, rows) {
     for (let c = 1; c < header.length; c++) {
         // the source column (tables end with one) is never a series, also when it holds bare numbers
         if (/^quellen?$/i.test(clean(header[c]))) continue;
-        const values = rows.map(row => parseGermanNumber(Array.isArray(row) ? row[c] : null));
-        if (values.every(v => v !== null)) {
+        const values = parseColumn(rows.map(row => (Array.isArray(row) ? row[c] : null)));
+        if (values) {
             series.push({ name: clean(header[c]), values, years: values.every(v => Number.isInteger(v) && v >= 1900 && v <= 2099) });
         }
     }

@@ -576,3 +576,19 @@ test("with blocked storage a new #token link asks again instead of reloading", (
     assert.equal(page.withToken({}).headers.Authorization, "Bearer in-memory");
     assert.deepEqual([win.reloads, again], [0, 1]);
 });
+
+test("chart numbers are read per column: an English column in English, an ambiguous one draws no chart", () => {
+    const rows = cells => cells.map((cell, i) => [String(2000 + i), cell]);
+    const values = cells => { const spec = page.chartSpec(["Jahr", "Wert"], rows(cells)); return spec && plain(spec.series[0].values); };
+    assert.deepEqual(values(["1,234.5", "2,000", "3.5"]), [1234.5, 2000, 3.5]);     // the English form decides the column
+    assert.deepEqual(values(["66,500", "70,250", "1,234,567"]), [66500, 70250, 1234567]);
+    assert.deepEqual(values(["1,5", "2,000", "3,25"]), [1.5, 2, 3.25]);              // the German form decides it
+    assert.deepEqual(values(["81.352", "82.019", "82.746"]), [81352, 82019, 82746]);   // thousands with points: German, as before
+    assert.equal(values(["1,500", "2,500", "66,500"]), null);                         // only "d,ddd" cells: German 1.5 or English 1500
+    assert.equal(values(["1,234.5", "1,5", "3"]), null);                              // both forms in one column
+    assert.equal(values(["1,234.5", "–", "3"]), null);
+    assert.equal(page.parseEnglishNumber("1,500"), 1500);
+    assert.equal(page.parseEnglishNumber("12.5 %"), 12.5);
+    assert.equal(page.parseEnglishNumber("0,5"), null);
+    assert.equal(page.parseEnglishNumber("1,2,3"), null);
+});
