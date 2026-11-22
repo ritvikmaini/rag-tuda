@@ -12,12 +12,13 @@ import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from
 import { sourceCards } from "../model/sources.js";
 import { chartConfig } from "../model/formats.js";
 import { handleFrame } from "../ui/ask.js";
-import { state } from "../ui/state.js";
+import { state, store } from "../ui/state.js";
 import { takeVariantFrame } from "../features/variants.js";
 import { recordStatus } from "../model/turns.js";
 import { chipChoices } from "../ui/chips.js";
 import { contactParts } from "../render/markdown.js";
 import { sourceElement } from "../render/sources.js";
+import { mindmapSources } from "../features/mindmap.js";
 import { menuEntries } from "../model/formats.js";
 import { readFileSync } from "node:fs";
 
@@ -382,4 +383,16 @@ test("small accent text and white-on-accent fills use the AA text token (test_ac
         assert.doesNotMatch(body, /(^|[;\s])color:\s*var\(--accent\)/, selector.trim());
         if (/(^|[;\s])color:\s*var\(--on-accent\)/.test(body)) assert.doesNotMatch(body, /background:\s*var\(--accent\)/, selector.trim());
     }
+});
+
+// ---- mind-map sources
+
+test("the mind map's source list uses the page language's page abbreviation", t => {
+    fakeDocument();
+    t.after(() => { delete globalThis.document; store.turns = []; setLang("de"); });
+    const entry = { n: 2, url: "https://docs.example.org/a.pdf", page: 4, title: "Titel" };
+    store.turns = [{ state: "done", thinking: { retrieval: true }, citations: [entry] }];
+    const label = lang => { setLang(lang); return mindmapSources("# A\n- Punkt [2]", store.turns[0]).children[0].children[0].textContent; };
+    assert.equal(label("de"), "[2] Titel, S. 4");
+    assert.equal(label("en"), "[2] Titel, p. 4");
 });

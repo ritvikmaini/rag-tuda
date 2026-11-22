@@ -42,7 +42,7 @@ export function mindmapSources(src, turn) {
     const wanted = new Set(citedNumbers(src));
     const items = entriesForTurn(store.turns, store.turns.indexOf(turn)).filter(e => wanted.has(e.n) && e.url).map(e =>
         h("li", null, h("a", { href: citationHref(e.url, e.page), target: "_blank", rel: "noopener noreferrer",
-            text: "[" + e.n + "] " + (e.title || readableSlug(e.url)) + (e.page ? ", S. " + e.page : "") })));
+            text: "[" + e.n + "] " + (e.title || readableSlug(e.url)) + (e.page ? ", " + TEXT.pageAbbr + " " + e.page : "") })));
     return items.length ? h("ol", { class: "mindmap-sources" }, ...items) : null;
 }
 
