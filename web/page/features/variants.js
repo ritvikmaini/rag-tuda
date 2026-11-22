@@ -7,7 +7,7 @@ import { citationEntries } from "../model/citations.js";
 import { shapeName } from "../model/formats.js";
 import { watchdogExpired, watchdogLimits } from "../model/streaming.js";
 import { pump, renderAnswer } from "../render/answer.js";
-import { DOTS_HTML, h } from "../render/dom.js";
+import { DOTS_HTML, h, showNotice } from "../render/dom.js";
 import { renderSources } from "../render/sources.js";
 import { updateSend } from "../ui/composer.js";
 import { state, store } from "../ui/state.js";
@@ -51,8 +51,7 @@ export async function startVariant(turn, view, name) {
         turn.versions = turn.versions.filter(v => v !== version);
         if (turn.versions.length < 2) turn.versions = [];
         Object.assign(turn, before);
-        view.variantNoticeText.textContent = result.stopped ? TEXT.variantStopped : TEXT.variantFailed;
-        view.variantNotice.hidden = false;
+        showNotice(view.variantNotice, view.variantNoticeText, result.stopped ? TEXT.variantStopped : TEXT.variantFailed);
     }
     turn.state = "done";
     view.shown = turn.answer.length;
@@ -132,8 +131,7 @@ export async function selectVersion(turn, view, name) {
         view.switching = false;
     }
     if (!ok) {
-        view.variantNoticeText.textContent = TEXT.selectFailed;
-        view.variantNotice.hidden = false;
+        showNotice(view.variantNotice, view.variantNoticeText, TEXT.selectFailed);
         return;
     }
     view.variantNotice.hidden = true;

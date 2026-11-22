@@ -2,7 +2,7 @@ import { TEXT } from "../config.js";
 import { copyTurn } from "../features/export.js";
 import { closeMenu, menuKey, toggleMenu } from "../features/menu.js";
 import { referenceLine, retryVisible } from "../model/turns.js";
-import { h, icon, svg } from "../render/dom.js";
+import { h, icon, showNotice, svg } from "../render/dom.js";
 import { toggleMore } from "../render/sources.js";
 import { toggleThinking } from "../render/thinking.js";
 import { editTurn, retryTurn } from "./composer.js";
@@ -13,8 +13,7 @@ import { state, store, ui, views } from "./state.js";
 export function renderTurnState(view, turn) {
     const s = turn.state;
     const message = s === "error" ? (turn.unauthorized ? TEXT.unauthorized : turn.refused ? TEXT.chipsRefused : TEXT.failed) : s === "stopped" ? TEXT.stopped : s === "interrupted" ? TEXT.interrupted : "";
-    view.notice.hidden = !message;
-    view.noticeText.textContent = message;
+    showNotice(view.notice, view.noticeText, message);
     view.notice.classList.toggle("is-error", s === "error" || s === "interrupted");
     const reference = referenceLine(turn);
     view.refLine.hidden = !reference;
@@ -38,7 +37,7 @@ export function renderTurn(turn) {
     view.thinking = h("div", { class: "thinking" }, view.toggle, view.collapse);
     view.body = h("div", { class: "md" });
     view.noticeText = h("span");
-    view.notice = h("p", { class: "notice", hidden: true }, icon("info"), view.noticeText);
+    view.notice = h("p", { class: "notice", role: "status", hidden: true }, icon("info"), view.noticeText);
     view.refLine = h("p", { class: "notice-ref", hidden: true });
     view.sourcesCount = h("span", { class: "sources-count" });
     view.sourceList = h("ul", { class: "source-list" });
@@ -68,7 +67,7 @@ export function renderTurn(turn) {
     view.actions = h("div", { class: "actions", hidden: true }, view.copyBtn, view.retryBtn, view.menuBtn, view.menu);
     view.tabs = h("div", { class: "versions", role: "tablist", "aria-label": TEXT.versions, hidden: true });
     view.variantNoticeText = h("span");
-    view.variantNotice = h("p", { class: "notice is-error", hidden: true }, icon("info"), view.variantNoticeText);
+    view.variantNotice = h("p", { class: "notice is-error", role: "status", hidden: true }, icon("info"), view.variantNoticeText);
     view.card = h("div", { class: "a-card", "aria-busy": "false" },
         view.thinking, view.tabs, view.variantNotice, view.body, view.notice, view.refLine, view.sources, view.actions);
     view.root = h("section", { class: "turn" },

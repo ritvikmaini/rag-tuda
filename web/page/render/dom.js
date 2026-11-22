@@ -20,6 +20,12 @@ export function svg(name, size) {
         'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + ICON_PATHS[name] + "</svg>";
 }
 
+// Shows a notice under a status role: the notice appears first and its text follows, so a screen reader announces it.
+export function showNotice(box, textEl, message) {
+    box.hidden = !message;
+    textEl.textContent = message;
+}
+
 // Small element builder; "html" is only ever used with the constant icons above.
 export function h(tag, attrs, ...children) {
     const el = document.createElement(tag);

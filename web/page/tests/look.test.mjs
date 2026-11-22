@@ -12,13 +12,15 @@ import { applyStatus, filterText, formatSeconds, newThinking, summaryText } from
 import { sourceCards } from "../model/sources.js";
 import { chartConfig } from "../model/formats.js";
 import { handleFrame } from "../ui/ask.js";
-import { state, store } from "../ui/state.js";
+import { state, store, ui, views } from "../ui/state.js";
 import { takeVariantFrame } from "../features/variants.js";
 import { recordStatus } from "../model/turns.js";
 import { chipChoices } from "../ui/chips.js";
 import { contactParts } from "../render/markdown.js";
 import { sourceElement } from "../render/sources.js";
+import { showNotice } from "../render/dom.js";
 import { mindmapSources } from "../features/mindmap.js";
+import { renderTurn } from "../ui/turns.js";
 import { menuEntries } from "../model/formats.js";
 import { readFileSync } from "node:fs";
 
@@ -385,7 +387,7 @@ test("small accent text and white-on-accent fills use the AA text token (test_ac
     }
 });
 
-// ---- mind-map sources
+// ---- mind-map sources and notices
 
 test("the mind map's source list uses the page language's page abbreviation", t => {
     fakeDocument();
@@ -395,4 +397,19 @@ test("the mind map's source list uses the page language's page abbreviation", t 
     const label = lang => { setLang(lang); return mindmapSources("# A\n- Punkt [2]", store.turns[0]).children[0].children[0].textContent; };
     assert.equal(label("de"), "[2] Titel, S. 4");
     assert.equal(label("en"), "[2] Titel, p. 4");
+});
+
+test("a notice appears before its text is set, and both notices carry the status role", t => {
+    const log = [];
+    const box = { set hidden(value) { log.push("hidden=" + value); } };
+    const textEl = { set textContent(value) { log.push("text=" + value); } };
+    showNotice(box, textEl, "Fehler");
+    showNotice(box, textEl, "");
+    assert.deepEqual(log, ["hidden=false", "text=Fehler", "hidden=true", "text="]);
+    fakeDocument();
+    ui.conversation = { appendChild() {} };
+    t.after(() => { delete globalThis.document; views.length = 0; delete ui.conversation; });
+    const view = renderTurn({ question: "Frage", answer: "", state: "done" });
+    assert.equal(view.notice.attrs.role, "status");
+    assert.equal(view.variantNotice.attrs.role, "status");
 });
