@@ -22,9 +22,11 @@ export function escapeHtml(text) {
 
 // Fenced blocks and inline code spans: left as they are.
 const CODE_RUN = /(```[\s\S]*?(?:```|$)|`[^`\n]*`)/;
-// The tags an answer can hold stay; an autolink or an e-mail address in angle brackets stays; any other <...> run is shown
-// as text (a placeholder such as <Rechnungsnummer> or <datum>).
-const HTML_TAG = /^\/?(a|b|i|u|s|p|em|strong|br|ul|ol|li|table|thead|tbody|tr|th|td|code|pre|sup|sub|span|div|hr|blockquote|h[1-6]|del|small|mark)(?=[\s/]|$)/;
+// The tags an answer can hold stay (they are also the only ones the sanitiser lets through); an autolink or an e-mail
+// address in angle brackets stays; any other <...> run is shown as text (a placeholder such as <Rechnungsnummer> or <datum>).
+export const ANSWER_TAGS = ["a", "b", "i", "u", "s", "p", "em", "strong", "br", "ul", "ol", "li", "table", "thead", "tbody", "tr",
+    "th", "td", "code", "pre", "sup", "sub", "span", "div", "hr", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6", "del", "small", "mark"];
+const HTML_TAG = new RegExp("^/?(" + ANSWER_TAGS.join("|") + ")(?=[\\s/]|$)");
 const AUTOLINK = /^[a-z][a-z0-9+.-]*:|^[^\s@]+@[^\s@]+$/i;
 
 // Escapes placeholders before the markdown converter, which would drop them as unknown elements.

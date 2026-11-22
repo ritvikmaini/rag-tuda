@@ -489,3 +489,52 @@ test("angle-bracket placeholders survive the markdown converter; tags and code s
     assert.ok(html("```\n<Name>\n```").includes("&lt;Name&gt;"));
     assert.equal(page.keepPlaceholders("<br> `<Ä>` <Ä> <max@x.de>"), "<br> `<Ä>` &lt;Ä&gt; <max@x.de>");
 });
+
+// The sanitiser's behaviour needs a DOM (the browser suite renders the same inputs in Chromium); here its settings and its
+// attribute hook are checked, with the markup showdown hands to it.
+function showdownHtml(markdown) {
+    const umd = { exports: {} };
+    new Function("module", "exports", readFileSync(new URL("../vendor/showdown-2.1.0.min.js", import.meta.url), "utf8"))(umd, umd.exports);
+    return new umd.exports.Converter({ tables: true, simplifiedAutoLink: true }).makeHtml(page.keepPlaceholders(markdown));
+}
+
+test("sanitiser: a tag split over two lines reaches it, and media tags are not among the tags it allows", () => {
+    for (const probe of ["<video\nsrc=https://evil.example/v>", "<audio\nsrc=https://evil.example/a autoplay>"]) {
+        assert.ok(/<(video|audio)\b/.test(showdownHtml(probe)), probe);
+    }
+    const allowed = page.SANITIZE_CONFIG.ALLOWED_TAGS;
+    for (const tag of ["video", "audio", "source", "track", "img", "iframe", "svg", "form", "style", "script"]) {
+        assert.ok(!allowed.includes(tag), tag);
+    }
+    assert.deepEqual(allowed, page.ANSWER_TAGS);   // what keepPlaceholders lets stand is what the sanitiser allows
+});
+
+test("sanitiser: data-, aria-, id, role and tabindex attributes are dropped (a forged citation marker has no tooltip data)", () => {
+    const forged = '<a class="cite" data-n="1" data-tip-title="Prüfungsordnung 2023" data-tip-quote="x" href="https://evil.example/">1</a>';
+    assert.ok(showdownHtml(forged).includes("data-tip-title"));   // the converter keeps it: the sanitiser must not
+    assert.equal(page.SANITIZE_CONFIG.ALLOW_DATA_ATTR, false);
+    assert.equal(page.SANITIZE_CONFIG.ALLOW_ARIA_ATTR, false);
+    for (const name of ["style", "id", "role", "tabindex"]) assert.ok(page.SANITIZE_CONFIG.FORBID_ATTR.includes(name), name);
+    assert.ok(page.SANITIZE_CONFIG.ADD_ATTR.includes("target"));
+});
+
+test("sanitiser: class survives only on code (a forged mind-map box or citation marker loses it, code.language-mindmap stays)", () => {
+    const kept = (nodeName, attrName) => {
+        const data = { attrName, keepAttr: true };
+        page.dropForeignClass({ nodeName }, data);
+        return data.keepAttr;
+    };
+    assert.equal(kept("DIV", "class"), false);   // <div class="mindmap" data-src="# A">
+    assert.equal(kept("A", "class"), false);     // <a class="cite" ...>
+    assert.equal(kept("SPAN", "class"), false);
+    assert.equal(kept("CODE", "class"), true);   // ```mindmap
+    assert.equal(kept("A", "href"), true);
+    // the hook is registered once per sanitiser, and every call carries the settings
+    const calls = [];
+    const purify = { addHook: (...args) => calls.push(["hook", args[0]]), sanitize: (html, config) => { calls.push(["sanitize", config]); return html; } };
+    page.sanitize(purify, "<p>a</p>");
+    page.sanitize(purify, "<p>b</p>");
+    assert.deepEqual(calls.map(c => c[0]), ["hook", "sanitize", "sanitize"]);
+    assert.equal(calls[0][1], "uponSanitizeAttribute");
+    assert.equal(calls[1][1], page.SANITIZE_CONFIG);
+});

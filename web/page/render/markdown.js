@@ -6,18 +6,14 @@ import { citationFacts, citationHref, citationLabel, citationParts, entriesForTu
 import { readableSlug } from "../model/sources.js";
 import { escapeHtml, keepPlaceholders } from "../model/text.js";
 import { h, svg } from "./dom.js";
+import { sanitize } from "./sanitize.js";
 import { state, store } from "../ui/state.js";
 
 // ---- answer rendering
 
 export function renderMarkdown(markdown) {
     if (state.converter && window.DOMPurify) {
-        return window.DOMPurify.sanitize(state.converter.makeHtml(keepPlaceholders(markdown)), {
-            ADD_ATTR: ["target"],
-            // answers are text: no styles, images, forms or embedded documents (overlays, remote requests)
-            FORBID_TAGS: ["style", "img", "form", "input", "button", "textarea", "select", "option", "iframe", "svg", "math"],
-            FORBID_ATTR: ["style"],
-        });
+        return sanitize(window.DOMPurify, state.converter.makeHtml(keepPlaceholders(markdown)));
     }
     return escapeHtml(markdown).replace(/\n/g, "<br>");
 }

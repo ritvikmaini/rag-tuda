@@ -92,6 +92,32 @@ def test_every_request_stays_on_the_page_server_and_ids_are_p_uuid(browser: Brow
         s.close()
 
 
+def test_an_answer_cannot_forge_the_pages_marks_or_load_media(browser: Browser, e2e: ModuleType) -> None:
+    hostile = {
+        "cite": '<a class="cite" data-n="1" data-tip-title="Fake" data-tip-quote="q" href="https://evil.example/">1</a>',
+        "mindmap": '<div class="mindmap" data-src="# A" id="cite-tip" role="status" tabindex="0">x</div>',
+        "video": "<video\nsrc=https://evil.example/v>",
+        "audio": "<audio\nsrc=https://evil.example/a autoplay>",
+        "code": "```mindmap\n# Thema\n- Punkt\n```",
+    }
+    s = e2e.Session(browser, str(e2e.PAGE))
+    try:
+        s.settle()
+        out = s.page.evaluate(
+            "async h => { const { renderMarkdown } = await import('./render/markdown.js');"
+            " return Object.fromEntries(Object.entries(h).map(([k, v]) => [k, renderMarkdown(v)])); }",
+            hostile,
+        )
+        assert "data-" not in out["cite"] and "class=" not in out["cite"] and "evil.example" in out["cite"]
+        for attr in ("class=", "data-", "id=", "role=", "tabindex="):
+            assert attr not in out["mindmap"]
+        assert "<video" not in out["video"] and "<audio" not in out["audio"]
+        assert "language-mindmap" in out["code"]
+        assert not [u for u in s.urls if "evil.example" in u]
+    finally:
+        s.close()
+
+
 AXE_STATES = {
     "first load": [],
     "lookup with sources": ["sources"],
