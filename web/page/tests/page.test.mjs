@@ -592,3 +592,14 @@ test("chart numbers are read per column: an English column in English, an ambigu
     assert.equal(page.parseEnglishNumber("0,5"), null);
     assert.equal(page.parseEnglishNumber("1,2,3"), null);
 });
+
+test("the counter and the limit text use the page language's number format; German stays 2.000", () => {
+    page.setLang("en");
+    const over = page.lengthState("x".repeat(2001));
+    assert.equal(over.counter, "2,001 / 2,000");
+    assert.ok(over.hint.includes("2,000") && !over.hint.includes("2.000"));
+    assert.equal(page.lengthState("x".repeat(1700)).counter, "1,700 / 2,000");
+    page.setLang("de");
+    assert.equal(page.lengthState("x".repeat(1700)).counter, "1.700 / 2.000");
+    assert.ok(page.lengthState("x".repeat(2001)).hint.includes("2.000"));
+});

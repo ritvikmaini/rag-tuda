@@ -16,8 +16,9 @@ export function questionLength(text) {
     return Array.from(String(text || "").trim()).length;
 }
 
+// The count in the page language's number format (2.000 in German, 2,000 in English).
 export function formatCount(n) {
-    return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return Number(n).toLocaleString(TEXT.printLocale);
 }
 
 // ok: nothing shown; near: counter and tip; over: counter, the reason and sending blocked.
