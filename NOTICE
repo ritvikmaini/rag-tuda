@@ -2,7 +2,8 @@ rag-tuda uses the third-party models, libraries and data listed here. Each keeps
 them and says what was checked. "Not read" means the licence text was not available locally when this file was written:
 read it at the source before redistributing anything.
 
-Models served by the model servers and the indexer (downloaded from Hugging Face, pinned by revision in the profile)
+Models served by the model servers and the indexer (downloaded from Hugging Face; only the embedder and the reranker are
+pinned by revision in the profile, docling's models follow the version of docling in uv.lock)
   Snowflake/snowflake-arctic-embed-m-v2.0   the embedder          licence stated on its model card: apache-2.0
   BAAI/bge-reranker-v2-m3                    the reranker          licence stated on its model card: apache-2.0
   docling-project/docling-layout-heron       PDF layout (docling)  licence stated on its model card: apache-2.0
@@ -12,7 +13,8 @@ Answer models named by the model cards in models/cards/ (pulled by Ollama or ser
   Qwen3 4B Instruct 2507 (s-qwen3-4b-instruct-2507, the default card)
                                              Apache License 2.0 (as printed by `ollama show --license`)
   gpt-oss 20B (l-groq-gpt-oss-20b)           Apache License 2.0 (as printed by `ollama show --license`)
-  Qwen3.5 4B, Qwen3.6 35B-A3B, Qwen3.8 27B, Gemma 4 E4B and 31B, gpt-oss 120B, and the vLLM example's Qwen3-235B-A22B
+  Qwen3.5 4B (s-qwen3.5-4b)                  Apache License 2.0 (read from the LICENSE of the local Hugging Face snapshot 851bf6e)
+  Qwen3.6 35B-A3B, Qwen3.8 27B, Gemma 4 E4B and 31B, gpt-oss 120B, and the vLLM example's Qwen3-235B-A22B
   Instruct 2507 FP8
                                              licence not read here (its page could not be reached from this machine);
                                              check before publishing

@@ -24,7 +24,7 @@ analysis = "off"
 
 # a full 8000-token window (7.3K prompt tokens) prefills at about 430 tokens/s and decodes at about 38 tokens/s on an M1 Max:
 # the first token comes after 18 s and a 700-token answer ends after 36 s (a cold model load adds up to 7 s); a request that
-# is not answered from the prompt cache analyses in 6 s. The limits are about twice the slowest case, for slower Macs.
+# is not answered from the prompt cache analyses in 6 s. The limits are 1.5 to 2 times the slowest case, for slower Macs.
 [timeouts]
 deadline_s = 150
 idle_s = 60

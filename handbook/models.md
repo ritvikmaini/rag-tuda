@@ -31,7 +31,7 @@ refuses otherwise. The XL card is shipped as an example to copy and has not been
 
 On one M1 Max with 64 GB and Ollama 0.40.12, `s-qwen3-4b-instruct-2507`: a prompt of about 6K tokens reaches its first token
 after 16.4 s (about 400 tokens/s prefill); decoding runs at 25 to 33 tokens/s. The card's comment gives the full 8K window as
-a first token after about 18 s and a 700-token answer ending after about 36 s. The card's timeouts are about twice the slowest
+a first token after about 18 s and a 700-token answer ending after about 36 s. The card's timeouts are 1.5 to 2 times the slowest
 case, for slower Macs. The M, L and XL cards have no measurements yet.
 
 ## Embedder and reranker

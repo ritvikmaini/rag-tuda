@@ -23,11 +23,12 @@ travels as a GET parameter. There is no telemetry.
 
 - **Native** (Apple-silicon Mac): Postgres alone in Docker; the embedding server, reranker server, indexer and backend are
   processes of the user, with pid files in `.rag/pids` and logs in `.rag/logs`; Ollama runs on the host.
-- **Compose** (Linux or WSL2): the whole stack in `deploy/compose.yaml`, with Ollama as a service; `compose.nvidia.yaml`
+- **Compose** (x86_64 Linux or WSL2): the whole stack in `deploy/compose.yaml`, with Ollama as a service; `compose.nvidia.yaml`
   gives the model servers a GPU and `compose.vllm.yaml` serves the language model with vLLM.
 
 The backend may call a remote OpenAI-compatible endpoint (Groq) for the answer. That is the only outbound call at question
-time, and the page shows which model and provider answer. The crawler is the only outbound traffic at build time.
+time, and the page shows which model and provider answer. At build time the crawler is the outbound traffic, and the indexer
+also downloads docling's layout and table models and the EasyOCR weights at the first PDF.
 
 ## Index
 

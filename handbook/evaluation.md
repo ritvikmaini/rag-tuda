@@ -26,10 +26,12 @@ answers; the residence disclaimer when a residence source is cited.
 
 ## Retrieval eval
 
-`rag eval --retrieval-only` reads the probe sets of `gate.yaml` (`--sets`, `--limit`), runs against the native stack only, and reports, after fusion and after reranking, hit@1,
+`rag eval --retrieval-only` reads the probe sets of `gate.yaml`, runs against the native stack only, and reports, after fusion and after reranking, hit@1,
 hit@3, hit@5, hit@10 and MRR. Only the analysis call uses the language model, and it is cached per run. The code lives in
 `apps/assistant_api/src/assistant_api/retrieval_eval.py` because the import contract bars `evals` from importing the
-assistant.
+assistant. `--sets` (comma-separated set names) and `--limit` (the first N conversations of each set) are options of
+`python -m assistant_api.retrieval_eval`, the module `rag eval --retrieval-only` runs; `rag eval` itself has only
+`--retrieval-only` and `--ablation`.
 
 `--ablation` runs one row per stage turned on, cumulatively: no filters, + filters, + acronyms, + fusion cut, + whole parents,
 + reference hop. It shows what each part of the design buys.
