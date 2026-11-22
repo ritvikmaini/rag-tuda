@@ -38,15 +38,16 @@ def source_set(options: Mapping[str, Any] | None, names: Iterable[str]) -> dict[
 
 def comparable(previous: Mapping[str, Any], profile: str, sources: Mapping[str, Any]) -> Mapping[str, Any]:
     """The previous stats when they describe a build of this profile and source set, else none: a build of another
-    size is no reference."""
-    same = previous.get("profile") == profile and previous.get("sources") == sources
+    size is no reference. A record of this profile that names no source set (a publish or a rollback wrote it) counts:
+    the size gate fails closed."""
+    same = previous.get("profile") == profile and previous.get("sources", sources) == sources
     return previous if same else {}
 
 
 def record_build_stats(state_dir: str, result):
     """Called after a successful swap, a publish or a rollback; the next build of the same profile and source set is
     compared against these counts (`result` names them: parents, children, documents, profile and sources; a
-    publish or a rollback does not know its source set). The file also marks the index as built.
+    publish or a rollback does not know its source set, and the next build still compares against it). The file also marks the index as built.
     Returns False (and logs) when the file cannot be written: the swap has happened, so
     the reply must not fail because of the stats file."""
     try:

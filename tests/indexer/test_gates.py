@@ -31,6 +31,9 @@ def test_stats_are_a_reference_only_for_the_same_profile_and_source_set():
     assert gates.comparable(stats, "example", core) == {}
     assert gates.comparable(stats, "tu", gates.source_set({"sources": "full"}, ["web", "docs"])) == {}
     assert gates.comparable({"parents": 100}, "tu", core) == {}  # written before the stats named them
+    unsourced = {"parents": 100, "profile": "tu"}  # a publish or a rollback wrote it: fails closed, still a reference
+    assert gates.comparable(unsourced, "tu", core) == unsourced
+    assert gates.comparable(unsourced, "example", core) == {}
 
 
 def test_the_first_failed_gate_names_itself_and_says_swap_refused():

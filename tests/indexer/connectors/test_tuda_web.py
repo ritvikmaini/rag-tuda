@@ -639,6 +639,21 @@ def test_shrunk_build_keeps_live_generation(builder, tmp_path):
     )
 
 
+def test_a_shrunk_build_right_after_a_publish_or_rollback_is_refused(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    live = list(builder.published)
+    stats_file = tmp_path / "state" / gates.STATS_NAME
+    written = json.loads(stats_file.read_text(encoding="utf-8"))
+    # what `indexer publish` and a rollback record: counts and profile, no source set
+    stats_file.write_text(json.dumps({k: written[k] for k in ("parents", "children", "profile")}), encoding="utf-8")
+    umbau = ("text/html", "<html><head><title>Umbau</title></head><body><p>Neue Seite.</p></body></html>")
+    redesigned = {**EXTRA_PAGES, **{url: umbau for url in (HUB, STUDIENBUERO, PRUEFUNGEN, EXTRA_HUB)}}
+    code, lines = builder(redesigned, TODAY + timedelta(days=1))
+    refused = [line for line in lines if line.startswith("refused:")]
+    assert code == 1 and len(refused) == 1 and "corpus shrank" in refused[0]
+    assert builder.published == live and not any(line.startswith("note: no size gate") for line in lines)
+
+
 def test_a_host_that_is_down_keeps_the_live_generation(builder, tmp_path):
     assert builder(EXTRA_PAGES)[0] == 0
     live = list(builder.published)

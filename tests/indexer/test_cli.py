@@ -143,7 +143,7 @@ def test_rollback_records_the_stats_of_the_generation_it_makes_live(run, monkeyp
     assert run("rollback")[0] == 0
     stats = json.loads(run.stats.read_text())
     assert (stats["parents"], stats["children"], stats["profile"]) == (120, 400, run.profile)
-    assert "sources" not in stats  # the generation's source set is not known: the next build is not size-gated
+    assert "sources" not in stats  # the generation's source set is not known; the gate still takes it as the reference
 
 
 def test_a_failed_stats_record_after_a_rollback_is_a_warning(run, monkeypatch):
