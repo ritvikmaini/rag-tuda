@@ -35,21 +35,26 @@ uv run rag up --profile example --yes   # the bundled labour-law example: no cra
 the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`), builds the index when there is none,
 creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints the link. The
 crawl of the default profile is polite: about one request per second per host. `--profile` defaults to the profile this
-folder was last started with, else `tu-informatik`; naming another profile switches. A model that is already on the
-machine is not downloaded again, and nothing is downloaded without your yes (`--yes` or the prompt). A second `up` changes nothing.
+folder was last started with, else `tu-informatik`; naming another profile switches, and a name without a
+`profiles/<name>/profile.yaml` is refused before any step, with the profiles that exist. A model that is already on the
+machine is not downloaded again, and nothing is downloaded without your yes (`--yes` or the prompt); for every profile but
+`example` the prompt also names the docling layout and table models and the EasyOCR weights that the indexer fetches itself
+at the first PDF. The index counts as built for a profile when the indexer's stats name that profile and the database volume
+is older than the stats; otherwise `up` builds it, so switching profiles builds the other profile's index and a removed
+volume is rebuilt. A second `up` changes nothing.
 
 The commands:
 
 | Command | What it does |
 |---|---|
 | `uv run rag doctor` | checks the machine and picks a class; `--card` shows one card's download size and whether it fits |
-| `uv run rag up` | brings the stack up; `--card`, `--profile`, `--mode native\|compose`, `--model`, `--llm-url`, `--yes` |
+| `uv run rag up` | brings the stack up; `--card`, `--profile` (only a profile that exists), `--mode native\|compose`, `--model`, `--llm-url`, `--yes` |
 | `uv run rag ask "<question>"` | asks one question and streams the cited answer; `--degree`, `--programme`, `--po`, `--lang` |
 | `uv run rag reindex` | builds a new index generation from a re-crawl, swaps it in and restarts the backend; `--full`, `--resume` |
-| `uv run rag rollback` | makes the previous index generation live again and restarts the backend |
+| `uv run rag rollback` | makes the previous index generation live again and restarts the backend; refused when the index was built for another profile than the stack runs (to go back to a profile, use `rag up --profile <name>`) |
 | `uv run rag eval` | the deploy smoke (stream structure) against the running stack, on the example profile for now; `--retrieval-only [--ablation]` scores retrieval alone, native mode only |
 | `uv run rag add <folder>` | registers a folder of your own documents (Markdown, text, PDF) as a source; then `rag reindex` |
-| `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots` |
+| `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots`, and fails naming the path and the remedy when files stay behind (written as root by a container) |
 
 ## Profiles
 
@@ -173,7 +178,21 @@ MRR 0.625 after fusion, and 1.00 and 1.000 after reranking. That is not a result
 
 Keep the index current with `rag reindex`, on a schedule. It needs Docker and the stack's Postgres running (a first `rag up`
 done), and it crawls again, so schedule it rarely. `rag reindex --resume` continues an interrupted crawl; `rag reindex --full`
-adds the full source set and takes hours. `rag rollback` makes the previous generation live again.
+adds the full source set and takes hours. The indexer's size check compares a build only with the last build of the same
+profile and source set (core or full, plus your folders). `rag rollback` makes the previous generation live again, and it
+stops when the index was built for another profile than the stack runs: after switching profiles, go back with
+`rag up --profile <name>`, not with `rag rollback`.
+
+The retention job removes conversations older than 90 days and Langfuse traces older than 30 days; without `--apply` it
+only reports. In compose mode, from the repository root:
+
+```sh
+docker compose --env-file .env -f deploy/compose.yaml exec -T backend python -m assistant_api.retention --apply
+```
+
+Natively, with the environment `rag up` gives the backend (the profile, the card and the secrets folder):
+`uv run --frozen --package assistant-api python -m assistant_api.retention --apply`. A run without tracing configured skips
+the trace step and still exits 0 when the other steps worked.
 
 A scheduled job has a bare environment. It needs `docker` and `uv` on its `PATH`, and with a hosted (`l-groq-...`) card the
 backend restart fails unless `GROQ_API_KEY` is in the job's environment too; `RAG__CRAWL__CONTACT` is optional (`rag reindex`
@@ -214,29 +233,36 @@ One launchd example for the Mac, `~/Library/LaunchAgents/rag-tuda.reindex.plist`
 Your own folders (`rag add <folder>`, then `rag reindex`) work in native mode only; compose mode prints a note on reindex and
 rollback when folders are registered. `uv run rag down` stops the stack and keeps the data.
 
-## Compose mode (Linux or WSL2)
+## Compose mode (x86_64 Linux or WSL2)
 
 `uv run rag up --mode compose` runs the compose files below with the card, its window, the profile and the secrets taken from
-`.rag/` (build, then migrate, then up, then a first request to the answer model).
+`.rag/` (download the two model snapshots after your yes, build, then migrate, then up, pull the card's model after your yes,
+then a first request to the answer model). The model servers' locks cover x86_64 Linux and Apple silicon only, so their images
+do not build on an arm64 Linux host.
 
 The stack needs Docker with compose. `deploy/compose.yaml` runs on the CPU with Ollama; add `-f deploy/compose.nvidia.yaml` for
 NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve the language model with vLLM
 instead of Ollama. The compose file names the project `rag-tuda`, so containers are `rag-tuda-<service>-1` and volumes
-`rag-tuda_<name>`. By hand, a fresh clone builds before it migrates:
+`rag-tuda_<name>`. By hand, a fresh clone downloads the two model snapshots, builds, then migrates:
 
 ```sh
 git clone <this repository> rag-tuda; cd rag-tuda
-cp .env_example .env    # then set BACKEND_REFRESH_TOKEN, and RAG_PROFILE=tu-informatik (the default there is example)
-PYTHONPATH=src python -m rag_tuda.state init    # the secret files under secrets/
+mkdir -p .rag; echo '{}' > .rag/indexer-overlay.yaml    # the TU profile has no folder sources; the default overlay names the example's law texts
+cp .env_example .env    # then set BACKEND_REFRESH_TOKEN, RAG_PROFILE=tu-informatik (the default there is example) and RAG_INDEXER_OVERLAY=../.rag/indexer-overlay.yaml
+uv run python -m rag_tuda.state init    # the secret files under secrets/ (0644 inside a 0700 folder: the containers do not run as root)
+uv run --frozen --project model_servers/embedding huggingface-cli download Snowflake/snowflake-arctic-embed-m-v2.0 --revision 95c2741480856aa9666782eb4afe11959938017f
+uv run --frozen --project model_servers/reranker huggingface-cli download BAAI/bge-reranker-v2-m3 --revision 953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e
 docker compose --env-file .env -f deploy/compose.yaml --profile build --profile evals build
-docker compose --env-file .env -f deploy/compose.yaml up -d pgvector
+docker compose --env-file .env -f deploy/compose.yaml up -d --wait pgvector
 docker compose --env-file .env -f deploy/compose.yaml --profile migrate run --rm migrate
 docker compose --env-file .env -f deploy/compose.yaml up -d
 docker compose --env-file .env -f deploy/compose.yaml exec ollama ollama pull qwen3:4b-instruct-2507-q4_K_M
 ```
 
-Ollama starts without a model; the last command downloads the default card's model (about 2.5 GB) once, and you run it after
-deciding to download. Model pulls in compose mode are always this manual step.
+The two downloads go to `~/.cache/huggingface`, which compose mounts (set `RAG_HF_CACHE` in `.env` for another home); the model
+servers load only from that cache and never download. Ollama starts without a model; the last command downloads the default
+card's model (about 2.5 GB) once, and you run it after deciding to download. Pulling by hand is the manual path only:
+`rag up --mode compose` pulls the card's model itself after your yes.
 
 Then build the first index: `docker compose --env-file .env -f deploy/compose.yaml --profile build run --rm indexer build`.
 The backend reports healthy (`/readyz`) only once an index is published. Every compose command names the file and the root
@@ -252,7 +278,7 @@ The backend reports healthy (`/readyz`) only once an index is published. Every c
 | `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes and the fixture mini-site; never in a service image), workspace members |
 | `profiles/` | `tu-informatik/` (profile, messages, prompts, roles, acronyms, sources) and `example/` (profile, messages, prompts, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/`) |
 | `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
-| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `compose.native.yaml` (Postgres alone on `127.0.0.1:55432`, for the native stack), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), `sql/`, the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
+| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `compose.native.yaml` (Postgres alone on `127.0.0.1:55432`, for the native stack), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
 | `web/page/` | the chat client: static files, the vendored libraries, its unit and browser tests |
 | `handbook/` | architecture, operations, evaluation, sources, models and design decisions |
 | `tests/` | unit, contract (`contracts/`), harness (`integration/`) and repository tests |
