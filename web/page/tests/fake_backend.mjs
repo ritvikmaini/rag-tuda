@@ -27,19 +27,19 @@ const ANSWERS = {
     steps: "So beantragen Sie eine Dienstreise [1].\n\n1. Antrag im Formular ausfüllen [1]\n2. Genehmigung der Abteilungsleitung " +
         "einholen [2]\n3. Reise nach der Rückkehr abrechnen – Kasse [2]",
     mindmap: "Ein Überblick über die Arbeitszeit [1].\n\n```mindmap\n# Arbeitszeit\n## Gleitzeit\n- Kernzeit 9 bis 15 Uhr [1]\n" +
-        "- Rahmenzeit 6 bis 20 Uhr [1]\n## Mobile Arbeit\n- Betriebsvereinbarung 2024 [2]\n- Antrag bei der Personalabteilung [2]\n" +
+        "- Rahmenzeit 6 bis 20 Uhr [1]\n## Mobile Arbeit\n- Dienstvereinbarung 2024 [2]\n- Antrag bei der Personalabteilung [2]\n" +
         "## Pausen\n- 30 Minuten ab 6 Stunden [1]\n```",
     shorter: "Kernzeit bis 15 Uhr [1].",
     longer: "Die Kernarbeitszeit endet um 15:00 Uhr [1]. Davor und danach gilt die Rahmenzeit von 6 bis 20 Uhr [1]. " +
-        "Mobile Arbeit regelt die Betriebsvereinbarung von 2024 [2].",
+        "Mobile Arbeit regelt die Dienstvereinbarung von 2024 [2].",
     simple: "Sie arbeiten in der Kernzeit bis 15 Uhr [1]. Danach können Sie gehen [1].",
     english: "Core working time ends at 3 p.m. (Kernarbeitszeit) [1].",
 };
 const CITATIONS = [
-    { n: 1, url: DOC, page: 2, title: "Betriebsvereinbarung Arbeitszeit", type: "Betriebsvereinbarung", origin: "Handbook", date: "2024", quote: "Kernzeit 9 bis 15 Uhr" },
-    { n: 2, url: DOC, page: 5, title: "Betriebsvereinbarung Arbeitszeit", type: "Betriebsvereinbarung", origin: "Handbook", date: "2024", quote: "Übertrag" },
+    { n: 1, url: DOC, page: 2, title: "Dienstvereinbarung Arbeitszeit", type: "Dienstvereinbarung", origin: "Handbook", date: "2024", quote: "Kernzeit 9 bis 15 Uhr" },
+    { n: 2, url: DOC, page: 5, title: "Dienstvereinbarung Arbeitszeit", type: "Dienstvereinbarung", origin: "Handbook", date: "2024", quote: "Übertrag" },
 ];
-const DOCS = [{ page_content: "x", metadata: { download_url: DOC, page_number: 2, title: "Betriebsvereinbarung Arbeitszeit" } }];
+const DOCS = [{ page_content: "x", metadata: { download_url: DOC, page_number: 2, title: "Dienstvereinbarung Arbeitszeit" } }];
 const made = new Map();  // conversation id -> version names of its last answer
 const originalShape = new Map();  // conversation id -> the shape of its last question's answer
 
