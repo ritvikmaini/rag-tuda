@@ -4,7 +4,7 @@ from rag_core.domain.text import clean_text, extract_year
 
 
 def test_extract_year():
-    assert extract_year("https://x/haushalt-2024/jahresbericht-der-stadt-beispiel-2024/") == 2024
+    assert extract_year("https://x/haushalt-2024/jahresbericht-der-universitaet-beispiel-2024/") == 2024
     assert extract_year(".../richtlinie-muster-verfahren-und-pruefung-der-posten2031-07/") == 2031
     assert extract_year("mitteilungsblatt-52-09", "Mitteilungsblatt 2021") == 2021
     assert extract_year("xy-zq-v3-11-27") is None

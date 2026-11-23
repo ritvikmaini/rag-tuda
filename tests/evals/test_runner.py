@@ -120,29 +120,37 @@ def test_source_url_page_match():
     def src(url):
         return [{"url": url, "title": "", "internal": False}]
 
-    exp = {"source_url_any": ["docs.example.org/leben/standesamt"], "source_url_match": "page"}
+    exp = {"source_url_any": ["docs.example.org/leben/studierendensekretariat"], "source_url_match": "page"}
     assert (
         "source_url_any"
-        not in checks.evaluate_turn("x", src("https://docs.example.org/leben/standesamt"), [], exp)["failed"]
-    )
-    assert (
-        "source_url_any"
-        not in checks.evaluate_turn("x", src("https://docs.example.org/leben/standesamt/"), [], exp)["failed"]
-    )
-    assert (
-        "source_url_any"
-        not in checks.evaluate_turn("x", src("https://docs.example.org/leben/standesamt#Eheschliessung"), [], exp)[
+        not in checks.evaluate_turn("x", src("https://docs.example.org/leben/studierendensekretariat"), [], exp)[
             "failed"
         ]
     )
     assert (
         "source_url_any"
-        in checks.evaluate_turn("x", src("https://docs.example.org/leben/standesamt/geburt"), [], exp)["failed"]
+        not in checks.evaluate_turn("x", src("https://docs.example.org/leben/studierendensekretariat/"), [], exp)[
+            "failed"
+        ]
     )
-    loose = {"source_url_any": ["docs.example.org/leben/standesamt"]}
     assert (
         "source_url_any"
-        not in checks.evaluate_turn("x", src("https://docs.example.org/leben/standesamt/geburt"), [], loose)["failed"]
+        not in checks.evaluate_turn(
+            "x", src("https://docs.example.org/leben/studierendensekretariat#Rueckmeldung"), [], exp
+        )["failed"]
+    )
+    assert (
+        "source_url_any"
+        in checks.evaluate_turn(
+            "x", src("https://docs.example.org/leben/studierendensekretariat/rueckmeldung"), [], exp
+        )["failed"]
+    )
+    loose = {"source_url_any": ["docs.example.org/leben/studierendensekretariat"]}
+    assert (
+        "source_url_any"
+        not in checks.evaluate_turn(
+            "x", src("https://docs.example.org/leben/studierendensekretariat/rueckmeldung"), [], loose
+        )["failed"]
     )
     plan = {"source_url_any": ["maps.example.org/#m=osm&zoomto=true&uid=358172"], "source_url_match": "page"}
     assert (

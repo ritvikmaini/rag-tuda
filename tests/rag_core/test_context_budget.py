@@ -58,16 +58,16 @@ def run(cands):
 
 def test_headers_numbers_and_sources():
     text = "[Page 4]\n" + "§ 3 Die Steuer beträgt 90 Euro im Jahr. " * 20 + "<!-- 🖼️❌ Image not available -->"
-    out = run([_doc("Hundesteuersatzung", 0.9, text), _doc("Gebühren", 0.5, text)])
+    out = run([_doc("Gebührensatzung", 0.9, text), _doc("Gebühren", 0.5, text)])
     ctx = out["context"]
     assert ctx.startswith("Es liegen 2 Quellen vor:")
     assert (
-        "### [1] Hundesteuersatzung\nexample.org | Satzung/Verordnung | Stand: 2021 | Seite 4\nLink: https://example.org/Hundesteuersatzung.pdf"
+        "### [1] Gebührensatzung\nexample.org | Satzung/Verordnung | Stand: 2021 | Seite 4\nLink: https://example.org/Gebührensatzung.pdf"
         in ctx
     )
     assert "[Page" not in ctx and "Image not available" not in ctx
     assert [s["n"] for s in out["sources"]] == [1, 2]
-    assert out["sources"][0]["section_id"] == "section-Hundesteuersatzung"
+    assert out["sources"][0]["section_id"] == "section-Gebührensatzung"
 
 
 def test_rank_score_wins_over_reranker_score():
@@ -99,17 +99,17 @@ def test_numbered_context_fits_the_budget():
 def test_the_scope_line_sits_between_the_fields_and_the_link():
     """The document's own scope statement, labelled by the profile; nothing without one or a label."""
     labels = SourceLabels(**{**EXAMPLE.__dict__, "scope": "Geltungsbereich laut Dokument"})
-    doc = _doc("Ansparung", 0.9, "Text zur Ansparung. " * 30, scope="An alle Beamtinnen und Beamten der Referate")
+    doc = _doc("Ansparung", 0.9, "Text zur Ansparung. " * 30, scope="An alle Beamtinnen und Beamten der Fachbereiche")
     assert cb.format_source(doc, labels=labels).startswith(
         "### Ansparung\nexample.org | Satzung/Verordnung | Stand: 2021 | Seite 4\n"
-        "Geltungsbereich laut Dokument: An alle Beamtinnen und Beamten der Referate\n"
+        "Geltungsbereich laut Dokument: An alle Beamtinnen und Beamten der Fachbereiche\n"
         "Link: https://example.org/Ansparung.pdf\n\n"
     )
     assert "Geltungsbereich" not in cb.format_source(doc, labels=EXAMPLE)
     assert "Geltungsbereich" not in cb.format_source(_doc("Ansparung", 0.9, "Text. " * 30), labels=labels)
     fixed = [SystemMessage(content="system"), HumanMessage(content="frage")]
     out = asyncio.run(cb.fit_context(BUDGET, FakeCounter(), fixed, [], [doc], labels=labels))
-    assert "Geltungsbereich laut Dokument: An alle Beamtinnen und Beamten der Referate\n" in out["context"]
+    assert "Geltungsbereich laut Dokument: An alle Beamtinnen und Beamten der Fachbereiche\n" in out["context"]
     assert "scope" not in out["sources"][0]  # the page's sources are unchanged
 
 
@@ -123,10 +123,10 @@ def test_the_words_around_the_sources_are_the_profiles_in_the_answers_language()
             "page": "Page",
         }
     )
-    docs = [_doc("Hundesteuersatzung", 0.9, "Text zur Steuer. " * 30), _doc("Gebühren", 0.5, "Text zur Gebühr. " * 30)]
+    docs = [_doc("Gebührensatzung", 0.9, "Text zur Abgabe. " * 30), _doc("Gebühren", 0.5, "Text zur Gebühr. " * 30)]
     fixed = [SystemMessage(content="system"), HumanMessage(content="frage")]
     out = asyncio.run(cb.fit_context(BUDGET, FakeCounter(), fixed, [], docs, labels=english))
-    assert out["context"].startswith("There are 2 sources:\n\n### [1] Hundesteuersatzung\n")
+    assert out["context"].startswith("There are 2 sources:\n\n### [1] Gebührensatzung\n")
     assert "example.org | Satzung/Verordnung | As of: 2021 | Page 4\nLink: https://example.org/" in out["context"]
     assert "Es liegen" not in out["context"] and "Stand" not in out["context"] and "Seite" not in out["context"]
     assert cb.join_sources([], english) == "No relevant information was found."

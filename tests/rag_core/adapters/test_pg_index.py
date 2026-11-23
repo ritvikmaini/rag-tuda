@@ -194,17 +194,17 @@ def test_a_filtered_frequent_term_is_logged_as_a_count_never_as_the_word(
     caplog,
 ):  # no question text in any log
     caplog.set_level(logging.INFO, logger="rag_core.adapters.pg_index")
-    counts = lambda p: [(50,)] if p["term"] in ("'stadt'", "'amt'") else [(1,)]  # noqa: E731
+    counts = lambda p: [(50,)] if p["term"] in ("'campus'", "'haus'") else [(1,)]  # noqa: E731
     pool: Any = Pool(
         [
             (AND, []),
-            (TSQ, [("'stadt' & 'amt' & 'garag'",)]),
+            (TSQ, [("'campus' & 'haus' & 'garag'",)]),
             (COUNT_TERM, counts),
             (COUNT_ALL, [(100,)]),
             (OR, []),
         ]
     )
-    asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Stadt Amt Garage", 3))
+    asyncio.run(pg_index.PgFullText(pool, "v", "german").search("Campus Haus Garage", 3))
     assert [r.getMessage() for r in caplog.records] == ["[FTS] Filtered 2 high-freq terms"]
 
 
@@ -247,26 +247,26 @@ def test_sections_and_their_failure_rule():
 
 
 def test_the_edge_rules_of_the_keyword_search_and_the_lookup():
-    counts = lambda p: [(50,)] if p["term"] == "'stadt'" else [(1,)]  # noqa: E731 - "stadt" is in 50 % of 100 children
+    counts = lambda p: [(50,)] if p["term"] == "'campus'" else [(1,)]  # noqa: E731 - "campus" is in 50 % of 100 children
     mixed: Any = Pool(
         [
             (AND, []),
-            (TSQ, [("'stadt' & 'garag'",)]),
+            (TSQ, [("'campus' & 'garag'",)]),
             (COUNT_TERM, counts),
             (COUNT_ALL, [(100,)]),
         ]
     )
-    asyncio.run(pg_index.PgFullText(mixed, "v", "german").search("Stadt Garage", 2))
+    asyncio.run(pg_index.PgFullText(mixed, "v", "german").search("Campus Garage", 2))
     assert [p["fts_de_or"] for t, p in mixed.conn.sent if OR in t] == ["'garag'"]
     every: Any = Pool(
         [
-            (TSQ, [("'stadt'",)]),
+            (TSQ, [("'campus'",)]),
             (COUNT_TERM, [(50,)]),
             (COUNT_ALL, [(100,)]),
         ]
     )
-    asyncio.run(pg_index.PgFullText(every, "v", "german").search("Stadt", 2))
-    assert [p["fts_de_or"] for t, p in every.conn.sent if OR in t] == ["'stadt'"]  # all frequent: all kept
+    asyncio.run(pg_index.PgFullText(every, "v", "german").search("Campus", 2))
+    assert [p["fts_de_or"] for t, p in every.conn.sent if OR in t] == ["'campus'"]  # all frequent: all kept
     empty: Any = Pool([(TSQ, [(None,)])])
     assert asyncio.run(pg_index.PgFullText(empty, "v", "german").search("der", 2)) == []
     assert len(empty.conn.sent) == 1  # no lexeme: no keyword query at all

@@ -48,7 +48,7 @@ TODAY = date(2026, 10, 26)
     [
         ("am 12.03.2019", date(2019, 3, 12)),
         ("Rechtsstand 1.7.2007", date(2007, 7, 1)),
-        ("Beispielstadt, den 26. 6.2019", date(2019, 6, 26)),
+        ("Beispielort, den 26. 6.2019", date(2019, 6, 26)),
         ("Rundschreiben v. 13.07.17 an alle", date(2017, 7, 13)),
         ("am 04.04.00 eröffnet", date(2000, 4, 4)),
         ("am 01.10.99 gegründet", date(1999, 10, 1)),

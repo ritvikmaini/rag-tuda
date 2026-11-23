@@ -40,7 +40,7 @@ def test_repair_ocrs_encoded_and_empty_pages_and_drops_what_stays_unreadable():
     def ocr(numbers):
         asked.append(list(numbers))
         return {
-            2: "A. Verwaltungshaushalt 2025 Einzelplan 7 Wirtschaftsförderung",
+            2: "A. Betriebshaushalt 2025 Einzelplan 7 Forschungsförderung",
             3: "Vorbericht: 27.481 Beschäftigte",
             4: "",
         }
@@ -48,7 +48,7 @@ def test_repair_ocrs_encoded_and_empty_pages_and_drops_what_stays_unreadable():
     repaired, quality = q.repair_pages(pages, page_count=4, ocr_fn=ocr)
     assert asked == [[2, 3, 4]]
     assert repaired[1] == good
-    assert repaired[2].startswith("A. Verwaltungshaushalt")
+    assert repaired[2].startswith("A. Betriebshaushalt")
     assert repaired[3].startswith("Vorbericht")
     assert 4 not in repaired
     assert quality == {

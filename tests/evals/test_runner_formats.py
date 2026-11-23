@@ -140,9 +140,9 @@ def test_english_answers_are_checked_for_their_language():
         "Civil servants and employees both receive 30 days of annual leave [1].\n\n| Group | Days | Quelle |\n"
         "| --- | --- | --- |\n| Civil servants | 30 | [1] |\n| Employees | 30 | [1] |\n\nPart-time staff receive leave pro rata [2].",
         "Flexitime applies to part-time staff as well (Betriebsvereinbarung über die gleitende Arbeitszeit an der Universität "
-        "Beispielstadt) [1]. Core time runs from 9 a.m. to 3 p.m. [1].",
+        "Beispiel) [1]. Core time runs from 9 a.m. to 3 p.m. [1].",
         "Special leave is regulated in the agreement on working time (Betriebsvereinbarung über die Arbeitszeit und die "
-        "Arbeitsbefreiung der Beschäftigten der Universität Beispielstadt) [1]. You apply via the Personnel Department (Personalabteilung) [1].",
+        "Arbeitsbefreiung der Beschäftigten der Universität Beispiel) [1]. You apply via the Personnel Department (Personalabteilung) [1].",
         "The university's 2026 budget amounts to 372,914,508 euros [1].",
     ]
     for text in english:

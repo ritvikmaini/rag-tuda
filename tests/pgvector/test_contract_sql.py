@@ -17,9 +17,9 @@ from rag_core.adapters import pg_index
 
 TARGET = gen.Target.for_collection("rag")
 TEXTS = (
-    "Die Fahrradgarage am Bahnhof hat dreihundert Stellplaetze",
-    "Die Stadtbuecherei oeffnet montags um neun Uhr",
-    "Der Wertstoffhof nimmt Sperrmuell und Gruenschnitt an",
+    "Die Fahrradgarage am Campus hat dreihundert Stellplaetze",
+    "Die Universitaetsbibliothek oeffnet montags um neun Uhr",
+    "Die Druckerei nimmt Plakate und Poster an",
     "Die Garage in der Mensa ist fuer Dienstwagen reserviert",
     "Stellplaetze fuer Fahrraeder gibt es an der Mensa",
     "Die Oeffnungszeiten des Studienbueros in der Mensa",

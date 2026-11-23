@@ -8,7 +8,7 @@ from indexer.chunking import structure, units
 
 def _doc(text, **meta):
     base = {
-        "title": "Hundesteuersatzung",
+        "title": "Gebührensatzung",
         "url": "https://docs.example.org/x.pdf",
         "source_type": "pdf",
         "doc_type": "Satzung/Verordnung",
@@ -21,7 +21,7 @@ def _doc(text, **meta):
 
 
 def test_parents_are_bounded_and_keep_page_metadata():
-    text = ("§ 1 Steuergegenstand. Das Halten eines Hundes im Stadtgebiet unterliegt der Steuer. " * 40).strip()
+    text = ("§ 1 Gebührengegenstand. Die Nutzung der Bibliothek auf dem Campus unterliegt der Gebühr. " * 40).strip()
     parents = units.chunk_documents([_doc(text)])
     assert len(parents) > 1
     assert all(len(p.text) <= units.PARENT_CHARS for p in parents)
@@ -31,24 +31,24 @@ def test_parents_are_bounded_and_keep_page_metadata():
 
 
 def test_children_carry_title_prefix_and_parent_id():
-    parents = units.chunk_documents([_doc("§ 2 Steuerpflicht. " * 60)])
+    parents = units.chunk_documents([_doc("§ 2 Gebührenpflicht. " * 60)])
     child = parents[0].children[0]
-    assert child.text.startswith("Hundesteuersatzung: ")
-    assert all(len(c.text) <= units.CHILD_CHARS + len("Hundesteuersatzung: ") for p in parents for c in p.children)
+    assert child.text.startswith("Gebührensatzung: ")
+    assert all(len(c.text) <= units.CHILD_CHARS + len("Gebührensatzung: ") for p in parents for c in p.children)
 
 
 def test_flat_documents_children_have_no_prefix():
     parents = units.chunk_documents(
         [
             _doc(
-                "Wertstoffhof Nord\nAdresse: Beispielstraße 1",
+                "Mensa Nord\nAdresse: Beispielstraße 1",
                 chunk="flat",
-                title="Wertstoffhof Nord",
+                title="Mensa Nord",
                 doc_key="flat1",
             )
         ]
     )
-    assert parents[0].children[0].text.startswith("Wertstoffhof Nord\n")
+    assert parents[0].children[0].text.startswith("Mensa Nord\n")
 
 
 def test_part_index_counts_per_document():
@@ -76,7 +76,7 @@ def _plain_chunk(docs):
 
 
 def test_recursive_mode_matches_the_plain_text_splitter():
-    text = ("§ 1 Steuergegenstand. Das Halten eines Hundes im Stadtgebiet unterliegt der Steuer. " * 40).strip()
+    text = ("§ 1 Gebührengegenstand. Die Nutzung der Bibliothek auf dem Campus unterliegt der Gebühr. " * 40).strip()
     docs = [_doc(text), _doc("Kurz.", page_number=4), _doc("Eintrag Bibliothek", chunk="flat", title="Bibliothek")]
     new = [
         (
@@ -109,7 +109,7 @@ def test_structure_mode_pages_metadata_and_header():
     }
     pdf, page = units.chunk_documents([p1, p2, web], mode="structure", header="tier1")
     header = pdf.metadata["context_header"]
-    assert header == "Hundesteuersatzung · Dienstanweisung/Dienstvereinbarung · Stand 2025 · § 2 Kernzeit: "
+    assert header == "Gebührensatzung · Dienstanweisung/Dienstvereinbarung · Stand 2025 · § 2 Kernzeit: "
     assert pdf.metadata["page_number"] == 1 and pdf.text.startswith("[Page 1]\n")
     assert pdf.metadata["section_path"] == "§ 2 Kernzeit"
     for child in pdf.children:
@@ -120,8 +120,8 @@ def test_structure_mode_pages_metadata_and_header():
     ctx = units.chunk_documents(
         [p1], mode="structure", contexts={"https://docs.example.org/x.pdf": "Regelt die Arbeitszeit."}
     )
-    assert ctx[0].metadata["context_header"] == "Regelt die Arbeitszeit. Hundesteuersatzung: "
-    assert ctx[0].children[0].text.startswith("Regelt die Arbeitszeit. Hundesteuersatzung: ")
+    assert ctx[0].metadata["context_header"] == "Regelt die Arbeitszeit. Gebührensatzung: "
+    assert ctx[0].children[0].text.startswith("Regelt die Arbeitszeit. Gebührensatzung: ")
 
 
 SCOPE = ScopeVocabulary(groups={"Beamtinnen und Beamte": ("beamt",)}, areas=(), compilations=())
@@ -130,20 +130,20 @@ SCOPE = ScopeVocabulary(groups={"Beamtinnen und Beamte": ("beamt",)}, areas=(), 
 def test_a_documents_scope_reaches_every_parent_and_no_child():
     """The key is section metadata only; children and their prefix stay byte for byte."""
     p1 = _doc(
-        "Rundschreiben 2025\nAn alle Beamtinnen und Beamten der Referate\n" + "Text zur Ansparung. " * 120,
+        "Rundschreiben 2025\nAn alle Beamtinnen und Beamten der Fachbereiche\n" + "Text zur Ansparung. " * 120,
         page_number=1,
     )
     p2 = _doc("Weiterer Text. " * 160, page_number=2)
-    flat = _doc("Wertstoffhof\nAn alle Beamtinnen und Beamten", chunk="flat", doc_key="flat1", title="Wertstoffhof")
+    flat = _doc("Mensa\nAn alle Beamtinnen und Beamten", chunk="flat", doc_key="flat1", title="Mensa")
     scoped = units.chunk_documents([p1, p2, flat], mode="structure", header="tier1", scope=SCOPE)
     plain = units.chunk_documents([p1, p2, flat], mode="structure", header="tier1")
     pdf = [p for p in scoped if "chunk" not in p.metadata]
-    assert len(pdf) > 1 and {p.metadata["scope"] for p in pdf} == {"An alle Beamtinnen und Beamten der Referate"}
+    assert len(pdf) > 1 and {p.metadata["scope"] for p in pdf} == {"An alle Beamtinnen und Beamten der Fachbereiche"}
     assert all("scope" not in p.metadata for p in scoped if p.metadata.get("chunk") == "flat")
     assert [(p.text, p.prefix, [c.text for c in p.children]) for p in scoped] == [
         (p.text, p.prefix, [c.text for c in p.children]) for p in plain
     ]
-    unscoped = units.chunk_documents([_doc("An alle Referate und Dienststellen\nText.")], mode="structure", scope=SCOPE)
+    unscoped = units.chunk_documents([_doc("An alle Fachbereiche und Dezernate\nText.")], mode="structure", scope=SCOPE)
     assert "scope" not in unscoped[0].metadata
     recursive = units.chunk_documents([p1], scope=SCOPE)  # recursive mode: pages stand alone, no document scope
     assert all("scope" not in p.metadata for p in recursive)
@@ -196,7 +196,7 @@ def test_every_child_starts_with_its_parents_prefix_and_the_prefix_is_recorded()
         assert p.prefix == p.metadata["context_header"] and p.children
         assert all(c.text.startswith(p.prefix) for c in p.children)
     [title] = units.chunk_documents([_doc("Kurz.")])
-    assert title.prefix == "Hundesteuersatzung: " and "context_header" not in title.metadata
+    assert title.prefix == "Gebührensatzung: " and "context_header" not in title.metadata
     assert all(c.text.startswith(title.prefix) for c in title.children)
     [flat] = units.chunk_documents([_doc("Bibliothek\nAdresse: Weg 1", chunk="flat", title="Bibliothek")])
     assert flat.prefix == "" and "context_header" not in flat.metadata

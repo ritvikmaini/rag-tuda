@@ -422,16 +422,16 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
             "example.pdfs",
         ),
         Parent(
-            "Wertstoffhof",
+            "Mensa",
             {
                 "section_id": "s3",
                 "part_index": 0,
-                "filename": "Wertstoffhof",
+                "filename": "Mensa",
                 "origin": "website",
                 "source_type": "map",
                 "doc_key": "https://map.example.org/#uid=1",
             },
-            (Child("Wertstoffhof"),),
+            (Child("Mensa"),),
             "",
             "example.maps",
         ),
@@ -455,7 +455,7 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
         "JOIN c29_chunks c ON c.section_id = s.section_id GROUP BY 1, 2"
     ).fetchall()
     assert sorted(joined) == sorted([("Öffnungszeiten in der Bibliothek", "Bibliothek", 2, True), ("§ 1 Geltung", "DA", 1, True),
-                                     ("Wertstoffhof", "Wertstoffhof", 1, True)])  # fmt: skip
+                                     ("Mensa", "Mensa", 1, True)])  # fmt: skip
     assert app.execute("SELECT metadata->'tags' FROM c29_sections WHERE content = '§ 1 Geltung'").fetchone()[0] == [
         "a",
         "b",
@@ -474,7 +474,7 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
     ).fetchone() == ("po", ["bsc-informatik", "msc-informatik"], [2023], None, datetime.date(2022, 1, 13), "en",
                      "https://docs.example.org/da#s", False)  # fmt: skip
     assert app.execute(
-        "SELECT regulation, programme, po_version, valid_from, twin_key FROM c29_sections WHERE content = 'Wertstoffhof'"
+        "SELECT regulation, programme, po_version, valid_from, twin_key FROM c29_sections WHERE content = 'Mensa'"
     ).fetchone() == (None, None, None, None, None)
     assert app.execute(
         "SELECT count(*), count(fts_en), count(programme) FILTER (WHERE programme = ARRAY['bsc-informatik', "

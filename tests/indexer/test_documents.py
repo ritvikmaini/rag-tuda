@@ -17,9 +17,7 @@ def test_resolve_title():
         "Richtlinie zur Pflege von Anlagen mit Grünflächen",
     ).startswith("Richtlinie zur")
     assert documents.resolve_title("Formblatt X", "Microsoft Word - form.docx", "Seite 1\nAntrag") == "Formblatt X"
-    assert (
-        documents.resolve_title("", "", "Seite 1\nAntrag auf Anwohnerparkausweis") == "Antrag auf Anwohnerparkausweis"
-    )
+    assert documents.resolve_title("", "", "Seite 1\nAntrag auf Semesterticket") == "Antrag auf Semesterticket"
     assert documents.resolve_title("", "", "") == "Dokument"
 
 
@@ -28,7 +26,7 @@ def test_clean_download_title():
     assert documents.clean_download_title("Musterordnung 14 06 2012") == "Musterordnung (14.06.2012)"
     assert documents.clean_download_title("420 3 2 Satzung") == "420 3 2 Satzung"  # numbers are kept as written
     assert documents.clean_download_title("Haushaltsbroschüre 2023") == "Haushaltsbroschüre 2023"
-    assert documents.clean_download_title("Amtsblatt Nr. 51_28") == "Amtsblatt Nr. 51_28"
+    assert documents.clean_download_title("Mitteilungsblatt Nr. 51_28") == "Mitteilungsblatt Nr. 51_28"
 
 
 def test_generic_or_file_name_titles_fall_back_to_the_manifest_title():

@@ -62,8 +62,7 @@ def test_describe_source_news_and_page():
     )
     assert page["type"] == "Webseite" and page["origin"] == "example.org"
     assert (
-        sm.describe_source({"title": "Wertstoffhof", "origin": "website", "source_type": "map"}, EXAMPLE)["origin"]
-        == "Karte"
+        sm.describe_source({"title": "Mensa", "origin": "website", "source_type": "map"}, EXAMPLE)["origin"] == "Karte"
     )
     assert sm.describe_source({"title": "DV mobile Arbeit", "origin": "archive"}, EXAMPLE)["origin"] == "Archiv"
 
@@ -87,7 +86,7 @@ def test_rank_per_document_cap():
         {"cross_encoder_score": 0.6, "doc_type": "Webseite", "doc_key": "web"},
         {"cross_encoder_score": 0.55, "doc_type": "Haushalt", "doc_key": "hh"},
     ]
-    kept, _, rep = rk.rank(metas, "Wie viele Schulen hat die Stadt?", rk.RankingPolicy(max_per_document=1))
+    kept, _, rep = rk.rank(metas, "Wie viele Fachbereiche hat die Universität?", rk.RankingPolicy(max_per_document=1))
     assert kept == [0, 2] and rep["capped"] == 2
 
 
@@ -176,12 +175,12 @@ def test_years_ignore_encoded_digits_and_future_years():
         sm.describe_source({"title": "Schulung", "url": web % "schulung/#Schulung%20%C2%A7%2045%20a"}, EXAMPLE)["date"]
         == ""
     )
-    assert sm.describe_source({"title": "Stadtradeln", "url": web % "Stadtradeln%2021/"}, EXAMPLE)["date"] == ""
+    assert sm.describe_source({"title": "Campuslauf", "url": web % "Campuslauf%2021/"}, EXAMPLE)["date"] == ""
     assert sm.describe_source({"title": "STEP 2040", "url": web % "step"}, EXAMPLE)["date"] == ""
     assert sm.describe_source({"title": "Sprengel", "url": web % "sprengel-2019/"}, EXAMPLE)["date"] == "2019"
     # a decoded fragment keeps its real date; an index doc_year after next year is not shown
     assert (
-        sm.describe_source({"title": "Radeln", "url": web % "radeln/#Stadtradeln%2011.%20Juli%202026"}, EXAMPLE)["date"]
+        sm.describe_source({"title": "Lauf", "url": web % "lauf/#Campuslauf%2011.%20Juli%202026"}, EXAMPLE)["date"]
         == "2026"
     )
     assert sm.describe_source({"title": "Plan", "doc_year": 2040, "url": web % "plan"}, EXAMPLE)["date"] == ""
@@ -193,8 +192,8 @@ def test_years_ignore_encoded_digits_and_future_years():
         {
             "cross_encoder_score": 0.5,
             "doc_type": "Webseite",
-            "title": "Radeln",
-            "url": web % "radeln/#Stadtradeln%2011.%20Juli%202026",
+            "title": "Lauf",
+            "url": web % "lauf/#Campuslauf%2011.%20Juli%202026",
         },
     ]
     _, adj, _ = rk.rank(metas, "Was gilt?", rk.RankingPolicy(**LIVE))

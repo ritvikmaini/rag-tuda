@@ -14,8 +14,8 @@ def scores(metas, question, **policy):
 
 def test_a_year_only_source_inside_the_period_gets_the_in_range_bonus():
     metas = [
-        {"cross_encoder_score": 0.5, "doc_type": "Amtsblatt", "doc_year": 2023},
-        {"cross_encoder_score": 0.5, "doc_type": "Amtsblatt", "doc_year": 2024},
+        {"cross_encoder_score": 0.5, "doc_type": "Mitteilungsblatt", "doc_year": 2023},
+        {"cross_encoder_score": 0.5, "doc_type": "Mitteilungsblatt", "doc_year": 2024},
         {"cross_encoder_score": 0.5, "doc_type": "Pressemitteilung", "doc_date": "2023-05-02", "doc_year": 2023},
     ]
     period = dict(date_from="2023-01-01", date_to="2023-12-31", in_range_bonus=0.2)
@@ -26,8 +26,8 @@ def test_a_year_only_source_inside_the_period_gets_the_in_range_bonus():
 def test_the_years_a_question_names_give_the_period_when_the_analysis_has_none():
     assert rk.question_period("Wie hoch war der Hebesatz im Jahr 2024?") == ("2024-01-01", "2024-12-31")
     assert rk.question_period("Schulen im Schuljahr 2022/2023?") == ("2022-01-01", "2023-12-31")
-    assert rk.question_period("Wie viele Einwohner hat Beispielstadt?") == (None, None)
-    assert rk.question_period("Einwohner am 31.12.2012 und Ende 2015?") == ("2012-01-01", "2015-12-31")
+    assert rk.question_period("Wie viele Studierende hat die Universität Beispiel?") == (None, None)
+    assert rk.question_period("Studierende am 31.12.2012 und Ende 2015?") == ("2012-01-01", "2015-12-31")
     assert rk.question_period("Kosten 1.500 Euro, Tel. 0000 556677, 2.019,50 €") == (None, None)
     metas = [
         {"cross_encoder_score": 0.5, "doc_type": "Haushalt", "doc_year": 2024},
@@ -43,8 +43,8 @@ def test_the_years_a_question_names_give_the_period_when_the_analysis_has_none()
 
 
 def test_no_recency_bonus_inside_a_named_period():
-    metas = [{"cross_encoder_score": 0.5, "doc_type": "Amtsblatt", "doc_year": 2026}]
-    recency = dict(recency_types=("Amtsblatt",), recency_bonus_per_year=0.01, recency_max_bonus=0.05)
+    metas = [{"cross_encoder_score": 0.5, "doc_type": "Mitteilungsblatt", "doc_year": 2026}]
+    recency = dict(recency_types=("Mitteilungsblatt",), recency_bonus_per_year=0.01, recency_max_bonus=0.05)
     assert scores(metas, "q", **recency) == [0.55]
     assert scores(metas, "q", date_from="2015-01-01", date_to="2015-12-31", **recency) == [0.55]  # default
     assert scores(metas, "q", date_from="2015-01-01", date_to="2015-12-31", no_recency_in_range=True, **recency) == [
