@@ -5,10 +5,10 @@ The choices where the design could have gone another way. The S-names are the on
 - **S1, acronyms and variants.** `acronyms.yaml` expands a matched term into an OR group inside the main full-text query
   ("PO" or "Prüfungsordnung"). A Postgres thesaurus file would need server-side files before the tables exist, so it is not
   used.
-- **S2, the deny-list.** A tracked-files check blocks traces of an unrelated earlier deployment, and a Claude-credit group
-  blocks attribution trailers; a second grep covers strings the list lacks.
-- **S3, tests.** Tests bound to the earlier deployment were deleted rather than rewritten; setup-only tests were re-pointed at
-  the example profile; the harness runs the example leg and a TU leg against a fixture mini-site.
+- **S2, the deny-list.** A tracked-files deny-list blocks strings that do not belong in this repository, attribution
+  trailers included.
+- **S3, tests.** Tests run against the example profile and the fixture mini-site; no test depends on data outside the
+  repository.
 - **S4, chips.** The page has chips for degree, programme and PO version. They are sticky, need no login, go with each
   question and show in the "understood" step. Explicit text in a question outranks a chip for that question.
 - **S5, retrieval eval.** `rag eval --retrieval-only` and `--ablation` are part of the minimal eval: the bake-offs need a
@@ -24,8 +24,7 @@ The choices where the design could have gone another way. The S-names are the on
 - **S10, filters and NULL.** For `po`, `mhb` and `spp` documents, programme and PO version are required, or the document is
   not indexed and the build summary lists it. For every other type NULL means "applies to all". An empty filtered result gives
   a "nothing found" answer naming the filter, never a silent unfiltered retry.
-- **S11, history.** Early work happened in a throwaway repository; this repository starts from the purged tree with the
-  deny-list blocking from its first commit, so its history holds no content from the earlier deployment.
+- **S11, history.** The history starts from one reviewed tree, with the deny-list blocking from the first commit.
 
 ## Other choices
 
@@ -36,5 +35,5 @@ The choices where the design could have gone another way. The S-names are the on
 - **Quality floor in code.** The citations frame, the PO-version line, the residence disclaimer and the translation note are
   built in code, not left to the prompt; a decline happens when no source passes the reranker threshold.
 - **One adapter, cards for the rest.** Model-specific workarounds live in the card's quirks, not in the code.
-- **Open-weight only.** No proprietary model API; Claude is a development tool, never the runtime model.
+- **Open-weight only.** No proprietary model API; every runtime model is open-weight.
 - **Crawled content stays local.** It lives in `.rag/crawl/`, never in git.
