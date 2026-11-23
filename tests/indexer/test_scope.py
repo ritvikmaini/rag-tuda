@@ -79,7 +79,8 @@ def test_a_sentence_about_the_document_counts_on_any_page():
         "Vorliegende Änderungen gelten ausschließlich für Beschäftigte des TVöD."
     )
     assert (
-        scope("Rundschreiben\nDie Regelung gilt für das Rechenzentrum.") == "Die Regelung gilt für das Rechenzentrum."
+        scope("Rundschreiben\nDie Regelung gilt für die Rechenzentrumsleitung.")
+        == "Die Regelung gilt für die Rechenzentrumsleitung."
     )
 
 
