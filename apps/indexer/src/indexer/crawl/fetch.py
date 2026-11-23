@@ -42,7 +42,8 @@ from indexer.crawl.robots import Robots
 
 __all__ = ["NEVER_FETCHED", "Fetcher", "Response", "Skipped", "user_agent"]
 
-# whatever the allow-list says: the city's main site blocks crawlers by name, and h-da.de is not part of this project
+# whatever the allow-list says: www.darmstadt.de (Darmstadt's main site) blocks crawlers by name, and h-da.de is not
+# part of this project
 NEVER_FETCHED = ("www.darmstadt.de", "h-da.de")
 BLOCKING_META = frozenset({"noindex", "noai", "none"})
 REDIRECTS = frozenset({301, 302, 303, 307, 308})

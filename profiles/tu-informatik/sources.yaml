@@ -1,6 +1,6 @@
 # The crawl's host allow-list; every other host is refused. A core host is built by every build, a full host only by a
-# full build; a core host with a `full` block lists more pages in a full build. Prefixes are URL paths. The city's main
-# site (www.darmstadt.de) and the other university (h-da.de) are never listed.
+# full build; a core host with a `full` block lists more pages in a full build. Prefixes are URL paths.
+# www.darmstadt.de (Darmstadt's main site) and h-da.de are never listed.
 # Selectors: only the FB20 host's section selector is read from a page's markup; every other selector is unverified. The
 # statutes of gesetze-im-internet.de are not crawled as pages; they come from the official XML (`laws`, read by the law
 # connector through the same fetcher, so the host is on the allow-list and robots.txt applies).

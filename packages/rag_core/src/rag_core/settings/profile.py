@@ -242,7 +242,7 @@ class Profile(ProfileModel):
 # --- the files beside profile.yaml: sources.yaml, roles.yaml and acronyms.yaml ----------------------------------------
 # Each is a model of its own, read with load_profile(); none is a section of Profile.
 
-# the city's main site (its robots.txt shuts out AI agents) and the other university: no crawl host, whatever else is listed
+# www.darmstadt.de (its robots.txt shuts out AI agents) and h-da.de: no crawl host, whatever else is listed
 NEVER_CRAWLED = ("darmstadt.de", "www.darmstadt.de", "h-da.de")
 TERM = re.compile(r"(WiSe) (\d{4})/(\d{2})|(SoSe) (\d{4})")
 PROGRAMME_ID = re.compile(r"[a-z][a-z0-9]*(-[a-z0-9]+)*")
