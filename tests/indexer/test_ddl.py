@@ -13,11 +13,32 @@ def test_v2_names_follow_the_base_name():
     }
 
 
-def test_the_typed_views_list_their_columns_and_no_legacy_column():
+def test_the_typed_views_list_their_columns():
     chunks, sections = ddl.typed_views("example", "example_g0012_chunks", "example_g0012_sections")
     assert chunks.startswith('CREATE OR REPLACE VIEW "example_chunks" AS SELECT chunk_id, section_id, document_id')
     assert sections.startswith('CREATE OR REPLACE VIEW "example_sections" AS SELECT section_id, document_id')
-    assert "langchain" not in chunks + sections and "*" not in chunks + sections
+    assert "*" not in chunks + sections
+
+
+def _table_columns(create_table: str) -> list[str]:
+    body = create_table[create_table.index("(") + 1 : create_table.rindex(")")]
+    parts, depth, start = [], 0, 0
+    for i, ch in enumerate(body):  # split at the commas outside parentheses: text[], vector(768), CHECK (...)
+        depth += (ch == "(") - (ch == ")")
+        if ch == "," and depth == 0:
+            parts.append(body[start:i])
+            start = i + 1
+    parts.append(body[start:])
+    return [p.split()[0] for p in parts]
+
+
+def test_the_tables_and_the_views_have_exactly_the_expected_columns():
+    sections, chunks = ddl.create_tables("a_sections", "a_chunks", 768)
+    assert _table_columns(sections) == list(ddl.TYPED_SECTIONS)
+    assert _table_columns(chunks) == list(ddl.TYPED_CHUNKS)
+    chunk_view, section_view = ddl.typed_views("example", "a_chunks", "a_sections")
+    assert chunk_view.split(" AS SELECT ")[1].split(" FROM ")[0].split(", ") == list(ddl.TYPED_CHUNKS)
+    assert section_view.split(" AS SELECT ")[1].split(" FROM ")[0].split(", ") == list(ddl.TYPED_SECTIONS)
 
 
 def test_the_document_metadata_is_typed_on_both_tables_and_both_views():
@@ -60,10 +81,9 @@ def test_required_indexes_name_their_definitions():
     assert names == {"gin on fts_de", "gin on fts_en", "primary chunk_id", "btree on section_id"}
 
 
-def test_new_chunk_tables_carry_no_legacy_column():  # new generations have no langchain_* columns
+def test_the_chunk_table_ends_with_the_extra_column():
     chunks = ddl.create_tables("a_sections", "a_chunks", 768)[1]
-    assert "langchain" not in chunks and chunks.endswith("extra jsonb NOT NULL DEFAULT '{}'::jsonb)")
-    assert not [n for n, _, _ in ddl.REQUIRED_INDEXES["children"] if "langchain" in n]
+    assert chunks.endswith("extra jsonb NOT NULL DEFAULT '{}'::jsonb)")
 
 
 def test_the_cache_and_the_registry_are_created_with_the_generation_tables():

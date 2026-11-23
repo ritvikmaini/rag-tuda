@@ -37,7 +37,7 @@ def test_describe_source_uses_the_live_metadata():
         "date": "2024",
         "url": url,
     }
-    # the legacy title keys are no longer read (every parent of the live index has a title)
+    # only the `title` key names a source; download_title is not read
     assert (
         sm.describe_source({"download_title": "X", "doc_type": "Haushalt", "download_url": url}, EXAMPLE)["title"]
         == "Dokument"

@@ -13,7 +13,7 @@ from indexer.index import generations as gen  # noqa: E402
 SOURCE = open(
     os.path.join(ROOT, "apps", "indexer", "src", "indexer", "index", "generations.py"), encoding="utf-8"
 ).read()
-# pg_get_indexdef of a v2 pair the writer built (ddl.create_tables + ddl.create_indexes; no legacy column)
+# pg_get_indexdef of a v2 pair the writer built (ddl.create_tables + ddl.create_indexes)
 CHILDREN = [
     ("CREATE INDEX example_g0014_chunks_fts_de ON public.example_g0014_chunks USING gin (fts_de)", True, False),
     ("CREATE INDEX example_g0014_chunks_fts_en ON public.example_g0014_chunks USING gin (fts_en)", True, False),
@@ -71,7 +71,7 @@ def test_the_gate_names_a_missing_invalid_or_non_unique_index():
 
 
 def test_the_viewdef_parser_finds_the_table():
-    assert gen.viewdef_table(" SELECT langchain_id,\n    content\n   FROM example_g0003;") == "example_g0003"
+    assert gen.viewdef_table(" SELECT chunk_id,\n    content\n   FROM example_g0003;") == "example_g0003"
     assert gen.viewdef_table(' SELECT a\n   FROM public."example_g0004_parents";') == "example_g0004_parents"
     assert gen.viewdef_table("") is None
 

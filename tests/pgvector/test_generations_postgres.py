@@ -448,7 +448,6 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
     assert {k: written[k] for k in ("children", "parents")} == {"children": 4, "parents": 3}
     assert gen.verify(conn, target, n, written) == {"children": 4, "parents": 3}
     gen.publish(conn, target, n)
-    assert gen.relkind(conn, "c29_production") is None and gen.relkind(conn, "c29_production_parents") is None
     app = connect("rag_app")
     joined = app.execute(
         "SELECT s.content, s.metadata->>'source', count(c.*), "

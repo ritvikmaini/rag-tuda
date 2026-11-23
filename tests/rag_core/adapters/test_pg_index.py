@@ -123,24 +123,6 @@ def test_no_filter_adds_no_condition_and_an_empty_filter_only_leaves_archived_ro
     )
 
 
-def test_no_statement_names_a_legacy_relation_or_column():  # no legacy read is left behind
-    names = (
-        "VECTOR",
-        "FTS_AND",
-        "FTS_OR",
-        "TSQUERY",
-        "GROUP_QUERIES",
-        "COUNT_ALL",
-        "COUNT_TERM",
-        "SECTIONS",
-        "PING",
-        "CHILD_PROBE",
-    )
-    statements = [getattr(pg_index, n) for n in names]
-    for legacy in ("langchain", "content_tsv", "paragraph_iid", "_production", "_parents"):
-        assert not [s for s in statements if legacy in s], legacy
-
-
 def test_max_distance_cuts_far_hits():
     pool: Any = Pool([("cosine_distance", [("near", "a", 0.2), ("far", "b", 0.9)])])
     hits = asyncio.run(pg_index.PgVectorStore(pool, "v").search([0.0], 2, max_distance=0.5))

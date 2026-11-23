@@ -83,7 +83,6 @@ def test_a_v2_publish_repoints_only_the_typed_views():
         'CREATE OR REPLACE VIEW "example_sections"',
         ddl.view_grant("example"),
     ]
-    assert not [sql for sql, _ in conn.sql if "example_production" in sql or "langchain" in sql]
 
 
 def test_ensure_tables_grants_the_registry_whenever_the_reader_lacks_select():

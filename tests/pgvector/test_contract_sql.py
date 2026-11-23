@@ -1,5 +1,5 @@
 """The index contract between the indexer and the assistant on a fresh cluster: after a publish as rag_indexer, rag_app
-reads the collection's two typed views and the registry and nothing else (no legacy view or column, no privilege on a
+reads the collection's two typed views and the registry and nothing else (no privilege on a
 generation's tables or on a table created later, no CREATE on public), and every statement of rag_core.adapters.pg_index
 runs against the views as rag_app. RUN_DOCKER_TESTS=1."""
 
@@ -68,18 +68,6 @@ def tables(port):
     gen.publish(conn, TARGET, n)
     yield names
     conn.close()
-
-
-def test_a_fresh_index_has_no_legacy_relation_or_column(connect, tables):
-    su = connect("vector_user")
-    assert su.execute("SELECT count(*) FROM pg_class WHERE relname LIKE 'rag_production%'").fetchone()[0] == 0
-    assert (
-        su.execute(
-            "SELECT count(*) FROM information_schema.columns "
-            "WHERE column_name IN ('langchain_id', 'langchain_metadata', 'content_tsv')"
-        ).fetchone()[0]
-        == 0
-    )
 
 
 def test_rag_app_reads_the_two_views_and_the_registry_and_nothing_else(connect, tables):

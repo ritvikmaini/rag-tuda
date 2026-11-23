@@ -171,7 +171,7 @@ def test_section_metadata_is_the_handoff_round_trip(settings):
     assert json.loads(rows[0]["metadata"]) == expected
     assert json.loads(rows[1]["metadata"])["file-folder"] == "F"  # the group's first parent's folder_iid
     assert rows[1]["content"] == "Inhalt mit Umlaut ü"
-    assert rows[0]["metadata"] == json.dumps(expected)  # the legacy writer's json.dumps text, key order included
+    assert rows[0]["metadata"] == json.dumps(expected)  # the json.dumps text, key order included
 
 
 def test_the_typed_columns_follow_the_interfaces_rule(settings):
