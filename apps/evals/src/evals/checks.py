@@ -318,7 +318,7 @@ NEGATION = re.compile(r"\b(nicht|kein\w*)\b", re.IGNORECASE)
 CLAUSE = re.compile(r"[;,](?!\d)\s*|\s+(?:bzw\.?|während|sowie|und für)\s+", re.IGNORECASE)
 AND = re.compile(r"\s+und\s+", re.IGNORECASE)
 # a sentence ends at . ! ? before a capital, never after a number ("30. April"), a single small letter ("z. B.") or a common
-# abbreviation ("Hl."), but after a full date ("31.03. Für Beamte …")
+# abbreviation ("Nr."), but after a full date ("31.03. Für Beamte …")
 ABBREVIATIONS = "".join(
     rf"(?<!\b{a}\.)"
     for a in ("Hl", "Dr", "St", "Nr", "Abs", "Art", "ca", "bzw", "ggf", "inkl", "evtl", "[a-z]", r"z\. B")

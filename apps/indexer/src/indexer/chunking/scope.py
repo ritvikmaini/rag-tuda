@@ -2,8 +2,8 @@
 
 Three cues, each only when it names a person group or an employer or area and states no exclusion: (a) the page-1
 addressee, (b) a Geltungsbereich heading's first sentence or a sentence about the document itself, (c) a person group in the
-page-1 heading (never the title alone: a file title often names a topic). A distribution list ("An alle Referate und
-Dienststellen") is no limit and gives nothing; an exclusion ("gilt nicht für …", "außer …") never prints, since a
+page-1 heading (never the title alone: a file title often names a topic). A distribution list ("An alle Fachbereiche und
+Dezernate") is no limit and gives nothing; an exclusion ("gilt nicht für …", "außer …") never prints, since a
 model reading it contradicted it. The grammar below is German administrative language; the words that make a
 limit are the profile's ingest.scope."""
 
