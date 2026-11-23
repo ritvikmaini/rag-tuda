@@ -46,7 +46,7 @@ class Switches(ProfileModel):
     fusion_cut: bool = True  # each query's legs are fused and the card's pre_rerank_k hits go to the reranker, scored
     # against its rerank_queries first queries; off = every hit of every leg, scored against every query
     # the parent texts go to the reranker whole (the model server's length setting decides); off = each cut to 512 tokens
-    # (512 * the card's chars_per_token characters), the length of the former reranker server
+    # (512 * the card's chars_per_token characters)
     whole_parents: bool = True
     # after the reranker, a section a kept parent names ("§ 22 APB") is fetched, scored against the question and added (at
     # most 3, above the threshold); off = only the sections the search found

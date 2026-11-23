@@ -447,7 +447,7 @@ def test_rerank_texts_not_cut_at_512() -> None:
         return reranker.calls[0][1]
 
     assert long_parent in sent(True)  # the model server's MAX_LENGTH decides the length, not the client
-    # the switch off: the former 512-token cut, estimated at the card's chars_per_token (here 2.0)
+    # the switch off: a 512-token cut of each parent, estimated at the card's chars_per_token (here 2.0)
     assert [len(t) for t in sent(False, 2.0) if t.startswith("x")] == [1024]
 
 

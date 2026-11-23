@@ -38,7 +38,7 @@ def _metadata(doc: Any) -> dict[str, Any]:
     return meta
 
 
-# the reranker length the parent texts are cut to, in tokens, with switches.whole_parents off (the former server limit)
+# the reranker length the parent texts are cut to, in tokens, with switches.whole_parents off
 CUT_PARENT_TOKENS = 512
 
 # the sections the reference hop adds at most, and the references it looks up at most, per question

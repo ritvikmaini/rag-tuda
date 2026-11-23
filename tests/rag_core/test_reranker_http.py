@@ -1,5 +1,5 @@
 """The reranker adapter on /v2/rerank: the /rerank-multi-query answer rebuilt from the aligned scores, so the retrieval service
-sees what that endpoint returned, and every failure caught as one RerankError whose text is the former log text."""
+sees what that endpoint returned, and every failure caught as one RerankError whose text is the log text ("<Type> <message>")."""
 
 import asyncio
 import json
