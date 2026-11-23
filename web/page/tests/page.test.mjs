@@ -281,10 +281,10 @@ test("German numbers: thousands, decimals, units, citations; anything else is no
 });
 
 test("a chart needs three rows and fully numeric columns; years give a line (Review Focus 4)", () => {
-    const header = ["Jahr", "Einwohner [1]", "Bemerkung"];
+    const header = ["Jahr", "Studierende [1]", "Bemerkung"];
     const rows = [["2019", "81.352", "x"], ["2020", "82.019", "y"], ["2021", "82.746 [2]", "z"]];
     assert.deepEqual(plain(page.chartSpec(header, rows)),
-        { kind: "line", labels: ["2019", "2020", "2021"], series: [{ name: "Einwohner", values: [81352, 82019, 82746] }] });
+        { kind: "line", labels: ["2019", "2020", "2021"], series: [{ name: "Studierende", values: [81352, 82019, 82746] }] });
     assert.equal(page.chartSpec(header, rows.slice(0, 2)), null);
     assert.equal(page.chartSpec(["Jahr", "Wert"], [["2019", "81.352"], ["2020", "–"], ["2021", "82.746"]]), null);
     const mixed = plain(page.chartSpec(["Jahr", "A", "B"], [["2019", "1", "–"], ["2020", "2", "5"], ["2021", "3", "6"]]));
@@ -295,14 +295,14 @@ test("a chart needs three rows and fully numeric columns; years give a line (Rev
     const config = plain(page.chartConfig(page.chartSpec(header, rows)));
     assert.equal(config.type, "line");
     assert.deepEqual(config.data.labels, ["2019", "2020", "2021"]);
-    assert.deepEqual(config.data.datasets, [{ label: "Einwohner", data: [81352, 82019, 82746] }]);
+    assert.deepEqual(config.data.datasets, [{ label: "Studierende", data: [81352, 82019, 82746] }]);
     assert.equal(config.options.plugins.legend.display, false);
     // axis and tooltip numbers in German (66.500), whatever the browser's language
     assert.equal(config.options.locale, "de-DE");
     // a source column is never a series, even when the model writes bare numbers into it
-    const sourced = plain(page.chartSpec(["Jahr", "Einwohner", "Quelle"], [["2019", "81.352", "1"], ["2020", "82.019", "2"],
+    const sourced = plain(page.chartSpec(["Jahr", "Studierende", "Quelle"], [["2019", "81.352", "1"], ["2020", "82.019", "2"],
         ["2021", "82.746", "2"]]));
-    assert.deepEqual(sourced.series.map(s => s.name), ["Einwohner"]);
+    assert.deepEqual(sourced.series.map(s => s.name), ["Studierende"]);
 });
 
 test("a mind map from # / ## / - lines, escaped, deeper levels flattened; the Freeplane export", () => {

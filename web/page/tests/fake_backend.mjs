@@ -19,7 +19,7 @@ const ANSWERS = {
     text: "Die Kernarbeitszeit endet um 15:00 Uhr [1].",
     table: "Die Regelungen unterscheiden sich [1].\n\n| Gruppe | Urlaub | Übertrag bis |\n| --- | --- | --- |\n" +
         "| Beamte | 30 Tage [1] | 30. April [2] |\n| Tarifbeschäftigte | 30 Tage [2] | 31. Mai [2] |",
-    numbers: "Die Einwohnerzahl ist gestiegen [1].\n\n| Jahr | Einwohner |\n| --- | --- |\n| 2019 | 81.352 [1] |\n" +
+    numbers: "Die Studierendenzahl ist gestiegen [1].\n\n| Jahr | Studierende |\n| --- | --- |\n| 2019 | 81.352 [1] |\n" +
         "| 2020 | 82.019 [1] |\n| 2021 | 82.746 [2] |\n| 2022 | 83.590 [2] |",
     // a loose list (blank lines between items): showdown wraps each item in <p>
     checklist: "Vor der Elternzeit ist einiges zu erledigen [1].\n\n- [ ] Elternzeit beantragen – 7 Wochen vorher – Personalabteilung [1]\n\n" +

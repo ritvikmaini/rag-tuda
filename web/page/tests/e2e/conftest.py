@@ -54,7 +54,7 @@ TEXT_ANSWER = "Die Kernarbeitszeit endet um 15:00 Uhr [1]. Mobile Arbeit regelt 
 # the backend's last paragraph, appended in code after the answer whatever its shape (a table, a mind map, a list)
 PO_LINE = "Grundlage: Prüfungsordnung 2023 des B.Sc. Informatik"
 NUMBER_ANSWER = (
-    "Die Einwohnerzahl ist gestiegen [1].\n\n| Jahr | Einwohner |\n| --- | --- |\n| 2019 | 81.352 [1] |\n"
+    "Die Studierendenzahl ist gestiegen [1].\n\n| Jahr | Studierende |\n| --- | --- |\n| 2019 | 81.352 [1] |\n"
     "| 2020 | 82.019 [1] |\n| 2021 | 82.746 [2] |\n| 2022 | 83.590 [2] |\n\n" + PO_LINE
 )
 # the mind maps of the recordings are masked text: the drawn map is checked on a hand-made answer
@@ -511,7 +511,7 @@ TOO_LONG_T, CHECKLIST_T, REFUSED_T = "plain_toolong_t1", "formats_checklist_t1",
 BUSY_T, ANSWERED_T = "busy_busy-2_t1", "busy_busy-1_t1"
 S01, FV01 = THESIS_T, "formats_variants_t1"
 SHORT = "Bitte lies diesen Absatz genau."
-NUMBERS_Q, SOURCES_Q = "Wie hat sich die Einwohnerzahl entwickelt?", "Wann endet die Kernarbeitszeit?"
+NUMBERS_Q, SOURCES_Q = "Wie hat sich die Studierendenzahl entwickelt?", "Wann endet die Kernarbeitszeit?"
 MINDMAP_Q = "Wie ist die mobile Arbeit geregelt?"
 
 
