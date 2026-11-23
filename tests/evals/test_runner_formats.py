@@ -7,7 +7,7 @@ from evals import runner as rp
 
 SAMPLES = [
     "Es gibt zwei Regelungen [1].\n\n| Gruppe | Urlaub |\n| --- | --- |\n| Beamte | 30 Tage [1] |\n| Tarif | 30 Tage |",
-    "Vorher [1].\n\n- [ ] Antrag – Personalamt [1]\n- [ ] Elterngeld [2]\n- [x] Bescheinigung",
+    "Vorher [1].\n\n- [ ] Antrag – Personalabteilung [1]\n- [ ] Elterngeld [2]\n- [x] Bescheinigung",
     "So geht es [1].\n\n1. Antrag [1]\n2. Genehmigung [2]\n3. Abrechnen",
     "Überblick [1].\n\n```mindmap\n# A\n## B\n- C [1]\n- D\n```",
     "Die Kernzeit endet um 15 Uhr [1].",
@@ -124,8 +124,8 @@ def test_ask_sends_the_format_parameters_and_reads_the_new_events():
 
 # ---- answer language
 
-GERMAN = "Sie stellen den Antrag beim Personalamt [1]. Die Genehmigung erteilt die Amtsleitung, und die Reise wird abgerechnet."
-ENGLISH = "You submit the application to the Personnel Office (Personalamt) [1]. The head of office approves it and the trip is settled."
+GERMAN = "Sie stellen den Antrag bei der Personalabteilung [1]. Die Genehmigung erteilt die Abteilungsleitung, und die Reise wird abgerechnet."
+ENGLISH = "You submit the application to the Personnel Department (Personalabteilung) [1]. The head of department approves it and the trip is settled."
 
 
 def test_english_answers_are_checked_for_their_language():
@@ -139,17 +139,17 @@ def test_english_answers_are_checked_for_their_language():
     english = [
         "Civil servants and employees both receive 30 days of annual leave [1].\n\n| Group | Days | Quelle |\n"
         "| --- | --- | --- |\n| Civil servants | 30 | [1] |\n| Employees | 30 | [1] |\n\nPart-time staff receive leave pro rata [2].",
-        "Flexitime applies to part-time staff as well (Dienstvereinbarung über die gleitende Arbeitszeit bei der Stadt "
+        "Flexitime applies to part-time staff as well (Betriebsvereinbarung über die gleitende Arbeitszeit an der Universität "
         "Beispielstadt) [1]. Core time runs from 9 a.m. to 3 p.m. [1].",
-        "Special leave is regulated in the agreement on working time (Dienstvereinbarung über die Arbeitszeit und die "
-        "Arbeitsbefreiung der Beschäftigten der Stadt Beispielstadt) [1]. You apply via the Personnel Office (Personalamt) [1].",
-        "The city's 2026 budget amounts to 372,914,508 euros [1].",
+        "Special leave is regulated in the agreement on working time (Betriebsvereinbarung über die Arbeitszeit und die "
+        "Arbeitsbefreiung der Beschäftigten der Universität Beispielstadt) [1]. You apply via the Personnel Department (Personalabteilung) [1].",
+        "The university's 2026 budget amounts to 372,914,508 euros [1].",
     ]
     for text in english:
         assert checks.looks_english(text), text
     for text in (
         "Das Gesamtvolumen beträgt 372.914.508 € [2].",
-        "Die Kernzeit endet um 15 Uhr (Dienstvereinbarung) [1].",
+        "Die Kernzeit endet um 15 Uhr (Betriebsvereinbarung) [1].",
     ):
         assert not checks.looks_english(text), text
 

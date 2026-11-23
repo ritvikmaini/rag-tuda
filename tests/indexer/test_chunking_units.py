@@ -77,7 +77,7 @@ def _plain_chunk(docs):
 
 def test_recursive_mode_matches_the_plain_text_splitter():
     text = ("§ 1 Steuergegenstand. Das Halten eines Hundes im Stadtgebiet unterliegt der Steuer. " * 40).strip()
-    docs = [_doc(text), _doc("Kurz.", page_number=4), _doc("Eintrag Rathaus", chunk="flat", title="Rathaus")]
+    docs = [_doc(text), _doc("Kurz.", page_number=4), _doc("Eintrag Bibliothek", chunk="flat", title="Bibliothek")]
     new = [
         (
             p.text,
@@ -104,7 +104,7 @@ def test_structure_mode_pages_metadata_and_header():
             "origin": "website",
             "doc_key": "https://docs.example.org/k",
             "page_number": -1,
-            "title_path": "Rathaus > Personal",
+            "title_path": "Bibliothek > Personal",
         },
     }
     pdf, page = units.chunk_documents([p1, p2, web], mode="structure", header="tier1")
@@ -115,8 +115,8 @@ def test_structure_mode_pages_metadata_and_header():
     for child in pdf.children:
         body = child.text[len(header) :]
         assert child.text.startswith(header) and "[Page" not in body and body[:120] in pdf.text
-    assert page.metadata["page_number"] == -1 and page.metadata["section_path"] == "Rathaus > Personal"
-    assert page.metadata["context_header"] == "Kernzeit · Webseite · Rathaus > Personal: "
+    assert page.metadata["page_number"] == -1 and page.metadata["section_path"] == "Bibliothek > Personal"
+    assert page.metadata["context_header"] == "Kernzeit · Webseite · Bibliothek > Personal: "
     ctx = units.chunk_documents(
         [p1], mode="structure", contexts={"https://docs.example.org/x.pdf": "Regelt die Arbeitszeit."}
     )
@@ -198,7 +198,7 @@ def test_every_child_starts_with_its_parents_prefix_and_the_prefix_is_recorded()
     [title] = units.chunk_documents([_doc("Kurz.")])
     assert title.prefix == "Hundesteuersatzung: " and "context_header" not in title.metadata
     assert all(c.text.startswith(title.prefix) for c in title.children)
-    [flat] = units.chunk_documents([_doc("Rathaus\nAdresse: Weg 1", chunk="flat", title="Rathaus")])
+    [flat] = units.chunk_documents([_doc("Bibliothek\nAdresse: Weg 1", chunk="flat", title="Bibliothek")])
     assert flat.prefix == "" and "context_header" not in flat.metadata
 
 

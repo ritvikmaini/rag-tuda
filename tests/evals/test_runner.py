@@ -62,12 +62,12 @@ def test_sources_carry_the_section_identity():
 
 
 def test_evaluate_digits_and_contains():
-    src = [{"url": "https://docs.example.org/leben/personalamt", "title": "", "internal": False}]
+    src = [{"url": "https://docs.example.org/leben/personalabteilung", "title": "", "internal": False}]
     c = checks.evaluate_turn(
-        "Sie erreichen das Personalamt unter 0123 45-6789 [1].",
+        "Sie erreichen die Personalabteilung unter 0123 45-6789 [1].",
         src,
         [],
-        {"digits_any": ["0123456789"], "source_url_any": ["personalamt"]},
+        {"digits_any": ["0123456789"], "source_url_any": ["personalabteilung"]},
     )
     assert c["auto_pass"], c["failed"]
     assert c["citations"] == [1]

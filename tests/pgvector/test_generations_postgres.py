@@ -383,19 +383,19 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
     profile = profile.model_copy(update={"ingest": profile.ingest.model_copy(update={"sources": sources})})
     parents = [
         Parent(
-            "Öffnungszeiten\x00 im Rathaus",
+            "Öffnungszeiten\x00 in der Bibliothek",
             {
                 "section_id": "s1",
                 "part_index": 0,
-                "filename": "Rathaus",
+                "filename": "Bibliothek",
                 "origin": "website",
                 "source_type": "page",
                 "url": "https://example.org/r",
                 "doc_key": "https://example.org/r",
                 "page_number": -1,
             },
-            (Child("Rathaus: Montag"), Child("Rathaus: Montag"), Child("Rathaus: Dienstag")),
-            "Rathaus: ",
+            (Child("Bibliothek: Montag"), Child("Bibliothek: Montag"), Child("Bibliothek: Dienstag")),
+            "Bibliothek: ",
             "folder",
         ),
         Parent(
@@ -454,14 +454,14 @@ def test_write_v2_fills_a_pair_the_typed_views_read(connect, tmp_path):  # write
         "bool_and(c.fts_de = to_tsvector('german', c.content)) FROM c29_sections s "
         "JOIN c29_chunks c ON c.section_id = s.section_id GROUP BY 1, 2"
     ).fetchall()
-    assert sorted(joined) == sorted([("Öffnungszeiten im Rathaus", "Rathaus", 2, True), ("§ 1 Geltung", "DA", 1, True),
+    assert sorted(joined) == sorted([("Öffnungszeiten in der Bibliothek", "Bibliothek", 2, True), ("§ 1 Geltung", "DA", 1, True),
                                      ("Wertstoffhof", "Wertstoffhof", 1, True)])  # fmt: skip
     assert app.execute("SELECT metadata->'tags' FROM c29_sections WHERE content = '§ 1 Geltung'").fetchone()[0] == [
         "a",
         "b",
     ]
     typed = app.execute("SELECT source, audience, year, page, header FROM c29_sections").fetchall()
-    assert sorted(typed) == sorted([("folder", "public", None, None, "Rathaus: "),
+    assert sorted(typed) == sorted([("folder", "public", None, None, "Bibliothek: "),
                                     ("example.pdfs", "public", 2024, 2, "DA · § 1: "),
                                     ("example.maps", "public", None, None, None)])  # fmt: skip
     assert (

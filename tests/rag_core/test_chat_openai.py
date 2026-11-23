@@ -447,8 +447,8 @@ def test_the_analysis_schema_is_in_the_strict_shape() -> None:
 def test_invalid_json_falls_back_to_plain_question(monkeypatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "not-needed")
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
-    question = "Wann hat das Bürgerbüro am Samstag geöffnet?"
-    truncated = '{"standalone_question": "Wann hat das Bürgerbüro am Sams'  # cut off at the token cap
+    question = "Wann hat das Studienbüro am Samstag geöffnet?"
+    truncated = '{"standalone_question": "Wann hat das Studienbüro am Sams'  # cut off at the token cap
     profile = load_profile(Profile, PROFILE)
     analysis, queries = asyncio.run(
         analyse(

@@ -58,7 +58,7 @@ def test_describe_source_news_and_page():
         == "24.04.2026"
     )
     page = sm.describe_source(
-        {"title": "Bürgerbüro", "doc_type": "Webseite", "url": "https://example.org/leben/buergerbuero"}, EXAMPLE
+        {"title": "Studienbüro", "doc_type": "Webseite", "url": "https://example.org/leben/studienbuero"}, EXAMPLE
     )
     assert page["type"] == "Webseite" and page["origin"] == "example.org"
     assert (
@@ -107,7 +107,7 @@ def test_rank_recency():
         {"cross_encoder_score": 0.51, "doc_type": "Dienstanweisung/Dienstvereinbarung", "doc_date": "2022-03-01"},
         {"cross_encoder_score": 0.5, "doc_type": "Dienstanweisung/Dienstvereinbarung", "doc_date": "2024-06-01"},
     ]
-    kept2, _, _ = rk.rank(dv, "Welche Dienstvereinbarung zur mobilen Arbeit ist die aktuellste?", p)
+    kept2, _, _ = rk.rank(dv, "Welche Betriebsvereinbarung zur mobilen Arbeit ist die aktuellste?", p)
     assert kept2 == [1, 0]  # a listed document type gets the recency bonus
 
 

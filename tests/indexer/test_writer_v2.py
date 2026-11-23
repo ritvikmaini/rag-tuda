@@ -199,7 +199,7 @@ def test_the_typed_columns_follow_the_interfaces_rule(settings):
         source_type="map",
         doc_key="https://maps.example.org/#uid=1",
         url="https://maps.example.org/#uid=1",
-        title="Rathaus",
+        title="Bibliothek",
         doc_type="Karte",
     )
     year = parent("year", ["x"], doc_year="2024", doc_date="03.05.2024", page_number="2")
@@ -264,7 +264,7 @@ def test_the_typed_columns_follow_the_interfaces_rule(settings):
             None,
             "https://maps.example.org/#uid=1",
             None,
-            "Rathaus",
+            "Bibliothek",
             None,
             0,
             "{}",

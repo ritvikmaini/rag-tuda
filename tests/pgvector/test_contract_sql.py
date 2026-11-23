@@ -20,9 +20,9 @@ TEXTS = (
     "Die Fahrradgarage am Bahnhof hat dreihundert Stellplaetze",
     "Die Stadtbuecherei oeffnet montags um neun Uhr",
     "Der Wertstoffhof nimmt Sperrmuell und Gruenschnitt an",
-    "Die Garage im Rathaus ist fuer Dienstwagen reserviert",
-    "Stellplaetze fuer Fahrraeder gibt es am Rathaus",
-    "Die Oeffnungszeiten des Buergerbueros im Rathaus",
+    "Die Garage in der Mensa ist fuer Dienstwagen reserviert",
+    "Stellplaetze fuer Fahrraeder gibt es an der Mensa",
+    "Die Oeffnungszeiten des Studienbueros in der Mensa",
 )
 
 pytestmark = pytest.mark.skipif(
@@ -91,9 +91,9 @@ def test_every_statement_of_the_adapter_runs_as_rag_app(connect, tables):
 
     near = "[" + ",".join(["1.0", "0.5"] + ["0.1"] * 766) + "]"
     assert len(run(pg_index.VECTOR, "rag_chunks", {"vector": near, "k": 5})) == 5
-    words = {"lang": "german", "query": "Garage Rathaus"}
+    words = {"lang": "german", "query": "Garage Mensa"}
     legs = [
-        pg_index.Leg("fts_de", "german", "'garag' & 'rathaus'", ()),
+        pg_index.Leg("fts_de", "german", "'garag' & 'mensa'", ()),
         pg_index.Leg("fts_en", "english", "'garag'", ()),
     ]
     and_params = {"fts_de_and": legs[0].and_text, "fts_en_and": legs[1].and_text}
@@ -104,13 +104,13 @@ def test_every_statement_of_the_adapter_runs_as_rag_app(connect, tables):
     assert run(
         pg_index.FTS_OR, "rag_chunks", or_params, **seen
     )  # the German rows have a NULL fts_en and still come back
-    assert run(pg_index.COUNT_TERM, "rag_chunks", {"term": "'rathaus'"}, column="fts_de")[0][0] > 0
+    assert run(pg_index.COUNT_TERM, "rag_chunks", {"term": "'mensa'"}, column="fts_de")[0][0] > 0
     assert run(pg_index.COUNT_ALL, "rag_chunks", column="fts_de")[0][0] == 6
     assert run(pg_index.COUNT_ALL, "rag_chunks", column="fts_en")[0][0] == 0  # no English row
-    assert app.execute(pg_index.TSQUERY, words).fetchone()[0] == "'garag' & 'rathaus'"
-    groups = {"lang": "german", "terms": ["PO", "Rathaus", "Garage", "der"], "owners": [0, 0, 1, 1]}
+    assert app.execute(pg_index.TSQUERY, words).fetchone()[0] == "'garag' & 'mensa'"
+    groups = {"lang": "german", "terms": ["PO", "Mensa", "Garage", "der"], "owners": [0, 0, 1, 1]}
     # one row per group, its terms OR-ed; "der" is a stopword and leaves the second group with one term
-    assert [r[0] for r in app.execute(pg_index.GROUP_QUERIES, groups).fetchall()] == ["'po' | 'rathaus'", "'garag'"]
+    assert [r[0] for r in app.execute(pg_index.GROUP_QUERIES, groups).fetchall()] == ["'po' | 'mensa'", "'garag'"]
     assert run(pg_index.PING, "rag_sections") and run(pg_index.CHILD_PROBE, "rag_chunks") == []
     rows = run(pg_index.SECTIONS, "rag_sections", {"section_ids": ["s0", "s1", "x"]})
     assert sorted(r[0] for r in rows) == ["s0", "s1"]

@@ -18,7 +18,7 @@ SAME = [
     ("Der Termin ist am 13.11.2026.", "13. November 2026"),
     ("Stichtag ist der 08.04.", "8. April"),
     ("Es sind noch vier Plätze frei.", "4 Plätze"),
-    ("Beginn um 15.30 Uhr im Rathaus.", "15:30"),
+    ("Beginn um 15.30 Uhr in der Mensa.", "15:30"),
     ("Beginn um 15 Uhr.", "15:00 Uhr"),
     ("Sie erreichen uns unter 0000 – 55 66 77.", "0000556677"),
     ("Telefon 0000/55 66 77", "0000 – 55 66 77"),

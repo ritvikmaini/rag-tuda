@@ -36,16 +36,16 @@ TABLE = (
     "| Tarif | 30 Tage |\n\nMehr dazu [2]."
 )
 CHECKLIST = (
-    "Vor der Elternzeit ist einiges zu tun [1].\n\n- [ ] Antrag stellen – 7 Wochen vorher – Personalamt [1]\n"
+    "Vor der Elternzeit ist einiges zu tun [1].\n\n- [ ] Antrag stellen – 7 Wochen vorher – Personalabteilung [1]\n"
     "- [ ] Elterngeld beantragen [2]\n- [x] Arbeitgeberbescheinigung"
 )
 STEPS = (
-    "So beantragen Sie eine Dienstreise [1].\n\n1. Antrag ausfüllen [1]\n2. Genehmigung einholen – Amtsleitung [2]\n"
+    "So beantragen Sie eine Dienstreise [1].\n\n1. Antrag ausfüllen [1]\n2. Genehmigung einholen – Abteilungsleitung [2]\n"
     "3. Reise abrechnen"
 )
 MINDMAP = (
     "Ein Überblick [1].\n\n```mindmap\n# Arbeitszeit\n## Gleitzeit\n- Kernzeit 9 bis 15 Uhr [1]\n- Rahmenzeit [2]\n"
-    "## Mobile Arbeit\n- Dienstvereinbarung\n```"
+    "## Mobile Arbeit\n- Betriebsvereinbarung\n```"
 )
 
 

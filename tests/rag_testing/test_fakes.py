@@ -134,11 +134,11 @@ def test_the_rerank_score_is_the_share_of_query_words():
 
 def test_the_fake_reranker_answers_v2_like_the_real_one():
     client = TestClient(serve.reranker_app())
-    docs = ["Die Fahrradgarage hat Stellplätze", "Rathaus", "Die Fahrradgarage hat Stellplätze"]
+    docs = ["Die Fahrradgarage hat Stellplätze", "Bibliothek", "Die Fahrradgarage hat Stellplätze"]
     body = client.post(
-        "/v2/rerank", json={"queries": ["Fahrradgarage Stellplätze", "Rathaus"], "documents": docs}
+        "/v2/rerank", json={"queries": ["Fahrradgarage Stellplätze", "Bibliothek"], "documents": docs}
     ).json()
-    assert body == {"scores": scoring.scores(["Fahrradgarage Stellplätze", "Rathaus"], docs)}
+    assert body == {"scores": scoring.scores(["Fahrradgarage Stellplätze", "Bibliothek"], docs)}
     assert body["scores"][0] == body["scores"][2] and len(body["scores"]) == 3
     assert client.post("/v2/rerank", json={"queries": [], "documents": docs}).status_code == 422
     assert client.post("/v2/rerank", json={"queries": ["x"], "documents": []}).json() == {"scores": []}

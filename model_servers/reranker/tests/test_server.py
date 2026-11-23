@@ -229,8 +229,8 @@ def test_qwen_yes_no_scores_in_unit_interval():
     model = FakeQwenModel(key_id=tokenizer._ids("urlaub")[0])
     predict = main.qwen_yes_no_predict(tokenizer, model, max_length=64)
     pairs = [
-        ("urlaub", "urlaub beantragen beim personalamt"),
-        ("urlaub", "das rathaus"),
+        ("urlaub", "urlaub beantragen bei der personalabteilung"),
+        ("urlaub", "die mensa"),
         ("urlaub", "so viel urlaub wie noch nie"),
     ]
     scores = predict(pairs, batch_size=2, convert_to_numpy=True)
@@ -244,7 +244,7 @@ def test_qwen_yes_no_scores_in_unit_interval():
 
 
 def test_qwen_scores_do_not_depend_on_the_tokenizers_padding_side():
-    pairs = [("urlaub", "urlaub beantragen beim personalamt heute noch"), ("urlaub", "urlaub")]
+    pairs = [("urlaub", "urlaub beantragen bei der personalabteilung heute noch"), ("urlaub", "urlaub")]
     for side in ("left", "right"):
         tokenizer = FakeQwenTokenizer(padding_side=side)
         predict = main.qwen_yes_no_predict(tokenizer, FakeQwenModel(key_id=tokenizer._ids("urlaub")[0]), max_length=200)
@@ -356,7 +356,7 @@ def test_no_pairs_no_call():
 
 # --- the rerank endpoint ---------------------------------------------------------------------------------------------------
 QUERIES = ["kernarbeitszeit endet", "urlaub beantragen"]
-DOCS = ["die kernarbeitszeit endet um 15 uhr", "urlaub beantragen beim personalamt", "das rathaus", "das rathaus"]
+DOCS = ["die kernarbeitszeit endet um 15 uhr", "urlaub beantragen bei der personalabteilung", "die mensa", "die mensa"]
 
 
 def test_the_old_endpoint_is_gone(tmp_path):

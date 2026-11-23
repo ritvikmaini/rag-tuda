@@ -45,22 +45,22 @@ class Embedder:
 
 def items(extra=""):
     """Two sections, four chunks, three distinct chunk texts (one shared across the sections), non-ASCII included."""
-    web = {"part_index": 0, "filename": "Rathaus", "origin": "website", "source_type": "page",
+    web = {"part_index": 0, "filename": "Bibliothek", "origin": "website", "source_type": "page",
            "url": "https://example.org/r", "doc_key": "https://example.org/r", "page_number": -1}  # fmt: skip
     pdf = {"part_index": 0, "filename": "DA", "origin": "archive", "source_type": "pdf",
            "doc_key": "https://docs.example.org/da.pdf", "page_number": 2}  # fmt: skip
     return [
         Parent(
-            "Öffnungszeiten im Rathaus",
+            "Öffnungszeiten in der Bibliothek",
             web,
-            (Child("Rathaus: Montag"), Child("Rathaus: Dienstag" + extra)),
-            "Rathaus: ",
+            (Child("Bibliothek: Montag"), Child("Bibliothek: Dienstag" + extra)),
+            "Bibliothek: ",
             "folder",
         ),
         Parent(
             "§ 1 Geltung",
             pdf,
-            (Child("DA · § 1: Geltung"), Child("Rathaus: Montag")),
+            (Child("DA · § 1: Geltung"), Child("Bibliothek: Montag")),
             "DA · § 1: ",
             "folder",
         ),
@@ -121,7 +121,10 @@ def test_an_edited_text_is_the_only_one_embedded(connect, profile):
     write(conn, target, profile, embed, items())
     embed.texts.clear()
     _, written, _ = write(conn, target, profile, embed, items(extra=" und Mittwoch"))
-    assert embed.texts == ["Rathaus: Dienstag und Mittwoch"] and written["embeddings"] == {"cached": 3, "computed": 1}
+    assert embed.texts == ["Bibliothek: Dienstag und Mittwoch"] and written["embeddings"] == {
+        "cached": 3,
+        "computed": 1,
+    }
 
 
 def test_seeding_copies_the_live_vectors_only_for_the_same_model_and_revision(connect, profile):
@@ -149,11 +152,12 @@ def test_housekeeping_keeps_what_live_and_previous_use_per_collection(connect, p
     write(conn, target, profile, embed, items())
     write(conn, target, profile, embed, items(extra=" A"))
     write(conn, target, profile, embed, items(extra=" B"))
-    result = gen.housekeep(conn, target)  # keeps 3 (live) and 2 (previous): "Rathaus: Dienstag" was used by 1 only
+    result = gen.housekeep(conn, target)  # keeps 3 (live) and 2 (previous): "Bibliothek: Dienstag" was used by 1 only
     assert result["cache_pruned"] == 1
     kept = {r[0] for r in conn.execute("SELECT text_sha256 FROM embedding_cache WHERE collection = 'e4'").fetchall()}
     assert kept == {
-        cache.sha(t) for t in ("Rathaus: Montag", "DA · § 1: Geltung", "Rathaus: Dienstag A", "Rathaus: Dienstag B")
+        cache.sha(t)
+        for t in ("Bibliothek: Montag", "DA · § 1: Geltung", "Bibliothek: Dienstag A", "Bibliothek: Dienstag B")
     }
     assert conn.execute("SELECT count(*) FROM embedding_cache WHERE collection = 'e4b'").fetchone()[0] == 3
     assert gen.rollback(conn, target)["live"] == 2

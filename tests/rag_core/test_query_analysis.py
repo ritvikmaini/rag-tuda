@@ -6,13 +6,13 @@ import json
 
 def test_json_answer():
     a = qa.parse_query_analysis(
-        '{"standalone_question": "Hat das Bürgerbüro am Samstag geöffnet?", "intent": "lookup", "search_queries": ["Bürgerbüro Öffnungszeiten Samstag"], "language": "de", "date_from": null, "date_to": null}',
+        '{"standalone_question": "Hat das Studienbüro am Samstag geöffnet?", "intent": "lookup", "search_queries": ["Studienbüro Öffnungszeiten Samstag"], "language": "de", "date_from": null, "date_to": null}',
         "Und am Samstag?",
     )
-    assert a.parsed == "json" and a.standalone_question.startswith("Hat das Bürgerbüro")
+    assert a.parsed == "json" and a.standalone_question.startswith("Hat das Studienbüro")
     assert qa.retrieval_queries(a, "Und am Samstag?", first_turn=False) == [
-        "Hat das Bürgerbüro am Samstag geöffnet?",
-        "Bürgerbüro Öffnungszeiten Samstag",
+        "Hat das Studienbüro am Samstag geöffnet?",
+        "Studienbüro Öffnungszeiten Samstag",
     ]
 
 
@@ -49,7 +49,7 @@ def test_non_retrieval_intents_and_situation_cap():
 
 def test_raw_followup_not_searched_after_first_turn():
     a = qa.parse_query_analysis(
-        '{"standalone_question": "Welche Homeoffice-Regelung der Stadt ist die aktuellste?", "intent": "lookup", "search_queries": ["Dienstvereinbarung mobile Arbeit 2024"]}',
+        '{"standalone_question": "Welche Homeoffice-Regelung der Universität ist die aktuellste?", "intent": "lookup", "search_queries": ["Betriebsvereinbarung mobile Arbeit 2024"]}',
         "Welche davon ist die aktuellste?",
     )
     assert "Welche davon ist die aktuellste?" not in qa.retrieval_queries(
