@@ -388,6 +388,23 @@ def test_one_query_per_predict_call_with_the_configured_batch_size(tmp_path):
     assert [sorted({q for q, _ in call}) for call in calls] == [[QUERIES[0]], [QUERIES[1]]] and set(seen) == {8}
 
 
+@pytest.mark.parametrize(
+    "device, configured, batch_size",
+    [("mps", None, 4), ("cuda", None, 32), ("cpu", None, 32), ("mps", 16, 16), ("cuda", 8, 8)],
+)
+def test_the_batch_size_is_the_devices_own_unless_configured(tmp_path, device, configured, batch_size):
+    seen = []
+
+    def predict(pairs, batch_size, convert_to_numpy):
+        seen.append(batch_size)
+        return fake_predict(pairs, batch_size, convert_to_numpy)
+
+    settings = main.Settings(SETTINGS.model, REV, predict_batch_size=configured)
+    with client(tmp_path, settings=settings, fake=main.Loaded(predict, "float16", device)) as c:
+        c.post("/v2/rerank", json={"queries": QUERIES[:1], "documents": DOCS[:2]})
+    assert seen == [batch_size] * 2  # the start-up reference pair, then the request
+
+
 def test_a_waiting_request_gets_503_while_the_gpu_job_runs(tmp_path):
     gate, calls, answers = threading.Event(), [], []
     settings = main.Settings(SETTINGS.model, REV, wait_s=0.2)

@@ -4,8 +4,9 @@ POST /v2/rerank {"queries": [str], "documents": [str]} -> {"scores": [float]} al
 over the queries (multi-query). One job on the GPU at a time: a waiting request gets 503 after MULTI_QUERY_WAIT_S, and a job
 stops between queries when its client has left. GET /info (model, revision, max_length, dtype, device, mode), /readyz (the
 start-up reference pair, from reference.<device>.json when it exists, else reference.json), /healthz. The settings come
-from the environment the Dockerfile sets (MAX_LENGTH tokens per pair; RERANK_MODE cross_encoder, or qwen_yes_no for a
-Qwen3-Reranker scored by the probability of "yes"); the model loads in the lifespan from its pinned snapshot, never from the
+from the environment the Dockerfile sets (RERANKER_PREDICT_BATCH_SIZE pairs per batch, unset: 4 on MPS, 32 elsewhere;
+MAX_LENGTH tokens per pair; RERANK_MODE cross_encoder, or qwen_yes_no for a Qwen3-Reranker scored by the probability of
+"yes"); the model loads in the lifespan from its pinned snapshot, never from the
 network; nothing happens at import. The device is RAG_DEVICE (cuda, mps or cpu; unset: the first available in that order),
 and a device that is not available stops the start. A torch.AcceleratorError (the CUDA context is gone) answers 500, turns
 /readyz 503 and stops the process (SIGTERM, os._exit after FATAL_GRACE_S); Docker restarts it.
@@ -21,7 +22,7 @@ import sys
 import threading
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +40,9 @@ REFERENCE = Path(__file__).with_name("reference.json")
 FATAL_GRACE_S = 30.0  # after SIGTERM, a daemon timer ends the process this much later if the shutdown hangs
 
 DEVICES = ("cuda", "mps", "cpu")
+DEFAULT_BATCH_SIZE = 32  # CrossEncoder.predict's default
+# 32 pairs per batch took the process past 11 GB on a 16 GB Mac; 4 keeps it near 6 GB and is faster
+BATCH_SIZES = {"mps": 4}
 
 
 def pick_device(env: Mapping[str, str], cuda_ok: bool, mps_ok: bool) -> str:
@@ -89,7 +93,7 @@ def positive_int(env: Mapping[str, str], name: str, default: int) -> int:
 class Settings:
     model: str
     revision: str
-    predict_batch_size: int = 32  # CrossEncoder.predict's default
+    predict_batch_size: int | None = None  # None: the device's BATCH_SIZES entry, else DEFAULT_BATCH_SIZE
     wait_s: float = 20.0  # a request waiting for the GPU job gives up after this (the assistant's timeout is 15 s)
     max_length: int = 1024  # tokens per (query, passage) pair; a parent section is ~500-700 tokens
     mode: str = "cross_encoder"  # or qwen_yes_no: a generative model whose yes/no logits are the score
@@ -107,7 +111,7 @@ class Settings:
         return cls(
             env["RERANKER_MODEL"],
             env["RERANKER_REVISION"],
-            int(env.get("RERANKER_PREDICT_BATCH_SIZE", "32")),
+            int(env["RERANKER_PREDICT_BATCH_SIZE"]) if env.get("RERANKER_PREDICT_BATCH_SIZE") else None,
             float(env.get("MULTI_QUERY_WAIT_S", "20")),
             positive_int(env, "MAX_LENGTH", 1024),
             mode,
@@ -300,6 +304,10 @@ def create_app(
     async def lifespan(app: FastAPI):
         current = settings or Settings.from_env()
         loaded = load(current)
+        current = replace(
+            current,
+            predict_batch_size=current.predict_batch_size or BATCH_SIZES.get(loaded.device, DEFAULT_BATCH_SIZE),
+        )
         app.state.readiness = reference_check(
             loaded, current, json.loads(reference_for(reference_path, loaded.device).read_text(encoding="utf-8"))
         )
