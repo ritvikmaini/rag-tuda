@@ -2,7 +2,7 @@
 PDF text quality.
 
 Page assessment of extracted PDF text and the repair of one extraction: OCR the pages
-that have no text or only substituted glyph codes (through a function passed in), drop
+that have no text, only page stamps or only substituted glyph codes (through a function passed in), drop
 what stays unreadable.
 Standard library only (tests: tests/indexer/test_extract_quality.py).
 """
@@ -11,14 +11,18 @@ import json
 import logging
 import os
 import re
+from collections import Counter
 
 logger = logging.getLogger(__name__)
 
-QUALITY_VERSION = 1
+QUALITY_VERSION = 2
 ENCODED_SHARE = 0.5  # a page is "encoded" when this share of its characters are U+F000-U+F0FF
 EMPTY_BELOW = 20  # fewer non-space characters: the page has no usable text (often only "2 / 142")
+MARK_LINE = 3  # a line of fewer non-space characters beside the page stamps is a stray mark, not text
+STAMP_SHARE = 0.9  # a line (digits ignored) on at least this share of a PDF's pages, and on two, is a page stamp
 READABLE_SHARE = 0.6  # share of letters, digits and punctuation in readable text
 
+_DIGITS = re.compile(r"\d+")
 _PAGE_MARK = re.compile(r"\[Page (\d+)\]\n")
 _PUA_LO, _PUA_HI = 0xF000, 0xF0FF
 _COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
@@ -44,11 +48,30 @@ def _visible(text):
     return [c for c in text or "" if not c.isspace()]
 
 
-def classify_page(text):
-    """'ok', 'encoded' (mostly substituted glyph codes) or 'empty' (no usable text)."""
+def stamp_lines(pages, page_count):
+    """The lines that stand on almost every page of the PDF (STAMP_SHARE) once their digits are ignored, such as "Seite 30
+    von 225": page stamps, which a scanned page keeps in its text layer while the body is an image. A form label that
+    returns on every module page of a handbook stands on fewer pages."""
+    seen = Counter()
+    for text in pages.values():
+        seen.update({_blank_digits(line) for line in _COMMENT_RE.sub("", text).splitlines() if line.strip()})
+    return {line for line, n in seen.items() if n >= max(2, STAMP_SHARE * page_count)}
+
+
+def _blank_digits(line):
+    return " ".join(_DIGITS.sub("0", line).split())
+
+
+def classify_page(text, stamps=()):
+    """'ok', 'encoded' (mostly substituted glyph codes) or 'empty' (no usable text: also a page that holds nothing but the
+    lines in `stamps`, give or take stray marks)."""
     chars = _visible(text)
     if len(chars) < EMPTY_BELOW:
         return "empty"
+    if stamps:
+        beside = (line for line in (text or "").splitlines() if _blank_digits(line) not in stamps)
+        if all(len(_visible(line)) < MARK_LINE for line in beside):
+            return "empty"
     encoded = sum(1 for c in chars if _PUA_LO <= ord(c) <= _PUA_HI)
     return "encoded" if encoded >= ENCODED_SHARE * len(chars) else "ok"
 
@@ -89,9 +112,11 @@ def repair_pages(pages, page_count, ocr_fn=None, ocr_budget=None, ocr_missing=Tr
         "pending_ocr_pages": [],
     }
     result, need_ocr, known_empty = {}, [], set(known_empty)
-    for n in range(1, max(page_count, max(pages, default=0)) + 1):
+    page_count = max(page_count, max(pages, default=0))
+    stamps = stamp_lines(pages, page_count)
+    for n in range(1, page_count + 1):
         text = pages.get(n, "")
-        if classify_page(_COMMENT_RE.sub("", text)) == "ok":
+        if classify_page(_COMMENT_RE.sub("", text), stamps) == "ok":
             result[n] = text
             continue
         if n in known_empty:
@@ -116,7 +141,7 @@ def repair_pages(pages, page_count, ocr_fn=None, ocr_budget=None, ocr_missing=Tr
         return result, quality
     for n in todo:
         text = clean_ocr_text(ocr.get(n))
-        if classify_page(text) == "ok" and is_readable(text):
+        if classify_page(text, stamps) == "ok" and is_readable(text):
             result[n] = text
             quality["ocr_pages"].append(n)
         else:
@@ -137,7 +162,7 @@ def repair_entry(entry, page_count, ocr_fn=None, ocr_budget=None, before_ocr=Non
     ocr_missing = method.startswith("pypdfium2") or near_empty
     previous = entry.get("quality")
     known_empty = []
-    if isinstance(previous, dict) and previous.get("version") == QUALITY_VERSION:
+    if isinstance(previous, dict):  # what OCR found empty or never finished stays so under a newer assessment
         known_empty = list(previous.get("empty_pages") or [])
         if previous.get("ocr_attempt"):
             logger.warning(

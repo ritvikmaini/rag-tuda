@@ -7,7 +7,7 @@ import logging
 import pytest
 from rag_core.domain.sources import CorruptStateError, PageItem, PdfItem
 
-from indexer import build, gates
+from indexer import build, cli, gates
 
 
 def test_a_failing_stats_write_does_not_fail_the_swapped_build(tmp_path):
@@ -121,6 +121,7 @@ def test_the_documents_reach_the_chunker_in_profile_order_then_the_gates(setting
         "documents": 1,
         "with_documents": 1,
         "missing_cache": 1,
+        "no_text": [],
         "extract": EXTRACTED,
     }
     assert result["sources"]["web"] == {"crawl": "kept", "crawl_pages": 2, "documents": 2}
@@ -132,6 +133,20 @@ def test_the_documents_reach_the_chunker_in_profile_order_then_the_gates(setting
     [summary] = [json.loads(m.split(": ", 1)[1]) for m in finished]
     assert summary.pop("minutes") >= 0
     assert summary == {"documents": {"web": 2, "pdfs": 1, "maps": 1}, "parents": 2, "children": 4}
+
+
+def test_a_pdf_without_usable_text_is_named_in_the_report_not_counted_as_a_document(settings, fakes, monkeypatch):
+    monkeypatch.setattr(build, "extract_pdfs", lambda **_: EXTRACTED)
+
+    def pdf_documents(items, seen_hashes, extracted_dir, clean):
+        seen_hashes.add("h1")  # its cache entry was read and holds no page of text
+        return [], 0
+
+    monkeypatch.setattr(build, "pdf_documents", pdf_documents)
+    result = build.build_corpus(settings, three_sources(fakes), limit=5, embedding=fakes.Embedding(None))
+    report = result["sources"]["pdfs"]
+    assert report["no_text"] == [PDF.url] and report["with_documents"] == 0
+    assert cli.summary_lines("pdfs", report) == [f"warning: pdfs: no usable text, not indexed: {PDF.url}"]
 
 
 def test_a_limit_build_skips_the_gates(settings, fakes, monkeypatch):

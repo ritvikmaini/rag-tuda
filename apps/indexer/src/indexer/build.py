@@ -133,17 +133,22 @@ def build_corpus(
                 extracted_dir=paths.extracted_dir,
                 skipped_log=paths.skipped_pdfs_log,
             )
+            earlier = set(seen_hashes)
             pdf_docs, missing = pdf_documents(
                 pdfs, seen_hashes, extracted_dir=paths.extracted_dir, clean=ingest.extraction.clean_markup
             )
             minutes["extract"] += time.monotonic() - t
             hashes = {d["metadata"]["file_hash"] for d in pdf_docs}
+            no_text = [
+                i.url for i in pdfs if i.file_hash in seen_hashes - earlier - hashes
+            ]  # extracted, no usable page
             count, kind = sum(1 for i in pdfs if i.file_hash in hashes), "pdfs"
             pages += [{**d, "source": connector} for d in pdf_docs]
             report |= {
                 "documents": len(pages),
                 "with_documents": count,
                 "missing_cache": missing,
+                "no_text": no_text,
                 "extract": {k: extracted.get(k) for k in ("processed", "cached", "failed", "skipped_page_limit")},
             }
         docs += pages

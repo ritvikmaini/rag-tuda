@@ -15,6 +15,44 @@ def test_classify_pages():
     assert q.classify_page("") == "empty"
 
 
+def stamped(n, body=""):
+    return f"Satzungsbeilage 2023-IV,\nSeite {n} von 225" + (f"\n{body}" if body else "")
+
+
+def test_a_page_of_page_stamps_alone_is_empty_and_goes_to_ocr():
+    pages = {n: stamped(n + 29) for n in range(1, 13)}
+    pages[8] = stamped(37, "o\no")  # stray marks of the scan
+    assert q.classify_page(pages[1]) == "ok"  # without the document's other pages it looks like text
+    asked = []
+
+    def ocr(numbers):
+        asked.append(list(numbers))
+        return {n: f"§ {n} Der Studiengang gliedert sich in Module und Prüfungen. " + stamped(n + 29) for n in numbers}
+
+    repaired, quality = q.repair_pages(pages, page_count=12, ocr_fn=ocr)
+    assert asked == [list(range(1, 13))] and quality["ocr_pages"] == list(range(1, 13))
+    assert repaired[3].startswith("§ 3 Der Studiengang")
+
+
+def test_ocr_that_returns_only_the_stamp_leaves_the_document_without_text():
+    pages = {n: stamped(n) for n in range(1, 5)}
+    repaired, quality = q.repair_pages(pages, page_count=4, ocr_fn=lambda numbers: {n: stamped(n) for n in numbers})
+    assert repaired == {} and quality["empty_pages"] == [1, 2, 3, 4] and quality["ocr_pages"] == []
+
+
+def test_a_label_on_some_pages_is_no_page_stamp():
+    handbook = {
+        n: f"Modulhandbuch Informatik {n}\n{word} vermittelt Grundlagen." for n, word in enumerate("ABCDEFGHIJ", 1)
+    }
+    for n in range(1, 7):  # the form label returns on the module pages only
+        handbook[n] += "\n10 Kommentar"
+    for n in range(1, 4):
+        handbook[n] += "\nLiteratur\nVorlesungsskript und Übungsblätter"
+    assert q.stamp_lines(handbook, 10) == {"Modulhandbuch Informatik 0"}
+    repaired, quality = q.repair_pages(handbook, page_count=10, ocr_fn=None)
+    assert sorted(repaired) == list(range(1, 11)) and quality["pending_ocr_pages"] == []
+
+
 def test_symbol_font_bullets_are_not_encoded_pages():
     page = " Erste Hilfe leisten\n Notruf 112 wählen\n Unfallstelle absichern"
     assert q.classify_page(page) == "ok"
@@ -91,6 +129,18 @@ def test_repair_entry_only_ocrs_missing_pages_of_fast_reader_entries():
     )
     assert sent2 == 1 and new2["text"].endswith("[Page 2]\nLesbarer OCR-Text der zweiten Seite.")
     assert new2["extraction_method"] == "pypdfium2+repair"
+
+
+def test_an_older_assessment_keeps_what_ocr_found_empty():
+    entry = {
+        "extraction_method": "pypdfium2",
+        "text": "[Page 1]\nLesbarer Text der ersten Seite hier.",
+        "quality": {"version": 1, "ocr_pages": [], "empty_pages": [2], "pending_ocr_pages": []},
+    }
+    assert not q.quality_is_current(entry["quality"])
+    asked = []
+    new, _sent = q.repair_entry(entry, page_count=3, ocr_fn=lambda n: asked.append(list(n)) or {})
+    assert asked == [[3]] and new["quality"]["empty_pages"] == [2, 3]
 
 
 def test_quality_is_current():
