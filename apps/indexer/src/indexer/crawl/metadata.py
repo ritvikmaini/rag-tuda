@@ -69,10 +69,16 @@ class Metadata:
     lang: str
     twin_key: str | None
     official_url: str | None
+    unconfigured_year: int | None = (
+        None  # the PO year an "Ausführungsbestimmungen" document names, when no version has it
+    )
 
     @property
     def missing(self) -> tuple[str, ...]:
-        """The required fields a programme regulation lacks; empty for every other document."""
+        """The required fields a programme regulation lacks; empty for every other document. Implementing provisions of
+        a PO year that is not a configured version count as lacking the PO version (they would apply to everyone)."""
+        if self.unconfigured_year:
+            return ("po_version",)
         if self.regulation not in PROGRAMME_BOUND:
             return ()
         return tuple(f for f in ("programme", "po_version") if getattr(self, f) is None)
@@ -144,6 +150,16 @@ def _version(programme: str | None, roles: Roles, *sources: str | None) -> tuple
             year = next(iter(years))
             return (year,) if any(v.year == year for v in roles.programmes[programme].po_versions) else None
     return None
+
+
+def _unconfigured_year(regulation: str, programme: str | None, roles: Roles, *texts: str | None) -> int | None:
+    """The one year the texts of an "Ausführungsbestimmungen" document on a programme's hub name, when the programme has
+    no PO version of that year; None for any other document."""
+    if regulation != "apb" or not programme or "ausfuehrungsbestimmung" not in _fold(*texts):
+        return None
+    years = set().union(*(_years(t) for t in texts))
+    configured = {v.year for v in roles.programmes[programme].po_versions}
+    return next(iter(years)) if len(years) == 1 and not years & configured else None
 
 
 def _official_url(programme: str | None, version: tuple[int, ...] | None, roles: Roles) -> str | None:
@@ -277,6 +293,7 @@ def pdf_metadata(link: Link, hub: Extraction, roles: Roles, twins: Mapping[str, 
         _lang(link.url, stem),
         (twins or {}).get(link.url),
         _official_url(programme, po_version, roles),
+        _unconfigured_year(regulation, programme, roles, link.text, link.title, stem),
     )
 
 

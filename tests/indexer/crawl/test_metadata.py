@@ -441,3 +441,23 @@ def test_language_of_a_pdf_name():
     names = (("apb.en.pdf", "en"), ("apb-english.pdf", "en"), ("apb.de.pdf", "de"), ("apb.pdf", "de"))
     for name, lang in (*names, ("Promotionsordnung-en.pdf", "en"), ("ESO_englisch.pdf", "en"), ("studien.pdf", "de")):
         assert pdf_metadata(_link(f"https://a.example/media/{name}", "APB"), hub, ROLES).lang == lang
+
+
+def test_implementing_provisions_of_an_unconfigured_po_year_are_listed_not_indexed():
+    hub = _hub(BSC_HUB, ("pruefungsord__209_dateiliste", None))
+
+    def provisions(year, text="Ausführungsbestimmungen (AB) {} zu den APB der TU Darmstadt"):
+        url = f"{MEDIA}/ordnungen_bsc/pruefungsordnung_x/Ausfuehrungsbestimmungen_AB_{year}_zu_den_APB.pdf"
+        link = _link(url, text.format(year), section_id="pruefungsord__209_dateiliste")
+        return Candidate(url, None, pdf_metadata(link, hub, ROLES))
+
+    old, configured = provisions(2011), provisions(2015)
+    current = Candidate(
+        INTERN_APB,
+        None,
+        pdf_metadata(_link(INTERN_APB, "Allgemeine Prüfungsbestimmungen (APB), 7. Novelle"), hub, ROLES),
+    )
+    selection = select_documents([old, configured, current], ROLES)
+    assert selection.not_indexed == ((old.url, ("po_version",)),)
+    assert [c.url for c in selection.kept] == [configured.url, INTERN_APB]
+    assert old.metadata.regulation == "apb" and old.metadata.programme is None  # it would apply to everyone

@@ -425,6 +425,26 @@ def test_one_file_linked_from_two_programme_hubs_gets_both_programmes(tu, make_c
     assert listed[PO_PDF]["content_hash"] == pdfs(result)[PO_PDF].file_hash
 
 
+OLD_AB = (
+    f"https://{FB20}/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/"
+    "pruefungsordnung_2007/Ausfuehrungsbestimmungen_AB_2007_zu_den_APB.pdf"
+)
+
+
+def test_implementing_provisions_of_an_old_po_year_are_listed_and_not_indexed(tu, make_context, served):
+    hub = (
+        '<html><head><title>Ordnungen B.Sc.</title></head><body><div class="main-column">'
+        '<section class="content-section" id="pruefungsordnung_2023"><h3>Prüfungsordnung 2023</h3>'
+        f'<a href="{PO_PDF}">Studiengangsordnung Bachelor Informatik 2023</a></section>'
+        '<section class="content-section" id="pruefungsordnung_2007_dateiliste">'
+        f'<a href="{OLD_AB}">Ausführungsbestimmungen (AB) 2007 zu den APB der TU Darmstadt</a></section>'
+        "</div></body></html>"
+    )
+    result = collect(site(served, {HUB: ("text/html", hub), OLD_AB: ("application/pdf", pages.PO_2023)}), make_context)
+    assert {"url": OLD_AB, "missing": ["po_version"]} in result.report["not_indexed"]
+    assert OLD_AB not in pdfs(result) and PO_PDF in pdfs(result)
+
+
 def test_every_url_is_asked_for_once_per_build(tu, make_context, served):
     net = site(served)
     collect(net, make_context, options={"sources": "full", "resume": False})
