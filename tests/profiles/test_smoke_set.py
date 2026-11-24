@@ -26,7 +26,7 @@ TU = ROOT / "profiles" / "tu-informatik"
 RAG = ROOT / ".rag"
 KINDS = {
     "bsc", "msc", "cs", "po_compare", "apb", "deadline", "visa", "phd", "english", "trap", "decline", "multi", "table",
-    "widening",
+    "widening", "eso",
 }  # fmt: skip
 CHECKS = {
     "contains_any", "contains_none", "digits_any", "source_url_any", "polarity", "group_values", "po_line_present",
@@ -96,7 +96,9 @@ def test_smoke_set_schema() -> None:
             quote = source["quote"]
             assert 20 <= len(quote) <= 400 and "\n" not in quote, conv["id"]  # one sentence, whitespace-normalised
             assert quote == squeeze(quote), conv["id"]
-            assert not re.search(r"[.!?]\s+[A-ZÄÖÜ]", ABBREVIATION.sub("", quote)), conv["id"]  # a second sentence
+            assert not re.search(r"(?<!\d)[.!?]\s+[A-ZÄÖÜ]", ABBREVIATION.sub("", quote)), conv[
+                "id"
+            ]  # a second sentence
             if "po_version" in source:
                 assert source["po_version"] in (2015, 2023), conv["id"]
                 assert expect.get("po_line_present") is True, conv[
