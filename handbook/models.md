@@ -86,8 +86,8 @@ shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, A
 - **Result.** With these settings `rag eval --retrieval-only` ran 27 golds in 4 minutes with no `RerankError` and no
   "semantic search failed", swap at most 4.8 GB (20.6 GB with the default Ollama and batch 32). The three model processes together
   were at 9.8 GB, under the 10.4 GB, without the VM's 1.5 GB (with it about 11.2 GB); the sum of their peaks, 3.1 + 5.1 + 2.7, is
-  10.9 GB. On the healthy stack the smoke set's 30 questions with answers ran with no degraded retrieval and no timeout, swap at
-  most 5.3 GB (3 of the 30 failed their content checks only).
+  10.9 GB. On the healthy stack the smoke set's 30 questions with answers ran with no degraded retrieval and no timeout, swap was
+  about 5.3 GB at the end of the run (3 of the 30 failed their content checks only).
   Watch it with `sysctl vm.swapusage`; `rerank_failed: True` in `.rag/logs/backend.log` means the answers came from unranked documents.
 
 ## Reasoning and streaming
