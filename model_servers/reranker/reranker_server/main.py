@@ -41,7 +41,7 @@ FATAL_GRACE_S = 30.0  # after SIGTERM, a daemon timer ends the process this much
 
 DEVICES = ("cuda", "mps", "cpu")
 DEFAULT_BATCH_SIZE = 32  # CrossEncoder.predict's default
-# 32 pairs per batch took the process past 11 GB on a 16 GB Mac; 4 keeps it near 6 GB and is faster
+# on a 16 GB Mac the process peaks near 11 GB at 32 pairs per batch and near 6 GB at 4, which is also faster
 BATCH_SIZES = {"mps": 4}
 
 
@@ -111,7 +111,7 @@ class Settings:
         return cls(
             env["RERANKER_MODEL"],
             env["RERANKER_REVISION"],
-            int(env["RERANKER_PREDICT_BATCH_SIZE"]) if env.get("RERANKER_PREDICT_BATCH_SIZE") else None,
+            positive_int(env, "RERANKER_PREDICT_BATCH_SIZE", 0) or None,
             float(env.get("MULTI_QUERY_WAIT_S", "20")),
             positive_int(env, "MAX_LENGTH", 1024),
             mode,

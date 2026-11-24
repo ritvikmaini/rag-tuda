@@ -79,6 +79,11 @@ def test_settings_come_from_the_environment():
     assert main.Settings.from_env(
         {**env, "RERANKER_PREDICT_BATCH_SIZE": "8", "MULTI_QUERY_WAIT_S": "1.5"}
     ) == main.Settings(SETTINGS.model, REV, 8, 1.5)
+    assert main.Settings.from_env({**env, "RERANKER_PREDICT_BATCH_SIZE": ""}).predict_batch_size is None
+    assert main.Settings.from_env(env).predict_batch_size is None
+    for bad in ("0", "-4"):
+        with pytest.raises(ValueError, match="RERANKER_PREDICT_BATCH_SIZE is not a positive integer"):
+            main.Settings.from_env({**env, "RERANKER_PREDICT_BATCH_SIZE": bad})
     with pytest.raises(ValueError, match="missing in the environment: RERANKER_REVISION"):
         main.Settings.from_env({"RERANKER_MODEL": SETTINGS.model})
     with pytest.raises(ValueError, match="RERANKER_REVISION is not a 40-character commit hash"):
