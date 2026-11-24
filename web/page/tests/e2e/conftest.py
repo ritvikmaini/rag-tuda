@@ -693,12 +693,36 @@ def as_stored(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{k: json.loads(s[k] or "null") if k in ("storage", "captured") else s[k] for k in keys} for s in shots]
 
 
+def relative_times(value: Any) -> Any:
+    """`thinking.startedAt` and `endedAt` are the paused clock's time at the question and at the last frame. On a slower machine
+    both land one or more 200 ms settle steps later together (a harness race, not a page difference). In every object that
+    has both keys, startedAt becomes 0 and a numeric endedAt becomes endedAt - startedAt, so the duration is still compared
+    and only the shared offset is dropped. A null stays null; an object with only one of the keys is untouched."""
+    if isinstance(value, list):
+        return [relative_times(v) for v in value]
+    if not isinstance(value, dict):
+        return value
+    out = {k: relative_times(v) for k, v in value.items()}
+    started, ended = out.get("startedAt"), out.get("endedAt")
+    if "startedAt" in out and "endedAt" in out and isinstance(started, int | float):
+        out["startedAt"] = 0
+        if isinstance(ended, int | float):
+            out["endedAt"] = ended - started
+    return out
+
+
+def relative_storage(text: str | None) -> str | None:
+    """`relative_times` on the raw sessionStorage string."""
+    return None if text is None else json.dumps(relative_times(json.loads(text)))
+
+
 def comparable(shots: list[dict[str, Any]], *keys: str) -> list[dict[str, Any]]:
     """The raw form for comparisons within one run. SVG `transform` values are masked: the mind map's zoom transform
-    differs in the fourth decimal from run to run on one page folder (d3's transition timing)."""
+    differs in the fourth decimal from run to run on one page folder (d3's transition timing). The stored thinking times are made relative."""
     return [
         {
-            **{k: s[k] for k in ("label", "storage", "captured", "title", "pageErrors", *keys)},
+            **{k: s[k] for k in ("label", "captured", "title", "pageErrors", *keys)},
+            "storage": relative_storage(s["storage"]),
             "raw": TRANSFORM.sub('transform="#"', s["raw"]),
         }
         for s in shots

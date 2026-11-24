@@ -27,7 +27,11 @@ def test_golden(browser: Browser, folder: str, scenario: dict[str, Any], e2e: Mo
         file.parent.mkdir(exist_ok=True)
         file.write_text(text, encoding="utf-8")
     assert all(not s["mismatches"] for s in shots), "every request matched its reply"
-    assert text == file.read_text(encoding="utf-8")
+    # the thinking times are compared as durations (see relative_times); key order is kept; the file's on-disk formatting is not compared (parsed and re-dumped)
+    stored = json.loads(file.read_text(encoding="utf-8"))
+    assert json.dumps(e2e.relative_times(shots), ensure_ascii=False, indent=1) == json.dumps(
+        e2e.relative_times(stored), ensure_ascii=False, indent=1
+    )
 
 
 def test_terminated_frames_render_the_same(
