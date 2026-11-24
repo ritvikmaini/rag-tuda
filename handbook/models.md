@@ -60,28 +60,34 @@ else MPS, else CPU). The bake-off that may replace them has not run.
 The S stack (Postgres in the Colima VM, the embedder, the reranker, Ollama with the default card at the full 8000-token window)
 shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, AC power), footprints from `footprint -p <pid>`:
 
-| Part | Alone | In the stack, 27 retrievals |
+| Part | Alone | In the stack, 27 retrievals (retrieval only; Ollama nearly idle) |
 |---|---|---|
 | Embedder | 2.65 GB idle; 30 query embeds 0.1 s each; a batch of 128 chunks 1.6 s, 2.9 GB | 2.7 GB |
 | Reranker, 37 documents, batch 4 (the MPS default) | 3.0 GB idle; peak 5.9 GB; 2.5 s a request | 4.6 GB (peak 5.1) |
-| Reranker, batch 32 (the setting before) | peak 11.2 GB; 5.5 s a request | |
+| Reranker, `RERANKER_PREDICT_BATCH_SIZE=32` | peak 11.2 GB; 5.5 s a request | |
 | `llama-server`, default Ollama | grows to 10.2 GB (peak 11.2) over 20 requests | |
-| `llama-server`, `LLAMA_ARG_CACHE_RAM=1024` | 2.4 to 3.1 GB | 2.4 GB (peak 3.1) |
+| `llama-server`, `LLAMA_ARG_CACHE_RAM=1024` | 2.4 to 3.1 GB | 2.4 GB (peak 3.1), as Ollama answers nothing in this run |
 | Colima VM (the default 4 CPUs, 6 GiB) | 1.1 GB fresh, 1.5 GB with Postgres in use | 1.5 GB |
 
 - **Reranker.** On MPS the server scores 4 pairs per batch (`RERANKER_PREDICT_BATCH_SIZE` overrides it; CUDA and the CPU keep 32).
-  Scores differ from batch 32 by at most 0.001 and the order of the best eight is the same. Emptying the MPS cache after a request
-  does not lower the peak.
+  Scores differ from batch 32 by at most 0.001 and the order of the best eight is the same (measured with bge-reranker-v2-m3 in
+  cross-encoder mode only). Emptying the MPS cache after a
+  request does not lower the peak.
 - **Ollama.** Its prompt cache (`LLAMA_ARG_CACHE_RAM`, default 8192 MiB) keeps the state of every earlier prompt; with 7K-token
   answer prompts it fills the Mac's memory and sends it into swap, which times out the reranker and the semantic search. Start Ollama
   with `LLAMA_ARG_CACHE_RAM=1024 ollama serve`. The cost: the analysis prompt's shared prefix is then kept only part of the time, so an
-  analysis takes 1 to 3 s when it is found and about 12 s when it is not (on 20 question and answer pairs: mean 6.9 s with 1024, 3.2 s
-  with the default, 10.2 s with 0, which holds `llama-server` at 1.4 GB). The answer's time does not change (about 21 s for these
-  prompts). `rag up` does not start or configure Ollama, so the setting belongs to whoever starts it.
-- **Colima.** Postgres with this index needs about 2 GB; the VM's footprint follows what Postgres touches (1.1 GB fresh) and does not fall
+  analysis takes 1 to 3 s when it is found and about 12 s when it is not (on 20 synthetic prompts, 17 of them answered: mean 6.9 s with
+  1024, 3.2 s with the default, 10.2 s with 0, which holds `llama-server` at 1.4 GB; the other 3 were over the 8000-token window and
+  got HTTP 400). The answer's time does not change (median 20.4 s, about 20 s for these prompts). `rag up` does not start or
+  configure Ollama, so the setting belongs to whoever starts it. With the macOS app, run `launchctl setenv LLAMA_ARG_CACHE_RAM 1024`
+  and restart the app.
+- **Colima.** Postgres with this index used 1.5 GB of the VM's footprint, which follows what Postgres touches (1.1 GB fresh) and does not fall
   again until `colima stop` and `colima start`. A fresh start before a long run keeps it small.
 - **Result.** With these settings `rag eval --retrieval-only` ran 27 golds in 4 minutes with no `RerankError` and no
-  "semantic search failed", swap at most 4.8 GB (20.6 GB before), and the three model processes together at 9.8 GB (under the 10.4 GB).
+  "semantic search failed", swap at most 4.8 GB (20.6 GB with the default Ollama and batch 32). The three model processes together
+  were at 9.8 GB, under the 10.4 GB, without the VM's 1.5 GB (with it about 11.2 GB); the sum of their peaks, 3.1 + 5.1 + 2.7, is
+  10.9 GB. On the healthy stack the smoke set's 30 questions with answers ran with no degraded retrieval and no timeout, swap at
+  most 5.3 GB (3 of the 30 failed their content checks only).
   Watch it with `sysctl vm.swapusage`; `rerank_failed: True` in `.rag/logs/backend.log` means the answers came from unranked documents.
 
 ## Reasoning and streaming
