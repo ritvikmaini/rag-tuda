@@ -103,18 +103,22 @@ A model card (`models/cards/*.toml`) names the answer model, its endpoint, its w
 
 | Class | Cards | Where it runs |
 |---|---|---|
-| S | `s-qwen3-4b-instruct-2507` (default, about 2.5 GB), `s-qwen3.5-4b` (3.3 GB), `s-gemma4-e4b` (6.6 GB) | Ollama on the machine |
+| S | `s-qwen3-4b-instruct-2507` (default, about 2.5 GB), `s-qwen3.5-4b` (4.0 GB), `s-gemma4-e4b` (9.5 GB) | Ollama on the machine |
 | M | `m-qwen3.6-35b-a3b` (22.6 GB), `m-qwen3.8-27b` (17.7 GB), `m-gemma4-31b` (20.4 GB) | Ollama on the machine |
 | L | `l-groq-gpt-oss-120b`, `l-groq-gpt-oss-20b`, `l-groq-qwen3.8-27b` | Groq's hosted endpoint; analysis, embedding and reranking stay local |
 | XL | `xl-vllm-example` | a vLLM server on NVIDIA GPUs; shipped as an example to copy, not tested |
 
-**What is measured.** Only the S card `s-qwen3-4b-instruct-2507` has been measured, on one M1 Max with 64 GB (Ollama 0.40.12):
-a prompt of about 6K tokens gets its first token after 16.4 s (about 400 tokens/s prefill), and decoding runs at 25 to 33
-tokens/s. The card's comment gives the full 8K-token window: the first token after about 18 s, and a 700-token answer ending
-after about 36 s. The card's timeouts follow from that, and they were measured on an M1 Max: a base-chip Mac may need the
-card's `idle_s`, `llm_read_s` and `deadline_s` raised.
+**What is measured.** The three S cards, on an M2 Pro with 16 GB (Ollama 0.40.17, AC power): at the full 8K-token window the
+first token comes after 21 s (`s-qwen3-4b-instruct-2507`), 20 s (`s-qwen3.5-4b`) or 18 s (`s-gemma4-e4b`), and a 700-token
+answer ends after 41, 37 or 35 s; decoding runs at 36 to 42 tokens/s. The default card was measured earlier on an M1 Max with
+64 GB (Ollama 0.40.12): the first token of a 6K-token prompt after 16.4 s, decoding at 25 to 33 tokens/s. The S cards'
+timeouts (`deadline_s` 150, `idle_s` 60, `llm_read_s` 60, `analysis_s` 40) are well above these cases because they also have to
+cover the retrieval's own waits (one `get_docs` call can be silent for about 57 s); a Mac much slower than this one may still
+need them raised. Ollama 0.40.17
+answers HTTP 501 to a `response_format` for `qwen3.5:4b` and `gemma4:e4b`, so their cards ask for JSON in the prompt
+(`structured_output = "prompt"`); the default card's tag takes the schema. The M, L and XL cards are not measured.
 
-**What is not measured yet.** The M class has not been run, and the bake-offs (embedder, reranker, answer models) are not run
+**What is not measured yet.** The M class has not been run (unmeasured on the 16 GB machine), and the bake-offs (embedder, reranker, answer models) are not run
 yet, so no card is a bake-off winner; the shipped defaults are the cards' starting choices. No quality or latency numbers for
 M, L or XL are given here.
 

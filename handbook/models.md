@@ -14,8 +14,8 @@ the model's `context_window` and, for a hosted card, the free tier's per-minute 
 | Class | Cards | Download | Window tokens |
 |---|---|---|---|
 | S | `s-qwen3-4b-instruct-2507` (default) | 2.5 GB | 8000 |
-| S | `s-qwen3.5-4b` | 3.3 GB | 8000 |
-| S | `s-gemma4-e4b` | 6.6 GB | 8000 |
+| S | `s-qwen3.5-4b` | 4.0 GB | 8000 |
+| S | `s-gemma4-e4b` | 9.5 GB | 8000 |
 | M | `m-qwen3.6-35b-a3b` | 22.6 GB | 16000 |
 | M | `m-qwen3.8-27b` | 17.7 GB | 16000 |
 | M | `m-gemma4-31b` | 20.4 GB | 16000 |
@@ -27,12 +27,26 @@ refuses otherwise. The XL card is shipped as an example to copy and has not been
 
 `rag doctor` lists the cards that fit the machine; `rag up` without `--card` takes the default card of the class that fits.
 
-## What the S card was measured at
+## What the S cards were measured at
 
-On one M1 Max with 64 GB and Ollama 0.40.12, `s-qwen3-4b-instruct-2507`: a prompt of about 6K tokens reaches its first token
-after 16.4 s (about 400 tokens/s prefill); decoding runs at 25 to 33 tokens/s. The card's comment gives the full 8K window as
-a first token after about 18 s and a 700-token answer ending after about 36 s. The card's timeouts are 1.5 to 2 times the slowest
-case, for slower Macs. The M, L and XL cards have no measurements yet.
+On an M2 Pro with 16 GB (10.4 GB usable), Ollama 0.40.17, AC power, with a prompt of the card's full 8000-token window (7.0K to
+7.5K tokens) and a 700-token answer:
+
+| Card | Prefill | Decode | First token | 700-token answer | Cold load |
+|---|---|---|---|---|---|
+| `s-qwen3-4b-instruct-2507` | 365 tokens/s | 36 tokens/s | 21 s | 41 s | 1 s |
+| `s-qwen3.5-4b` | 375 tokens/s | 42 tokens/s | 20 s | 37 s | 1.5 s |
+| `s-gemma4-e4b` | 570 tokens/s | 41 tokens/s | 18 s | 35 s | 5 s |
+
+The S cards' timeouts (`deadline_s` 150, `idle_s` 60, `llm_read_s` 60, `analysis_s` 40, `retries` 1) are well above these cases: `idle_s`
+also bounds the silence of one `get_docs` call, whose stage timeouts add up to about 57 s (retrieval 10 + 2 s, parent lookup 5 s,
+reranker 15 s, then the reference hop's 5 + 5 + 15 s), so the limits leave room for the stack's own waits. `window_tokens` is the
+largest budget whose first token stays under half of `idle_s`: the full 8000-token window's first token is at most 21 s, a 16K
+prompt takes 29 to 61 s. Ollama 0.40.17 answers HTTP 501 ("structured
+output is unavailable") to a `response_format` for `qwen3.5:4b` and `gemma4:e4b`, whose cards use `structured_output = "prompt"`
+(10 of 10 analysis replies were valid JSON of the schema). An earlier measurement of the default card on an M1 Max with 64 GB
+(Ollama 0.40.12): a 6K-token prompt reached its first token after 16.4 s and decoding ran at 25 to 33 tokens/s. The M, L and XL
+cards have no measurements yet.
 
 ## Embedder and reranker
 

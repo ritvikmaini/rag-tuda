@@ -22,9 +22,12 @@ answer_tokens = 700
 answer = "off"
 analysis = "off"
 
-# a full 8000-token window (7.3K prompt tokens) prefills at about 430 tokens/s and decodes at about 38 tokens/s on an M1 Max:
-# the first token comes after 18 s and a 700-token answer ends after 36 s (a cold model load adds up to 7 s); a request that
-# is not answered from the prompt cache analyses in 6 s. The limits are 1.5 to 2 times the slowest case, for slower Macs.
+# measured on an M2 Pro with 16 GB, Ollama 0.40.17: a full 8000-token window (7.5K prompt tokens) prefills at about 365 tokens/s and
+# decodes at about 36 tokens/s: the first token comes after 21 s and a 700-token answer ends after 41 s (a cold model load adds
+# 1 s); an analysis that is not answered from the prompt cache takes 9 s including the load.
+# The limits are not tied to the slowest model case: idle_s also bounds the silence of one get_docs call, whose stage
+# timeouts add up to about 57 s (retrieval 10 + 2 s, parent lookup 5 s, reranker 15 s, then the reference hop's 5 + 5 + 15 s), so
+# they leave room for the stack's own waits; the full window's first token (at most 21 s) stays under half of idle_s.
 [timeouts]
 deadline_s = 150
 idle_s = 60

@@ -84,4 +84,4 @@ Docker (on macOS `colima start --cpu 6 --memory 12`), Node and a first-run downl
 - `rag eval` or `rag reindex` says nothing was started from this folder: run `rag up` first.
 - The backend answers 401 on every `/api` request in compose mode: the compose command lacked `--env-file .env`.
 - `/readyz` stays unhealthy: no index is published yet; build the first one.
-- A slow Mac times out: raise the card's `idle_s`, `llm_read_s` and `deadline_s`; the shipped values were measured on an M1 Max.
+- A slow Mac times out: raise the card's `idle_s`, `llm_read_s` and `deadline_s`; the shipped values leave room for the retrieval's own waits on top of the model times measured on an M2 Pro with 16 GB (`handbook/models.md`).
