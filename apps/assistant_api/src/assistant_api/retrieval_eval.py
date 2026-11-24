@@ -15,7 +15,15 @@ list the reranker is given (a section once, at its best child) and among the rer
 to stdout, after a line naming the index (collection and live generation), the embedder and reranker `model@revision` the servers
 serve, and the card: hit@1/3/5/10 and MRR per stage (a plain run), or per ablation row after reranking, with the median and the
 maximum of the seconds one retrieval took (the call that fuses, reranks and returns; not split by stage). Never a question, a
-query or a document. Logs go to stderr. A conversation without a gold, or with one that names no url, is counted and left out.
+query or a document. Logs go to stderr. A conversation with a gold that names no url is counted and left out. A conversation
+without a gold is a no-answer probe: it is counted and left out of the table, and retrieved like the others.
+
+After the table, per row, one block of probes: a line per conversation (set/id), fixed columns, `-` for no value:
+`probe  kind  returned  fused  rank  gold_score  top_score  status`. `kind` is `gold` or `none`; `returned` the sections of the final
+list (0: the retrieval declines); `fused` and `rank` the gold's rank after fusion and after reranking; `gold_score` the gold's
+`cross_encoder_score` (the best section that is the gold; of several sources the best, or the worst for rule all); `top_score` the
+best score among all the candidates the reranker scored, before threshold, floor and cut. `status` is `ok`, `rerank_failed` (the
+reranker did not answer: its scores are 0.0 by construction, so both score columns show `-`) or `error` (the retrieval failed).
 
 The analysis runs once per distinct question per run, with the filter readers on (the profile's analysis_temperature is 0); the
 `filters` switch of a row only decides whether the resolved filter is applied. Each ablation row sets the five switches of
@@ -38,7 +46,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from time import perf_counter
-from typing import Any, TextIO, cast
+from typing import Any, NamedTuple, TextIO, cast
 
 from rag_core.adapters.http import close_http_client
 from psycopg import sql
@@ -130,12 +138,29 @@ def is_gold(gold: Mapping[str, Any], section: Section) -> bool:
     return True
 
 
+def by_rule(gold: Mapping[str, Any], values: Sequence[Any], best: Callable[..., Any], worst: Callable[..., Any]) -> Any:
+    """One value of the gold's sources: the best of those found (rule any) or the worst, None if one is missing (rule all)."""
+    found = [v for v in values if v is not None]
+    if gold.get("rule") == "all":
+        return worst(found) if len(found) == len(values) else None
+    return best(found, default=None)
+
+
 def rank_of(gold: Mapping[str, Any], sections: Sequence[Section]) -> int | None:
     """The 1-based position of the first gold section, None when it is not in the list. Of several sources the best position
     (rule any) or the worst, None if one is missing (rule all)."""
     ranks = [next((i for i, s in enumerate(sections, 1) if is_gold(source, s)), None) for source in sources_of(gold)]
-    found = [r for r in ranks if r]
-    return (max(found) if len(found) == len(ranks) else None) if gold.get("rule") == "all" else min(found, default=None)
+    return by_rule(gold, ranks, min, max)
+
+
+def gold_score(gold: Mapping[str, Any], sections: Sequence[Section], scores: Mapping[str, float]) -> float | None:
+    """The gold's reranker score: per source the best score of its sections, None when none was scored; of several sources the
+    best (rule any) or the worst, None if one is missing (rule all)."""
+    per_source = [
+        max((scores[s.section_id] for s in sections if s.section_id in scores and is_gold(source, s)), default=None)
+        for source in sources_of(gold)
+    ]
+    return by_rule(gold, per_source, max, min)
 
 
 def without_stale(gold: Mapping[str, Any], texts: Mapping[str, Sequence[str]]) -> Mapping[str, Any] | None:
@@ -170,6 +195,7 @@ class Traced:
 
     def __init__(self, service: RetrievalService) -> None:
         self.service = service
+        # scored in place by the reranker: cross_encoder_score, and rerank_failed after a failure
         self.children: list[Any] = []
         rerank = service._rerank  # the one point where the fused list is complete and not yet scored
 
@@ -188,6 +214,20 @@ class Traced:
         final_ids = self._ids(final)
         found = await self.service.sections.get_many(list(dict.fromkeys([*fused_ids, *final_ids])), None)
         return [found[i] for i in fused_ids if i in found], [found[i] for i in final_ids if i in found]
+
+    def rerank_failed(self) -> bool:
+        """Whether the reranker did not answer for the last retrieval (its documents carry a score of 0.0, which is no evidence)."""
+        return any(c.metadata.get("rerank_failed") for c in self.children)
+
+    def scores(self) -> dict[str, float]:
+        """The best reranker score per section among the children it scored, before threshold, floor and cut; empty after a
+        failed rerank."""
+        scores: dict[str, float] = {}
+        for child in [] if self.rerank_failed() else self.children:
+            score = child.metadata.get("cross_encoder_score")
+            if (section_id := child.metadata.get("section_id")) and score is not None:
+                scores[section_id] = max(score, scores.get(section_id, score))
+        return scores
 
     @staticmethod
     def _ids(documents: Sequence[Any]) -> list[str]:
@@ -223,12 +263,43 @@ def with_switches(profile: Profile, overrides: Mapping[str, bool]) -> Profile:
     return profile.model_copy(update={"retrieval": retrieval.model_copy(update={"switches": switches})})
 
 
+class Probe(NamedTuple):
+    """What one conversation's retrieval showed, as the probe block prints it; `returned` None: the retrieval failed."""
+
+    name: str
+    has_gold: bool
+    returned: int | None = None
+    fused: int | None = None
+    rank: int | None = None
+    gold_score: float | None = None
+    top_score: float | None = None
+    rerank_failed: bool = False
+
+
 class Tally:
     def __init__(self) -> None:
         self.fused: list[int | None] = []
         self.reranked: list[int | None] = []
         self.seconds: list[float] = []  # one per retrieval that worked
         self.failed = 0
+        self.probes: list[Probe] = []  # the conversations with a gold that worked or failed, and those without a gold
+
+
+def probe_of(
+    name: str, gold: Mapping[str, Any] | None, traced: Traced, fused: Sequence[Section], final: Sequence[Section]
+) -> Probe:
+    """The probe of a retrieval that worked: the gold's ranks and score (a no-answer probe has none) and the top score."""
+    scores = traced.scores()
+    return Probe(
+        name,
+        gold is not None,
+        len(final),
+        rank_of(gold, fused) if gold else None,
+        rank_of(gold, final) if gold else None,
+        gold_score(gold, fused, scores) if gold else None,
+        max(scores.values(), default=None),
+        traced.rerank_failed(),
+    )
 
 
 async def evaluate(
@@ -250,18 +321,21 @@ async def evaluate(
         logger.error("not a set with a probe file of its own: %s; known: %s", ", ".join(unknown), ", ".join(known))
         return 1
     conversations = [
-        c for name in chosen for c in json.loads(known[name].read_text(encoding="utf-8"))["conversations"][:limit]
+        (f"{name}/{c.get('id', '?')}", c)
+        for name in chosen
+        for c in json.loads(known[name].read_text(encoding="utf-8"))["conversations"][:limit]
     ]
-    golds = [(first_question(c), gold_of(c), chips_of(c)) for c in conversations if valid_gold(gold_of(c))]
-    no_gold = sum(gold_of(c) is None for c in conversations)
+    golds = [(first_question(c), gold_of(c), chips_of(c), name) for name, c in conversations if valid_gold(gold_of(c))]
+    no_answer = [(first_question(c), None, chips_of(c), name) for name, c in conversations if gold_of(c) is None]
+    no_gold = len(no_answer)
     bad_gold = len(conversations) - len(golds) - no_gold
     stale = None
     if section_texts is not None and golds:
         texts = await section_texts(
-            sorted({s["url"].partition("#")[0] for _, gold, _ in golds for s in sources_of(gold)})
+            sorted({s["url"].partition("#")[0] for _, gold, _, _ in golds for s in sources_of(gold)})
         )
-        live = [(question, without_stale(gold, texts), chips) for question, gold, chips in golds]
-        golds, stale = [(q, g, c) for q, g, c in live if g is not None], sum(g is None for _, g, _ in live)
+        live = [(question, without_stale(gold, texts), chips, name) for question, gold, chips, name in golds]
+        golds, stale = [(q, g, c, n) for q, g, c, n in live if g is not None], sum(g is None for _, g, _, _ in live)
     logger.info("[RetrievalEval] %d conversations with a gold, %d without, %d bad", len(golds), no_gold, bad_gold)
     analyses = Analyses(deps)
     tallies: dict[str, Tally] = {}
@@ -269,7 +343,7 @@ async def evaluate(
         tally = tallies[label] = Tally()
         switches = {**deps.profile.retrieval.switches.model_dump(), **overrides}
         async with open_row(overrides) as traced:
-            for question, gold, chips in golds:
+            for question, gold, chips, name in [*golds, *no_answer]:
                 try:
                     if len(question) > deps.profile.guard.max_question_chars:
                         raise ValueError("too_long")  # such a question never reaches the analysis
@@ -287,12 +361,15 @@ async def evaluate(
                     seconds = perf_counter() - started
                 except Exception as exc:  # the class only: a message may echo a question
                     logger.error("[RetrievalEval] row %s: %s", label, type(exc).__name__)
-                    tally.failed += 1
+                    tally.failed += gold is not None
+                    tally.probes.append(Probe(name, gold is not None))
                     continue
-                tally.seconds.append(seconds)
-                tally.fused.append(rank_of(gold, fused))
-                tally.reranked.append(rank_of(gold, final))
-    out.write(header + table(rows, tallies, no_gold, bad_gold, stale))
+                tally.probes.append(probe_of(name, gold, traced, fused, final))
+                if gold is not None:  # a no-answer probe is not scored: the table is of the golds
+                    tally.seconds.append(seconds)
+                    tally.fused.append(rank_of(gold, fused))
+                    tally.reranked.append(rank_of(gold, final))
+    out.write(header + table(rows, tallies, no_gold, bad_gold, stale) + probe_blocks(rows, tallies))
     out.flush()
     return 0 if any(t.reranked for t in tallies.values()) else 1
 
@@ -326,15 +403,45 @@ def table(
                     *timing,
                 )
             )
-    widths = [max(len(line[i]) for line in lines) for i in range(len(lines[0]))]
-    body = [
-        "  ".join(cell.ljust(w) if i == 0 else cell.rjust(w) for i, (cell, w) in enumerate(zip(line, widths)))
-        for line in lines
-    ]
+    body = aligned(lines)
     notes = f"{no_gold} conversations without a gold left out\n{bad_gold} conversations with a bad gold left out\n"
     if stale is not None:
         notes += f"{stale} conversations with a stale gold (its quote is in no section of its url) left out\n"
     return notes + "\n".join(body) + "\n"
+
+
+def aligned(lines: Sequence[tuple[str, ...]]) -> list[str]:
+    """The lines as columns: the first left-aligned, the others right-aligned."""
+    widths = [max(len(line[i]) for line in lines) for i in range(len(lines[0]))]
+    return [
+        "  ".join(cell.ljust(w) if i == 0 else cell.rjust(w) for i, (cell, w) in enumerate(zip(line, widths)))
+        for line in lines
+    ]
+
+
+def probe_blocks(rows: Sequence[tuple[str, Mapping[str, bool]]], tallies: Mapping[str, Tally]) -> str:
+    """After the table, per row, a line naming the row and one line per probe (see the module's text for the columns)."""
+    blocks = []
+    for label, _ in rows:
+        lines: list[tuple[str, ...]] = [
+            ("probe", "kind", "returned", "fused", "rank", "gold_score", "top_score", "status")
+        ]
+        for p in tallies[label].probes:
+            status = "error" if p.returned is None else "rerank_failed" if p.rerank_failed else "ok"
+            lines.append(
+                (
+                    p.name,
+                    "gold" if p.has_gold else "none",
+                    "-" if p.returned is None else str(p.returned),
+                    str(p.fused or "-"),
+                    str(p.rank or "-"),
+                    "-" if p.gold_score is None else f"{p.gold_score:.3f}",
+                    "-" if p.top_score is None else f"{p.top_score:.3f}",
+                    status,
+                )
+            )
+        blocks.append(f"\nprobes ({label})\n" + "\n".join(aligned(lines)) + "\n")
+    return "".join(blocks)
 
 
 def not_served(reports: Mapping[str, str]) -> list[str]:

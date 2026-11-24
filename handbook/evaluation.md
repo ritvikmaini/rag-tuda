@@ -42,6 +42,15 @@ assistant. `--sets` (comma-separated set names) and `--limit` (the first N conve
 `python -m assistant_api.retrieval_eval`, the module `rag eval --retrieval-only` runs; `rag eval` itself has only
 `--retrieval-only` and `--ablation`.
 
+After the table, one block per row lists the probes, a line per conversation (set/id) with fixed columns: `probe kind returned fused
+rank gold_score top_score status`, `-` for no value. `kind` is `gold` or `none`: a conversation without a gold is a no-answer
+probe, retrieved like the others and left out of the table. `returned` counts the sections of the final list, and 0 is a decline.
+`fused` and `rank` are the gold's rank after fusion and after reranking. `gold_score` is the gold's `cross_encoder_score` (the best
+section that is the gold) and `top_score` the best score among all candidates the reranker scored, before the threshold, the
+relevance floor and the cut: the numbers to read `threshold`, `relevance_floor` and `min_docs` off. `status` is `ok`,
+`rerank_failed` (the reranker did not answer; its 0.0 scores are no evidence, so both score columns show `-`) or `error` (the
+retrieval failed).
+
 `--ablation` runs one row per stage turned on, cumulatively: no filters, + filters, + acronyms, + fusion cut, + whole parents,
 + reference hop. It shows what each part of the design buys.
 

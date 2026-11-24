@@ -17,6 +17,7 @@ from assistant_api.graph.state import GraphDeps
 from rag_core.domain.filters import Chips
 from rag_core.domain.retrieval import Hit, Section
 from rag_core.services.prompts import PromptService, load_profile_prompts
+from rag_core.ports.retrieval import RerankError
 from rag_core.services.retrieval import RetrievalService
 from rag_core.settings import load_profile
 from rag_core.settings.card import load_card
@@ -83,15 +84,23 @@ class Reranker:
 
     SCORES = {"Parent s1": 0.6, "Parent s2": 0.95, "Parent s3": 0.1}
 
+    def __init__(self, scores=None) -> None:
+        self.scores = scores or self.SCORES
+
     async def rerank(self, queries, texts, timeout_s):
         return sorted(
-            ((next((v for k, v in self.SCORES.items() if t.startswith(k)), 0.0), t) for t in set(texts)), reverse=True
+            ((next((v for k, v in self.scores.items() if t.startswith(k)), 0.0), t) for t in set(texts)), reverse=True
         )
 
 
-def service(profile: Profile) -> RetrievalService:
+class DeadReranker:
+    async def rerank(self, queries, texts, timeout_s):
+        raise RerankError("down")
+
+
+def service(profile: Profile, reranker=None) -> RetrievalService:
     return RetrievalService(
-        Embedder(), Vector(), FullText(), Sections(), Reranker(), profile.retrieval, profile.ranking,
+        Embedder(), Vector(), FullText(), Sections(), reranker or Reranker(), profile.retrieval, profile.ranking,
         Timeouts(retrieval_s=10, parent_lookup_s=5, reranker_s=15), 8, 20, 1, chars_per_token=3.3,
     )  # fmt: skip
 
@@ -113,8 +122,8 @@ def make_deps() -> GraphDeps:
 class Rows:
     """open_row over the fake service: remembers the switches each row was opened with."""
 
-    def __init__(self, profile: Profile) -> None:
-        self.profile, self.opened = profile, []
+    def __init__(self, profile: Profile, reranker=None) -> None:
+        self.profile, self.reranker, self.opened = profile, reranker, []
 
     def __call__(self, overrides):
         self.opened.append(dict(overrides))
@@ -122,7 +131,7 @@ class Rows:
 
     @asynccontextmanager
     async def open(self, overrides):
-        yield ev.Traced(service(ev.with_switches(self.profile, overrides)))
+        yield ev.Traced(service(ev.with_switches(self.profile, overrides), self.reranker))
 
 
 def probe(cid, question, gold=GOLD):
@@ -162,6 +171,17 @@ def cells(text: str) -> list[list[str]]:
     return [line.split() for line in text.splitlines()]
 
 
+def table_of(text: str) -> str:
+    """The text before the probe blocks: the notes and the table."""
+    return text.partition("\nprobes (")[0]
+
+
+def probes_of(text: str, label: str = "profile") -> dict[str, list[str]]:
+    """The probe block of a row: probe name -> its other cells."""
+    block = text.partition(f"\nprobes ({label})\n")[2].partition("\n\n")[0]
+    return {line.split()[0]: line.split()[1:] for line in block.splitlines()[1:]}
+
+
 class Clock:
     """A perf_counter whose k-th interval lasts the k-th of these seconds."""
 
@@ -171,7 +191,7 @@ class Clock:
     def __call__(self) -> float:
         self.started = not self.started
         if not self.started:
-            self.now += self.seconds.pop(0)
+            self.now += self.seconds.pop(0) if self.seconds else 0.0  # the no-answer probes are timed too, unused
         return self.now
 
 
@@ -208,7 +228,7 @@ def test_hit_at_k_and_mrr(profile_dir: Path, monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(ev, "perf_counter", Clock(1.0, 2.0, 3.0, 4.5))  # the four retrievals that work
     code, text, _, _ = run(profile_dir, ev.PLAIN)
     assert code == 0
-    assert cells(text) == [
+    assert cells(table_of(text)) == [
         ["1", "conversations", "without", "a", "gold", "left", "out"],
         ["1", "conversations", "with", "a", "bad", "gold", "left", "out"],
         ["stage", "n", "failed", "hit@1", "hit@3", "hit@5", "hit@10", "MRR", "median", "s", "max", "s"],
@@ -263,7 +283,7 @@ def test_stale_golds_are_counted_and_left_out_of_the_scores(profile_dir: Path, m
     monkeypatch.setattr(ev, "perf_counter", Clock(1.0, 2.0, 3.0))
     asyncio.run(ev.evaluate(deps, Rows(deps.profile), profile_dir, None, None, ev.PLAIN, out, "", texts))
     assert seen == [["https://example.test/fehlt", GOLD["url"]]]  # one lookup, the urls once each, no fragment
-    lines = cells(out.getvalue())
+    lines = cells(table_of(out.getvalue()))
     assert lines[2][:3] == ["1", "conversations", "with"] and "stale" in lines[2]
     assert lines[-1][:3] == ["after", "reranking", "3"]  # A1, A2 and A5; A4 is not scored as a miss
 
@@ -294,8 +314,8 @@ def test_the_chips_of_a_probe_reach_the_analysis_and_key_its_cache(
 def test_analysis_cached_per_run(profile_dir: Path) -> None:
     code, text, deps, opened = run(profile_dir, ev.ABLATION)
     assert code == 0 and len(opened.opened) == 6
-    # A1, A2 and A5 share a question, A4's differs, A6 has no usable gold: two analysis calls for six rows of four
-    assert deps.analysis.calls == 2  # type: ignore[attr-defined]
+    # A1, A2 and A5 share a question, A4's and the no-answer probe A3's differ, A6 has no usable gold: three analysis calls
+    assert deps.analysis.calls == 3  # type: ignore[attr-defined]
     for word in (
         "Kanarienvogel",
         "Tintenfisch",
@@ -323,8 +343,8 @@ def test_ablation_turns_switches_off_one_by_one(profile_dir: Path) -> None:
     assert rows.opened == [switches for _, switches in ev.ABLATION]
     profile = ev.with_switches(make_deps().profile, ev.ABLATION[1][1])
     assert profile.retrieval.switches.filters and not profile.retrieval.switches.fusion_cut
-    assert [line[0] for line in cells(text)[3:]] == ["no", "+", "+", "+", "+", "+"]
-    assert text.count("\n") == 9  # the two notes, the head and six rows
+    assert [line[0] for line in cells(table_of(text))[3:]] == ["no", "+", "+", "+", "+", "+"]
+    assert table_of(text).count("\n") == 9  # the two notes, the head and six rows
 
 
 def test_a_conversation_without_a_gold_or_a_failing_one_does_not_count_as_a_miss(profile_dir: Path) -> None:
@@ -343,7 +363,16 @@ def test_a_conversation_without_a_gold_or_a_failing_one_does_not_count_as_a_miss
 
     code, text, _, _ = run(profile_dir, ev.PLAIN, deps=deps, open_row=Down(deps.profile))
     assert code == 1 and "Kanarienvogel" not in text
-    assert cells(text)[4][:5] == ["after", "reranking", "0", "4", "0.00"]  # all four failed, none counted a miss
+    assert cells(table_of(text))[4][:5] == [
+        "after",
+        "reranking",
+        "0",
+        "4",
+        "0.00",
+    ]  # all four failed, none counted a miss
+    assert {p[-1] for p in probes_of(text).values()} == {"error"} and len(
+        probes_of(text)
+    ) == 5  # the no-answer probe too
 
 
 def test_the_table_comes_after_the_header_line(profile_dir: Path) -> None:
@@ -441,3 +470,62 @@ def test_the_example_golds_are_in_their_documents() -> None:
             encoding="utf-8"
         )
         assert f"## {gold['heading']}\n" in text and gold["quote"] in text and len(gold["quote"]) <= 200
+
+
+def run_probes(tmp_path: Path, reranker, gold=GOLD, floor: float | None = None) -> dict[str, list[str]]:
+    """The probe block of a run over one probe with a gold (G) and one without (N); a floor above the scores makes the
+    retrieval decline."""
+    (tmp_path / "probes").mkdir(parents=True)
+    convs = [probe("G", "Frage Kanarienvogel?", gold), probe("N", "Frage Tintenfisch?", gold=None)]
+    (tmp_path / "probes" / "a.json").write_text(json.dumps({"conversations": convs}), encoding="utf-8")
+    (tmp_path / "gate.yaml").write_text(
+        yaml.safe_dump({"sets": {"set_a": {"file": "probes/a.json"}}}), encoding="utf-8"
+    )
+    deps = make_deps()
+    profile = deps.profile
+    if floor is not None:
+        profile = profile.model_copy(update={"ranking": profile.ranking.model_copy(update={"relevance_floor": floor})})
+    out = io.StringIO()
+    code = asyncio.run(ev.evaluate(deps, Rows(profile, reranker), tmp_path, None, None, ev.PLAIN, out))
+    assert code == 0 and not {"Kanarienvogel", "Tintenfisch"} & set(out.getvalue().split())
+    return probes_of(out.getvalue())
+
+
+def test_a_no_answer_probe_with_an_empty_final_list_is_a_decline(tmp_path: Path) -> None:
+    rows = run_probes(tmp_path, Reranker({"Parent s1": 0.1, "Parent s2": 0.3, "Parent s3": 0.2}), floor=0.4)
+    assert rows["set_a/N"] == ["none", "0", "-", "-", "-", "0.300", "ok"]  # nothing above threshold or floor
+    assert rows["set_a/G"][:3] == ["gold", "0", "2"]  # the gold is the second fused section and is not returned
+
+
+def test_a_no_answer_probe_with_a_non_empty_final_list_shows_its_top_score(tmp_path: Path) -> None:
+    rows = run_probes(tmp_path, Reranker())
+    assert rows["set_a/N"] == [
+        "none",
+        "3",
+        "-",
+        "-",
+        "-",
+        "0.950",
+        "ok",
+    ]  # s1 and s2 pass the threshold, min_docs adds s3
+
+
+def test_the_gold_above_and_below_another_document(tmp_path: Path) -> None:
+    above = run_probes(tmp_path / "above", Reranker())
+    assert above["set_a/G"] == ["gold", "3", "2", "1", "0.950", "0.950", "ok"]  # first after reranking, the best score
+    below = run_probes(tmp_path / "below", Reranker({"Parent s1": 0.7, "Parent s2": 0.3, "Parent s3": 0.1}))
+    assert below["set_a/G"] == ["gold", "3", "2", "2", "0.300", "0.700", "ok"]  # under the threshold, kept by min_docs
+
+
+def test_a_failed_rerank_is_no_score_evidence(tmp_path: Path) -> None:
+    rows = run_probes(tmp_path, DeadReranker())
+    assert rows["set_a/G"] == [
+        "gold",
+        "3",
+        "2",
+        "2",
+        "-",
+        "-",
+        "rerank_failed",
+    ]  # the order is kept, the 0.0 scores hidden
+    assert rows["set_a/N"] == ["none", "3", "-", "-", "-", "-", "rerank_failed"]
