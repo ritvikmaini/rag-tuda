@@ -48,7 +48,15 @@ def doc(section_id: str, **columns) -> Document:
 
 
 def answered(
-    docs, answer: str, *, applied: Filter | None = None, english=False, profile: Path = TU, earlier=(), seen=None
+    docs,
+    answer: str,
+    *,
+    applied: Filter | None = None,
+    english=False,
+    profile: Path = TU,
+    earlier=(),
+    seen=None,
+    intent="lookup",
 ) -> str:
     """The answer the node sends for the given sources when the model writes `answer`; `earlier` is the stored conversation
     before the question, `seen` collects the prompts the model gets."""
@@ -76,7 +84,7 @@ def answered(
     question = "Wie lange dauert die Thesis?"
     state = {
         "messages": [*earlier, HumanMessage(content=question)],
-        "intent": "lookup",
+        "intent": intent,
         "raw_docs": docs,
         "grouped_raw_docs": docs,
         "formatted_docs": "",
@@ -212,3 +220,43 @@ def test_grouped_citations_get_the_po_line_and_the_visa_disclaimer():
         assert answer.endswith("Grundlage: Prüfungsordnung 2023 des B.Sc. Informatik\n\n" + VISA), written
     # a group that holds only an uncited source adds nothing
     assert answered([bound, residence, other], "Antwort [3, 3].") == "Antwort [3, 3]."
+
+
+GERMAN_LINE = (
+    "Notrufe: 112 (Feuerwehr, Rettungsdienst) und 110 (Polizei). "
+    "TelefonSeelsorge, kostenfrei, Tag und Nacht: 0800 111 0 111, 0800 111 0 222 oder 116 123."
+)
+ENGLISH_LINE = (
+    "Emergency numbers: 112 (fire, ambulance) and 110 (police). "
+    "TelefonSeelsorge, free, day and night: 0800 111 0 111, 0800 111 0 222 or 116 123."
+)
+COMPLETE_DE = "Rufen Sie 112 oder 110 an. TelefonSeelsorge: 0800 111 0 111, 0800 111 0 222 oder 116 123."
+COMPLETE_EN = "Call 112 or 110. TelefonSeelsorge: 0800 111 0 111, 0800 111 0 222 or 116 123."
+
+
+def test_an_urgent_reply_that_leaves_out_a_number_gets_the_contact_line():
+    # the profile's lines pin every verified number
+    for line in (GERMAN_LINE, ENGLISH_LINE):
+        for number in ("112", "110", "0800 111 0 111", "0800 111 0 222", "116 123"):
+            assert number in line
+    forgot_police = "Rufen Sie sofort die 112 an. TelefonSeelsorge: 0800 111 0 111, 0800 111 0 222 oder 116 123."
+    assert answered([], forgot_police, intent="urgent") == forgot_police + "\n\n" + GERMAN_LINE
+    forgot_one = COMPLETE_DE.replace("0800 111 0 222 oder ", "")
+    assert answered([], forgot_one, intent="urgent") == forgot_one + "\n\n" + GERMAN_LINE
+    english = "Call 112 now. TelefonSeelsorge: 0800 111 0 111 or 116 123."
+    assert answered([], english, english=True, intent="urgent") == english + "\n\n" + ENGLISH_LINE
+
+
+def test_an_urgent_reply_with_every_number_is_left_alone():
+    assert answered([], COMPLETE_DE, intent="urgent") == COMPLETE_DE
+    assert answered([], COMPLETE_EN, english=True, intent="urgent") == COMPLETE_EN
+    # other spacing and hyphens still read as the number; digits of another number do not
+    assert answered([], "112, 110, 0800-111-0-111, 0800 1110 222, 116123.", intent="urgent").count("Notrufe") == 0
+    assert answered(
+        [], "Rufen Sie 1120 oder 110 an: 0800 111 0 111, 0800 111 0 222, 116 123.", intent="urgent"
+    ).endswith(GERMAN_LINE)
+
+
+def test_only_an_urgent_reply_gets_the_contact_line_and_a_profile_without_one_adds_none():
+    assert answered([], "Antwort.", intent="out_of_scope") == "Antwort."
+    assert answered([], "Antwort.", intent="urgent", profile=EXAMPLE) == "Antwort."

@@ -28,6 +28,8 @@ answer:
   po_programme: "{entry} of the {programme}"
   non_binding: "Not legally binding: the cited source is an English information translation. The German text is binding."
   visa_disclaimer: "No legal advice. The competent immigration authority (City of Darmstadt or District of Darmstadt-Dieburg, depending on your place of residence) has the final say."
+  # appended to an urgent reply that leaves out any of its phone numbers
+  urgent_contacts: "Emergency numbers: 112 (fire, ambulance) and 110 (police). TelefonSeelsorge, free, day and night: 0800 111 0 111, 0800 111 0 222 or 116 123."
   # closes an answer to a search that found nothing under a filter; {filter}, {first}, {rest}: what the filter names
   no_match: "I found nothing for {filter}."
   no_match_more: "I found nothing for {first}, {rest}."

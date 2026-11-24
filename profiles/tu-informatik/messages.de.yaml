@@ -27,6 +27,8 @@ answer:
   po_programme: "{entry} des {programme}"
   non_binding: "Nicht rechtsverbindlich: Die zitierte Quelle ist eine englische Informationsübersetzung. Verbindlich ist der deutsche Text."
   visa_disclaimer: "Keine Rechtsberatung. Verbindlich entscheidet die zuständige Ausländerbehörde (Stadt Darmstadt oder Landkreis Darmstadt-Dieburg, je nach Wohnort)."
+  # appended to an urgent reply that leaves out any of its phone numbers
+  urgent_contacts: "Notrufe: 112 (Feuerwehr, Rettungsdienst) und 110 (Polizei). TelefonSeelsorge, kostenfrei, Tag und Nacht: 0800 111 0 111, 0800 111 0 222 oder 116 123."
   # closes an answer to a search that found nothing under a filter; {filter}, {first}, {rest}: what the filter names
   no_match: "Für {filter} habe ich nichts gefunden."
   no_match_more: "Für {first}, {rest}, habe ich nichts gefunden."

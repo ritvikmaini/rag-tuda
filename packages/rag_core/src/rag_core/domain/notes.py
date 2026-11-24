@@ -93,6 +93,20 @@ def appended_lines(
     return [line for line in lines if line and _flat(line) not in have]
 
 
+NUMBER = re.compile(r"\d+(?: \d+)*")
+
+
+def urgent_line(answer: str, contacts: str) -> str:
+    """The contact line (the profile's, in the answer's language) when the answer lacks any phone number the line names, else
+    "". The numbers are the line's runs of digits and single spaces ("0800 111 0 111"); the answer holds one when its digits
+    appear in order, as a whole number, with spaces or hyphens between the groups."""
+    for number in NUMBER.findall(contacts):
+        written = r"[\s-]*".join(number.split())
+        if not re.search(rf"(?<!\d){written}(?!\d)", answer):
+            return contacts
+    return ""
+
+
 def _line_pattern(template: str) -> re.Pattern[str] | None:
     """A pattern for a line made from a template: its {entries} read as any text; None for an empty template."""
     if not template:

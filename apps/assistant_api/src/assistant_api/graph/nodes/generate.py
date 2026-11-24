@@ -27,7 +27,7 @@ from rag_core.domain.context_budget import ContextBudget, fit_context, rank_scor
 from rag_core.domain.dates import asks_for_event, format_date, shown_as_coming, written_dates
 from rag_core.domain.history import context_turns, conversation_state, select_turns
 from rag_core.domain.language import PROMPT_NAMES
-from rag_core.domain.notes import appended_lines
+from rag_core.domain.notes import appended_lines, urgent_line
 from rag_core.domain.query_analysis import RETRIEVAL_INTENTS
 from rag_core.domain.source_meta import cited_numbers
 from rag_core.domain.status_groups import GENERAL, Scope, note_for, question_scope, scope_lines, source_group
@@ -313,6 +313,13 @@ def make_generate(deps: GraphDeps):
                         response = AIMessage(content=answer + "\n\n" + text)
                 except Exception as exc:  # the note never costs an answer: the model's is sent
                     logger.warning(f"[StatusGroups] note_failed={type(exc).__name__}")
+            if intent == "urgent":
+                try:  # no cap on the line's words: the numbers are what the reply is for
+                    line = urgent_line(str(response.content), catalog.answer.urgent_contacts)
+                    if line:
+                        response = AIMessage(content=str(response.content) + "\n\n" + line)
+                except Exception as exc:  # the line never costs an answer: the model's is sent
+                    logger.warning(f"[Urgent] line_failed={type(exc).__name__}")
             if sources:
                 try:
                     answer = str(response.content)
