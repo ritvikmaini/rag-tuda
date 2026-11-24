@@ -44,31 +44,31 @@ assistant. `--sets` (comma-separated set names) and `--limit` (the first N conve
 
 After the table, one block per row lists the probes, a line per conversation (set/id) with fixed columns: `probe kind returned fused
 rank gold_score top_score status`, `-` for no value. `kind` is `gold` or `none`: a conversation without a gold is a no-answer
-probe, retrieved like the others and left out of the table. `returned` is the length of the final list the retrieval hands to the answer, and 0 is a decline.
-`fused` and `rank` are the gold's rank after fusion and after reranking. `gold_score` is the gold's `cross_encoder_score` (the best
-section that is the gold) and `top_score` the best score among all candidates the reranker scored, before the threshold, the
-relevance floor and the cut: the numbers to read `threshold`, `relevance_floor` and `min_docs` off. The abstain of the
-ranking compares `relevance_floor` with the best score after the recency and date bonuses, so it can differ from `top_score` when a
-profile sets a bonus. `status` is `ok`,
-`rerank_failed` (the reranker did not answer; its 0.0 scores are no evidence, so both score columns show `-`) or `error` (the
-retrieval failed).
+probe, retrieved like the others and left out of the table. `returned` is the length of the final list the retrieval hands to
+the answer, and 0 is a decline. `fused` and `rank` are the gold's rank after fusion and after reranking. `gold_score` is the
+gold's `cross_encoder_score` (the best section that is the gold) and `top_score` the best score among all candidates the
+reranker scored, before the threshold, the relevance floor and the cut: the numbers to read `threshold`, `relevance_floor` and
+`min_docs` off. The abstain of the ranking compares `relevance_floor` with the best score after the recency and date bonuses, so
+it can differ from `top_score` when a profile sets a bonus. `status` is `ok`, `rerank_failed` (the reranker did not answer; its
+0.0 scores are no evidence, so both score columns show `-`) or `error` (the retrieval failed).
 
 `--ablation` runs one row per stage turned on, cumulatively: no filters, + filters, + acronyms, + fusion cut, + whole parents,
 + reference hop. It shows what each part of the design buys.
 
-The one run available today is on the example profile, four questions with a gold source: after fusion hit@1 0.25 and MRR
+The run on the example profile has four questions with a gold source: after fusion hit@1 0.25 and MRR
 0.625, after reranking hit@1 1.00 and MRR 1.000. It shows the eval runs end to end and says nothing about TU's documents. The
 TU ablation table is pending the TU smoke set and index.
 
-## Bake-offs (not run yet)
+## Bake-offs
 
-Planned order, each on one index generation: (1) the embedder on retrieval-only hit@k and index time; (2) the reranker on
-post-rerank hit@k and latency, then the refit of `threshold`, `relevance_floor` and `min_docs`; (3) answer models per class on
-the smoke set: check pass rate, citation validity, version correctness, decline correctness, time to first token, tokens per
-second, tokens per answer, with reasoning on and off where a model has both. Candidates: embedders `snowflake-arctic-embed-m-v2.0`
-(today), `snowflake-arctic-embed-l-v2.0` and `Qwen3-Embedding-4B`; rerankers `bge-reranker-v2-m3` (today),
-`Qwen3-Reranker-0.6B` and `Qwen3-Reranker-4B`. Winners go into the cards and the profile. A small smoke set detects only large
-differences: ties go to the smaller or faster option.
+A bake-off runs each candidate on one index generation, in this order: (1) the embedder on retrieval-only hit@k and index time;
+(2) the reranker on post-rerank hit@k and latency, then the refit of `threshold`, `relevance_floor` and `min_docs`; (3) answer
+models per class on the smoke set: check pass rate, citation validity, version correctness, decline correctness, time to first
+token, tokens per second, tokens per answer, with reasoning on and off where a model has both. The candidates are the embedders
+`snowflake-arctic-embed-m-v2.0` (the pinned one), `snowflake-arctic-embed-l-v2.0` and `Qwen3-Embedding-4B`, and the rerankers
+`bge-reranker-v2-m3` (the pinned one), `Qwen3-Reranker-0.6B` and `Qwen3-Reranker-4B`. The winners go into the cards and the
+profile. A small smoke set detects only large differences: ties go to the smaller or faster option. What has been measured, on
+which machine, is in `handbook/models.md` and the README.
 
 ## Hosted-model runs
 
