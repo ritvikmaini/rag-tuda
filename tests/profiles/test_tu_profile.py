@@ -29,6 +29,7 @@ def test_profile_and_roles_load():
     assert profile.ingest.sources["laws"].connector == "law_xml"
     assert profile.generation.analysis_max_tokens == 800
     assert profile.identity.language == "de" and profile.ranking.recency_types == []
+    assert profile.ranking.relevance_floor == 0.1
 
     roles = load_profile(Roles, TU / "roles.yaml")
     assert {p: [v.year for v in r.po_versions] for p, r in roles.programmes.items()} == {

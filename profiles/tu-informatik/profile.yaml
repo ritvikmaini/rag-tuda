@@ -48,7 +48,8 @@ ranking:
   in_range_by_year: true
   question_years: true
   no_recency_in_range: true
-  relevance_floor: 0.0
+  # a sanity floor: no section scoring below it reaches the model, not even through min_docs; a failed reranker is not abstained
+  relevance_floor: 0.1
   source_min_score: 0.0
   max_per_document: 0
 history: {max_age_hours: 12, position: after_system}
