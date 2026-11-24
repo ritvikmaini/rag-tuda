@@ -19,6 +19,7 @@ QUALITY_VERSION = 2
 ENCODED_SHARE = 0.5  # a page is "encoded" when this share of its characters are U+F000-U+F0FF
 EMPTY_BELOW = 20  # fewer non-space characters: the page has no usable text (often only "2 / 142")
 MARK_LINE = 3  # a line of fewer non-space characters beside the page stamps is a stray mark, not text
+STAMP_MIN_PAGES = 5  # a shorter PDF has no stamps: its pages may well repeat a line, or all of them
 STAMP_SHARE = 0.9  # a line (digits ignored) on at least this share of a PDF's pages, and on two, is a page stamp
 READABLE_SHARE = 0.6  # share of letters, digits and punctuation in readable text
 
@@ -51,11 +52,13 @@ def _visible(text):
 def stamp_lines(pages, page_count):
     """The lines that stand on almost every page of the PDF (STAMP_SHARE) once their digits are ignored, such as "Seite 30
     von 225": page stamps, which a scanned page keeps in its text layer while the body is an image. A form label that
-    returns on every module page of a handbook stands on fewer pages."""
+    returns on every module page of a handbook stands on fewer pages. A PDF of fewer than STAMP_MIN_PAGES pages has none."""
+    if page_count < STAMP_MIN_PAGES:
+        return set()
     seen = Counter()
     for text in pages.values():
         seen.update({_blank_digits(line) for line in _COMMENT_RE.sub("", text).splitlines() if line.strip()})
-    return {line for line, n in seen.items() if n >= max(2, STAMP_SHARE * page_count)}
+    return {line for line, n in seen.items() if n >= STAMP_SHARE * page_count}
 
 
 def _blank_digits(line):

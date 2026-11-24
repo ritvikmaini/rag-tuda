@@ -35,9 +35,20 @@ def test_a_page_of_page_stamps_alone_is_empty_and_goes_to_ocr():
 
 
 def test_ocr_that_returns_only_the_stamp_leaves_the_document_without_text():
-    pages = {n: stamped(n) for n in range(1, 5)}
-    repaired, quality = q.repair_pages(pages, page_count=4, ocr_fn=lambda numbers: {n: stamped(n) for n in numbers})
-    assert repaired == {} and quality["empty_pages"] == [1, 2, 3, 4] and quality["ocr_pages"] == []
+    pages = {n: stamped(n) for n in range(1, 6)}
+    repaired, quality = q.repair_pages(pages, page_count=5, ocr_fn=lambda numbers: {n: stamped(n) for n in numbers})
+    assert repaired == {} and quality["empty_pages"] == [1, 2, 3, 4, 5] and quality["ocr_pages"] == []
+
+
+def test_a_short_pdf_has_no_page_stamps():
+    page = "Gebührenordnung der Hochschule, Fassung vom Januar"
+    two = {1: page, 2: page}
+    assert q.stamp_lines(two, 2) == set() and q.stamp_lines({n: stamped(n) for n in (1, 2, 3, 4)}, 4) == set()
+    repaired, quality = q.repair_pages(two, page_count=2, ocr_fn=None)
+    assert sorted(repaired) == [1, 2] and quality["pending_ocr_pages"] == []
+    five = {n: stamped(n) for n in range(1, 6)}
+    assert q.stamp_lines(five, 5) == {"Satzungsbeilage 0-IV,", "Seite 0 von 0"}
+    assert q.repair_pages(five, page_count=5, ocr_fn=None)[1]["pending_ocr_pages"] == [1, 2, 3, 4, 5]
 
 
 def test_a_label_on_some_pages_is_no_page_stamp():
