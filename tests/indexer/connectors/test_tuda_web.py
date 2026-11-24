@@ -440,6 +440,38 @@ def test_one_file_linked_from_two_programme_hubs_gets_both_programmes(tu, make_c
     assert listed[PO_PDF]["content_hash"] == pdfs(result)[PO_PDF].file_hash
 
 
+UNDATED_PDF = MSC_PDF.rsplit("/", 1)[0] + "/Studiengangsordnung.pdf"  # its name states no year
+
+
+def test_a_main_column_link_wins_over_an_earlier_link_of_an_aside(tu, make_context, served):
+    first = (  # the first page crawled links the PO only from an aside, which states no PO version
+        '<html><head><title>Ordnungen</title></head><body><div class="main-column"><section class="content-section" '
+        'id="info"><h3>Info</h3><p>Hinweise.</p></section></div>'
+        f'<aside><a href="{UNDATED_PDF}">Ordnung des Studiengangs M.Sc. Informatik</a></aside></body></html>'
+    )
+    msc_hub = (
+        '<html><head><title>Ordnungen M.Sc.</title></head><body><div class="main-column">'
+        '<section class="content-section" id="pruefungsordnung_2023"><h3>Prüfungsordnung 2023</h3>'
+        f'<a href="{UNDATED_PDF}">Ordnung des Studiengangs M.Sc. Informatik</a></section></div></body></html>'
+    )
+    prefixes = (
+        f"{pages.ORDNUNGEN}/ordnungen_msc_informatik",
+        "/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/",
+    )
+    (tu / "sources.yaml").write_text(
+        yaml.safe_dump(sources_yaml(extra_seeds=(MSC_HUB,), extra_prefixes=prefixes)), encoding="utf-8"
+    )
+    net = site(
+        served,
+        {HUB: ("text/html", first), MSC_HUB: ("text/html", msc_hub), UNDATED_PDF: ("application/pdf", pages.PO_2023)},
+    )
+    result = collect(net, make_context)
+    meta = pdfs(result)[UNDATED_PDF].metadata
+    assert (meta["programme"], meta["po_version"]) == (["msc-informatik"], [2023])
+    assert UNDATED_PDF not in [d["url"] for d in result.report["not_indexed"]]
+    assert list(net.urls()).count(UNDATED_PDF) == 1  # not fetched twice
+
+
 OLD_AB = (
     f"https://{FB20}/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/"
     "pruefungsordnung_2007/Ausfuehrungsbestimmungen_AB_2007_zu_den_APB.pdf"

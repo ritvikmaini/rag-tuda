@@ -291,8 +291,16 @@ class TudaWeb:
                 crawl.docs.append(Doc(anchor, title, entry, dataclasses.replace(reply, body=b"")))
             for link in page.pdfs:
                 owner = hosts.get(urlsplit(link.url).hostname or "")
-                if link.url in crawl.pdfs or owner is None or not in_scope(owner.source, link.url):
-                    continue  # linked from another section, or not the listing host's: a bundle of acts, say
+                if owner is None or not in_scope(owner.source, link.url):
+                    continue  # not the listing host's: a bundle of acts, say
+                known = crawl.pdfs.get(link.url)
+                if (
+                    known and known.link.aside and not link.aside
+                ):  # a main column states the scope, an aside menu does not
+                    meta = pdf_metadata(link, page, roles, twins)
+                    crawl.pdfs[link.url] = dataclasses.replace(known, link=link, hub=page, metadata=meta)
+                if known:
+                    continue  # linked from another section
                 pdf = fetcher.get(link.url)
                 if not isinstance(pdf, Skipped) and not stays_in_scope(owner.source, pdf, link.url):
                     crawl.skipped.append({"url": link.url, "reason": "redirected out of scope"})
