@@ -47,8 +47,8 @@ def test_the_first_build_publishes_generation_1_and_names_what_it_left_out(
 ) -> None:
     assert harness.live_generation(db) == 1
     lines = built.stdout.splitlines()
-    assert lines[0] == "source tu_web: 10 documents"
-    assert lines[-1].startswith("generation 1 published (previous none): 9 sections, ")
+    assert lines[0] == "source tu_web: 11 documents"
+    assert lines[-1].startswith("generation 1 published (previous none): 10 sections, ")
     assert not [line for line in lines if line.startswith("warning")]  # no empty page, nothing fail-closed
     notes = set(lines[1:-1])
     assert f"note: tu_web: copy skipped, its original is indexed: {APB_COPY}" in notes
