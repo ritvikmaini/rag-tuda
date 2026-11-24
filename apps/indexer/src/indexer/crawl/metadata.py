@@ -37,16 +37,16 @@ __all__ = [
 PROGRAMME_BOUND = ("po", "mhb", "spp")  # these need a programme and a PO version
 UNIVERSAL = ("apb", "eso", "promotion", "residence")  # these apply beyond one programme
 HUB_COPIED = ("apb", "eso")  # university-wide regulations a faculty hub may carry a copy of
+ORDNUNG = re.compile(r"(?<!zu)ordnung")  # "Zuordnung" (assignment) is no Ordnung
 # checked in order against the folded text, the most specific kind first (a Modulhandbuch may name the APB); the first
-# match is the regulation. A form is checked before the PO: "Erklärung zum PO-Wechsel" is a form, not a PO; a
-# "Zuordnung" (assignment) is no Ordnung.
+# match is the regulation. A form is checked before the PO: "Erklärung zum PO-Wechsel" is a form, not a PO.
 REGULATIONS = (
     ("mhb", re.compile(r"modulhandbuch|\bmhb\b")),
     ("spp", re.compile(r"studien und pruefungsplan|studienplan|\bspp\b")),
     ("apb", re.compile(r"\bapb\b|allg\w* pruefungsbest")),
     ("eso", re.compile(r"\beso\b|einschreibeordnung")),
     ("form", re.compile(r"erklaerung|antrag|formular")),
-    ("po", re.compile(r"(?<!zu)ordnung")),
+    ("po", ORDNUNG),
 )
 # a section heading names a regulation only by these kinds (its "Ordnung" alone is no PO); a PO year in it names the PO
 HEADING_REGULATIONS = ("mhb", "spp", "apb", "eso")
@@ -141,7 +141,7 @@ def _section_year(section_id: str | None, heading: str | None) -> int | None:
     """The PO year a section names ("pruefungsordnung_2023"), when its id or heading says Ordnung and one year."""
     text = " ".join(t for t in (section_id, heading) if t)
     years = _years(text)
-    return next(iter(years)) if "ordnung" in _fold(text) and len(years) == 1 else None
+    return next(iter(years)) if ORDNUNG.search(_fold(text)) and len(years) == 1 else None
 
 
 def _version(programme: str | None, roles: Roles, *sources: str | None) -> tuple[int, ...] | None:

@@ -531,3 +531,10 @@ def test_a_zuordnung_is_no_ordnung():
     code = _link("https://www.tu-darmstadt.de/media/x/ISCEDZuordnungen-2.pdf", "ISCED – Code Zuordnung (PDF-Datei)")
     assert pdf_metadata(code, page, ROLES).regulation == "info"
     assert pdf_metadata(_link(code.url, "Studienordnung"), page, ROLES).regulation == "po"
+
+
+def test_a_zuordnung_section_on_a_hub_is_no_po_of_its_own():
+    entries = page_entries(_hub(BSC_HUB, ("zuordnung_2023", "Zuordnung 2023")), ROLES)
+    assert [(e.metadata.regulation, e.metadata.po_version) for e in entries] == [("info", None)]
+    entries = page_entries(_hub(BSC_HUB, ("pruefungsordnung_2023", "Prüfungsordnung 2023")), ROLES)
+    assert [(e.metadata.regulation, e.metadata.po_version) for e in entries] == [("po", (2023,))]
