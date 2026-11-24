@@ -461,3 +461,33 @@ def test_implementing_provisions_of_an_unconfigured_po_year_are_listed_not_index
     assert selection.not_indexed == ((old.url, ("po_version",)),)
     assert [c.url for c in selection.kept] == [configured.url, INTERN_APB]
     assert old.metadata.regulation == "apb" and old.metadata.programme is None  # it would apply to everyone
+
+
+def test_a_date_of_implementing_provisions_is_no_po_year():
+    hub = _hub(BSC_HUB, ("pruefungsord__209_dateiliste", None))
+    base = f"{MEDIA}/ordnungen_bsc/pruefungsordnung_x"
+    cases = (  # (file name, link text): the year is a date, not a PO year
+        ("Ausfuehrungsbestimmungen_zu_den_APB.pdf", "Ausführungsbestimmungen zu den APB (in Kraft seit 13.01.2022)"),
+        ("2025_01_15_Ausfuehrungsbestimmungen_x.pdf", "Ausführungsbestimmungen zu den APB"),
+    )
+    for name, text in cases:
+        link = _link(f"{base}/{name}", text, section_id="pruefungsord__209_dateiliste")
+        meta = pdf_metadata(link, hub, ROLES)
+        assert meta.regulation == "apb" and meta.unconfigured_year is None and meta.missing == (), name
+
+
+def test_implementing_provisions_name_their_unconfigured_year_beside_a_date():
+    hub = _hub(BSC_HUB, ("pruefungsord__209_dateiliste", None))
+    base = f"{MEDIA}/ordnungen_bsc/pruefungsordnung_x"
+    for year, name, text in (
+        (2011, "Ausfuehrungsbestimmungen_AB_2011_zu_den_APB.pdf", "Ausführungsbestimmungen (AB) 2011 zu den APB"),
+        (2007, "Ausfuehrungsbestimmungen_AB_2007_zu_den_APB.pdf", "Ausführungsbestimmungen (AB) 2007 zu den APB"),
+        (2004, "Ausfuehrungsbestimmungen_2004_zu_den_APB.pdf", "Ausführungsbestimmungen 2004 zu den APB"),
+        (
+            2004,
+            "2025_01_15_Ausfuehrungsbestimmungen_2004.pdf",
+            "Ausführungsbestimmungen 2004 zu den APB (Stand 15.01.2025)",
+        ),
+    ):
+        link = _link(f"{base}/{name}", text, section_id="pruefungsord__209_dateiliste")
+        assert pdf_metadata(link, hub, ROLES).unconfigured_year == year, name

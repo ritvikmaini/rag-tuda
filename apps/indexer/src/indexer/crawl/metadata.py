@@ -69,9 +69,8 @@ class Metadata:
     lang: str
     twin_key: str | None
     official_url: str | None
-    unconfigured_year: int | None = (
-        None  # the PO year an "Ausführungsbestimmungen" document names, when no version has it
-    )
+    # the PO year an "Ausführungsbestimmungen" document names, when no version has it
+    unconfigured_year: int | None = None
 
     @property
     def missing(self) -> tuple[str, ...]:
@@ -153,8 +152,8 @@ def _version(programme: str | None, roles: Roles, *sources: str | None) -> tuple
 
 
 def _unconfigured_year(regulation: str, programme: str | None, roles: Roles, *texts: str | None) -> int | None:
-    """The one year the texts of an "Ausführungsbestimmungen" document on a programme's hub name, when the programme has
-    no PO version of that year; None for any other document."""
+    """The one year the texts of an "Ausführungsbestimmungen" document on a programme's hub name (dates and a file name's
+    date prefix are no PO year), when the programme has no PO version of that year; None for any other document."""
     if regulation != "apb" or not programme or "ausfuehrungsbestimmung" not in _fold(*texts):
         return None
     years = set().union(*(_years(t) for t in texts))
@@ -293,7 +292,7 @@ def pdf_metadata(link: Link, hub: Extraction, roles: Roles, twins: Mapping[str, 
         _lang(link.url, stem),
         (twins or {}).get(link.url),
         _official_url(programme, po_version, roles),
-        _unconfigured_year(regulation, programme, roles, link.text, link.title, stem),
+        _unconfigured_year(regulation, programme, roles, link.text, link.title, DATE_PREFIX.sub("", stem)),
     )
 
 
