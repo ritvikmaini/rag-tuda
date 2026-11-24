@@ -6,7 +6,11 @@ Read-only, run natively with the backend's settings (`rag eval --retrieval-only 
 A conversation takes part when its first turn carries `"gold": {"url": ..., "heading": ... | "page": N, "quote": ...}`: the hit is
 the gold when its url (a `#` fragment ignored) equals the gold's and the section's text contains the gold's quote (whitespace
 normalised); a gold without a quote falls back to its heading (in the section path or a heading line of the text), then to its page.
-The rank is the 1-based position of the gold among the sections of the fused
+A gold may name more sources in `"also": [{...}, ...]` with `"rule": "any"` (the default: the best rank of the sources) or
+`"all"` (the worst: every source must be found). A gold whose quote is in no section of its url is stale (the page changed): it is
+counted and left out of the scores, not counted as a miss; of a gold with several sources a stale source is dropped, and an `all`
+gold with a stale source is stale as a whole. A first turn may carry `"chips": {"degree", "programme", "po"}`, the page's selectors
+the analysis resolves the filter with. The rank is the 1-based position of the gold among the sections of the fused
 list the reranker is given (a section once, at its best child) and among the reranked sections the retrieval returns. One table goes
 to stdout, after a line naming the index (collection and live generation), the embedder and reranker `model@revision` the servers
 serve, and the card: hit@1/3/5/10 and MRR per stage (a plain run), or per ablation row after reranking, with the median and the
@@ -28,19 +32,20 @@ import json
 import logging
 import os
 import sys
-from collections.abc import AsyncIterator, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from time import perf_counter
-from typing import Any, TextIO
+from typing import Any, TextIO, cast
 
 from rag_core.adapters.http import close_http_client
-from rag_core.adapters.pg_index import open_index, read_pool
+from psycopg import sql
+from rag_core.adapters.pg_index import PgSections, open_index, read_pool
 from rag_core.domain.access import ANONYMOUS
 from rag_core.domain.answer_shapes import answer_language
-from rag_core.domain.filters import Filter
+from rag_core.domain.filters import Chips, Filter
 from rag_core.domain.resilience import dispose_engines
 from rag_core.domain.retrieval import Section
 from rag_core.services.retrieval import RetrievalService
@@ -71,13 +76,34 @@ def gold_of(conversation: Mapping[str, Any]) -> Any:
     return conversation["turns"][0].get("gold")
 
 
-def valid_gold(gold: Any) -> bool:
-    """A gold names a url; its quote and heading, when given, are texts."""
+def chips_of(conversation: Mapping[str, Any]) -> Chips | None:
+    """The page's selectors the first turn is asked with, None without any."""
+    chips = conversation["turns"][0].get("chips")
+    return Chips(**{k: chips.get(k) for k in ("degree", "programme", "po")}) if chips else None
+
+
+def valid_source(source: Any) -> bool:
+    """A source names a url; its quote and heading, when given, are texts."""
     return (
-        isinstance(gold, Mapping)
-        and isinstance(gold.get("url"), str)
-        and bool(gold["url"])
-        and all(isinstance(gold.get(key, ""), str) for key in ("quote", "heading"))
+        isinstance(source, Mapping)
+        and isinstance(source.get("url"), str)
+        and bool(source["url"])
+        and all(isinstance(source.get(key, ""), str) for key in ("quote", "heading"))
+    )
+
+
+def sources_of(gold: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """The gold's own source and the `also` ones."""
+    return [gold, *(gold.get("also") or [])]
+
+
+def valid_gold(gold: Any) -> bool:
+    """A gold is a source whose `also` entries are sources too and whose rule is any or all."""
+    return (
+        valid_source(gold)
+        and isinstance(gold.get("also") or [], list)
+        and all(valid_source(source) for source in gold.get("also") or [])
+        and gold.get("rule", "any") in ("any", "all")
     )
 
 
@@ -105,8 +131,29 @@ def is_gold(gold: Mapping[str, Any], section: Section) -> bool:
 
 
 def rank_of(gold: Mapping[str, Any], sections: Sequence[Section]) -> int | None:
-    """The 1-based position of the first gold section, None when it is not in the list."""
-    return next((i for i, section in enumerate(sections, 1) if is_gold(gold, section)), None)
+    """The 1-based position of the first gold section, None when it is not in the list. Of several sources the best position
+    (rule any) or the worst, None if one is missing (rule all)."""
+    ranks = [next((i for i, s in enumerate(sections, 1) if is_gold(source, s)), None) for source in sources_of(gold)]
+    found = [r for r in ranks if r]
+    return (max(found) if len(found) == len(ranks) else None) if gold.get("rule") == "all" else min(found, default=None)
+
+
+def without_stale(gold: Mapping[str, Any], texts: Mapping[str, Sequence[str]]) -> Mapping[str, Any] | None:
+    """The gold without its stale sources (a quote in no section of its url; `texts`: url without fragment -> the texts of its
+    sections); None when the gold cannot be met any more: every source stale, or one of an `all` gold."""
+    sources = sources_of(gold)
+    live = [
+        s
+        for s in sources
+        if not s.get("quote")
+        or any(squeeze(s["quote"]) in squeeze(t) for t in texts.get(s["url"].partition("#")[0], ()))
+    ]
+    if not live or (gold.get("rule") == "all" and len(live) < len(sources)):
+        return None
+    if len(live) == len(sources):
+        return gold
+    first, *rest = live
+    return {**{k: v for k, v in first.items() if k != "also"}, **({"also": rest} if rest else {})}
 
 
 def summarise(ranks: Sequence[int | None]) -> dict[str, float]:
@@ -148,21 +195,25 @@ class Traced:
 
 
 OpenRow = Callable[[Mapping[str, bool]], AbstractAsyncContextManager[Traced]]
+SectionTexts = Callable[
+    [Sequence[str]], Awaitable[Mapping[str, Sequence[str]]]
+]  # urls -> url -> the texts of its sections
 
 
 class Analyses:
-    """The analysis node's state per question, asked once per run. The node runs with the filter readers on."""
+    """The analysis node's state per question and chips, asked once per run. The node runs with the filter readers on."""
 
     def __init__(self, deps: GraphDeps) -> None:
         analysis_deps = dataclasses.replace(deps, profile=with_switches(deps.profile, {"filters": True}))
         self.node: Any = make_analyse(analysis_deps)  # Any: fed the question's fields only, as scope_scores does
-        self.states: dict[str, dict[str, Any]] = {}
+        self.states: dict[tuple[str, Chips | None], dict[str, Any]] = {}
 
-    async def of(self, question: str) -> dict[str, Any]:
-        if question not in self.states:
+    async def of(self, question: str, chips: Chips | None = None) -> dict[str, Any]:
+        if (question, chips) not in self.states:
             messages = [question_message(question, None, datetime.now(timezone.utc))]
-            self.states[question] = await self.node({"messages": messages, "formats": ""})
-        return self.states[question]
+            config: Any = {"configurable": {"chips": chips}}
+            self.states[(question, chips)] = await self.node({"messages": messages, "formats": ""}, config)
+        return self.states[(question, chips)]
 
 
 def with_switches(profile: Profile, overrides: Mapping[str, bool]) -> Profile:
@@ -189,9 +240,10 @@ async def evaluate(
     rows: Sequence[tuple[str, Mapping[str, bool]]],
     out: TextIO,
     header: str = "",
+    section_texts: SectionTexts | None = None,
 ) -> int:
     """Writes the header line and the table of the rows over the chosen sets (gate.yaml's file sets by default; at most `limit`
-    conversations of each)."""
+    conversations of each). With `section_texts`, a gold whose quote is in no section of its url is stale: counted, not scored."""
     known = file_sets(profile_dir)
     chosen = list(names) if names else list(known)
     if unknown := [n for n in chosen if n not in known]:
@@ -200,9 +252,16 @@ async def evaluate(
     conversations = [
         c for name in chosen for c in json.loads(known[name].read_text(encoding="utf-8"))["conversations"][:limit]
     ]
-    golds = [(first_question(c), gold_of(c)) for c in conversations if valid_gold(gold_of(c))]
+    golds = [(first_question(c), gold_of(c), chips_of(c)) for c in conversations if valid_gold(gold_of(c))]
     no_gold = sum(gold_of(c) is None for c in conversations)
     bad_gold = len(conversations) - len(golds) - no_gold
+    stale = None
+    if section_texts is not None and golds:
+        texts = await section_texts(
+            sorted({s["url"].partition("#")[0] for _, gold, _ in golds for s in sources_of(gold)})
+        )
+        live = [(question, without_stale(gold, texts), chips) for question, gold, chips in golds]
+        golds, stale = [(q, g, c) for q, g, c in live if g is not None], sum(g is None for _, g, _ in live)
     logger.info("[RetrievalEval] %d conversations with a gold, %d without, %d bad", len(golds), no_gold, bad_gold)
     analyses = Analyses(deps)
     tallies: dict[str, Tally] = {}
@@ -210,11 +269,11 @@ async def evaluate(
         tally = tallies[label] = Tally()
         switches = {**deps.profile.retrieval.switches.model_dump(), **overrides}
         async with open_row(overrides) as traced:
-            for question, gold in golds:
+            for question, gold, chips in golds:
                 try:
                     if len(question) > deps.profile.guard.max_question_chars:
                         raise ValueError("too_long")  # such a question never reaches the analysis
-                    state = await analyses.of(question)
+                    state = await analyses.of(question, chips)
                     started = perf_counter()
                     fused, final = await traced.places(
                         state["retrieval_queries"],
@@ -233,13 +292,17 @@ async def evaluate(
                 tally.seconds.append(seconds)
                 tally.fused.append(rank_of(gold, fused))
                 tally.reranked.append(rank_of(gold, final))
-    out.write(header + table(rows, tallies, no_gold, bad_gold))
+    out.write(header + table(rows, tallies, no_gold, bad_gold, stale))
     out.flush()
     return 0 if any(t.reranked for t in tallies.values()) else 1
 
 
 def table(
-    rows: Sequence[tuple[str, Mapping[str, bool]]], tallies: Mapping[str, Tally], no_gold: int, bad_gold: int
+    rows: Sequence[tuple[str, Mapping[str, bool]]],
+    tallies: Mapping[str, Tally],
+    no_gold: int,
+    bad_gold: int,
+    stale: int | None = None,
 ) -> str:
     """The plain table: one row (a plain run) shows both stages, several (an ablation) the rows after reranking."""
     lines: list[tuple[str, ...]] = [("stage", "n", "failed", *(f"hit@{k}" for k in KS), "MRR", "median s", "max s")]
@@ -269,6 +332,8 @@ def table(
         for line in lines
     ]
     notes = f"{no_gold} conversations without a gold left out\n{bad_gold} conversations with a bad gold left out\n"
+    if stale is not None:
+        notes += f"{stale} conversations with a stale gold (its quote is in no section of its url) left out\n"
     return notes + "\n".join(body) + "\n"
 
 
@@ -295,6 +360,24 @@ def header_line(rt: Runtime, generation: int | None) -> str:
         f"index {rt.collection} generation {'unknown' if generation is None else generation}; "
         f"embedder {pins[0]}; reranker {pins[1]}; card {rt.settings.card.name}\n"
     )
+
+
+def texts_reader(sections: PgSections) -> SectionTexts:
+    """The one lookup of the stale check: the texts of every section of the given urls (a `#` fragment ignored), read from the
+    section view the retrieval reads."""
+    query = sql.SQL(
+        "SELECT split_part(url, '#', 1), content FROM {} WHERE split_part(url, '#', 1) = ANY(%(urls)s)"
+    ).format(sql.Identifier(sections.view))
+
+    async def read(urls: Sequence[str]) -> Mapping[str, Sequence[str]]:
+        async with sections.pool.connection() as conn:
+            rows = await (await conn.execute(query, {"urls": list(urls)})).fetchall()
+        texts: dict[str, list[str]] = {}
+        for url, content in rows:
+            texts.setdefault(url, []).append(content)
+        return texts
+
+    return read
 
 
 def row_opener(rt: Runtime) -> OpenRow:
@@ -334,6 +417,7 @@ async def run(args: argparse.Namespace, environ: Mapping[str, str], secrets_dir:
                 ABLATION if args.ablation else PLAIN,
                 sys.stdout,
                 header_line(rt, generation),
+                texts_reader(cast(PgSections, index.sections)),
             )
         finally:
             await dispose_engines(*index.engines)

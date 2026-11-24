@@ -14,6 +14,7 @@ import yaml
 
 from assistant_api import retrieval_eval as ev
 from assistant_api.graph.state import GraphDeps
+from rag_core.domain.filters import Chips
 from rag_core.domain.retrieval import Hit, Section
 from rag_core.services.prompts import PromptService, load_profile_prompts
 from rag_core.services.retrieval import RetrievalService
@@ -214,6 +215,80 @@ def test_hit_at_k_and_mrr(profile_dir: Path, monkeypatch: pytest.MonkeyPatch) ->
         ["after", "fusion", "4", "0", "0.00", "0.75", "0.75", "0.75", "0.375", "-", "-"],
         ["after", "reranking", "4", "0", "0.75", "0.75", "0.75", "0.75", "0.750", "2.50", "4.50"],
     ]  # the latency is of the whole retrieval, so only the last stage carries it
+
+
+def test_a_gold_with_several_sources_ranks_by_its_rule() -> None:
+    other = {"url": "https://example.test/anderes", "quote": "Der Urlaub beträgt"}
+    sections = [
+        Section(i, t, {"url": u})
+        for i, t, u in (
+            ("s3", "Der Urlaub beträgt", other["url"]),
+            ("s0", "x", "y"),
+            ("s1", "Der Urlaub beträgt 24", GOLD["url"]),
+        )
+    ]
+    assert ev.rank_of(GOLD, sections) == 3  # one source, as before
+    assert ev.rank_of({**GOLD, "also": [other]}, sections) == 1  # any: the best
+    assert ev.rank_of({**GOLD, "also": [other], "rule": "all"}, sections) == 3  # all: the worst
+    assert ev.rank_of({**GOLD, "also": [{"url": "https://example.test/fehlt"}], "rule": "all"}, sections) is None
+    assert ev.valid_gold({**GOLD, "also": [other], "rule": "all"})
+    assert not ev.valid_gold({**GOLD, "also": [{"quote": "x"}]}) and not ev.valid_gold({**GOLD, "rule": "some"})
+
+
+def test_a_source_whose_quote_is_in_no_section_of_its_url_is_stale() -> None:
+    texts = {
+        GOLD["url"]: ["Davor.", "Der\nUrlaub  beträgt 24 Werktage."],
+        "https://example.test/geaendert": ["Neuer Text"],
+    }
+    assert ev.without_stale(GOLD, texts) is GOLD  # the quote is there, across a line break
+    gone = {"url": "https://example.test/geaendert", "quote": "Alter Text"}
+    assert ev.without_stale({**GOLD, "url": gone["url"]}, texts) is None
+    assert ev.without_stale({**GOLD, "url": "https://example.test/fehlt#a"}, texts) is None  # no section at all
+    assert ev.without_stale({"url": gone["url"]}, texts) == {"url": gone["url"]}  # no quote: nothing to be stale
+    # any: the stale source is dropped, the gold stays; all: one stale source makes the whole gold stale
+    assert ev.without_stale({**GOLD, "also": [gone]}, texts) == GOLD
+    assert ev.without_stale({**gone, "also": [GOLD]}, texts) == GOLD
+    assert ev.without_stale({**GOLD, "also": [gone], "rule": "all"}, texts) is None
+
+
+def test_stale_golds_are_counted_and_left_out_of_the_scores(profile_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = []
+
+    async def texts(urls):
+        seen.append(list(urls))
+        return {GOLD["url"]: ["Der Urlaub beträgt 24 Werktage."]}  # A4's url has no section
+
+    deps = make_deps()
+    out = io.StringIO()
+    monkeypatch.setattr(ev, "perf_counter", Clock(1.0, 2.0, 3.0))
+    asyncio.run(ev.evaluate(deps, Rows(deps.profile), profile_dir, None, None, ev.PLAIN, out, "", texts))
+    assert seen == [["https://example.test/fehlt", GOLD["url"]]]  # one lookup, the urls once each, no fragment
+    lines = cells(out.getvalue())
+    assert lines[2][:3] == ["1", "conversations", "with"] and "stale" in lines[2]
+    assert lines[-1][:3] == ["after", "reranking", "3"]  # A1, A2 and A5; A4 is not scored as a miss
+
+
+def test_the_chips_of_a_probe_reach_the_analysis_and_key_its_cache(
+    profile_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chipped = probe("A7", "Wie viel Urlaub Kanarienvogel?")
+    chipped["turns"][0]["chips"] = {"degree": "bachelor", "po": 2023}
+    path = profile_dir / "probes" / "a.json"
+    path.write_text(
+        json.dumps({"conversations": [probe("A1", "Wie viel Urlaub Kanarienvogel?"), chipped]}), encoding="utf-8"
+    )
+    asked = []
+    real = ev.Analyses.of
+
+    async def of(self, question, chips=None):
+        asked.append(chips)
+        return await real(self, question, chips)
+
+    monkeypatch.setattr(ev.Analyses, "of", of)
+    deps = make_deps()
+    run(profile_dir, ev.PLAIN, deps=deps)
+    assert asked == [None, Chips(degree="bachelor", po=2023)]
+    assert deps.analysis.calls == 2  # the same question with other chips is asked again  # type: ignore[attr-defined]
 
 
 def test_analysis_cached_per_run(profile_dir: Path) -> None:
