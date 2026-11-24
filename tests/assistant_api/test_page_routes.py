@@ -21,6 +21,10 @@ from assistant_api.sse import frames as fr
 
 ROOT = Path(__file__).resolve().parents[2]
 AUTH = {"Authorization": "Bearer t0k"}
+POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+    "frame-ancestors 'none'"
+)
 FAKE_CARD = ROOT / "deploy" / "env" / "ci-fake-card.toml"
 GROQ_CARD = ROOT / "models" / "cards" / "l-groq-gpt-oss-120b.toml"
 
@@ -73,6 +77,7 @@ def test_the_page_is_open_and_the_api_wants_the_token(page: Path) -> None:
     assert client.get("/nothing.js").status_code == 404
     assert client.post("/v1/admin/reload", headers=AUTH).status_code == 404
     assert client.get("/").headers["X-Frame-Options"] == "DENY"
+    assert client.get("/").headers["Content-Security-Policy"] == POLICY
 
 
 def test_the_page_serves_no_dotfiles_tests_listings_or_files_outside(page: Path) -> None:

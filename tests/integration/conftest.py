@@ -20,10 +20,10 @@ GEN = Path(__file__).resolve().parents[2] / "deploy" / "ci" / ".generated"
 
 # collected only while a harness runs (`just harness <profile>` sets RAG_CI_PROFILE and, by default, runs tests/integration):
 # the example leg runs this folder's tests but the TU ones, the TU leg its own tests (tu/), test_index_ids.py, which holds for
-# any profile (test_index_ids.py and the stream's own test), and the TU-only tests here
+# any profile (test_index_ids.py, the page's policy test and the stream's own test), and the TU-only tests here
 PROFILE = os.environ.get("RAG_CI_PROFILE")
 TU_ONLY = {"test_filter_carry_over.py", "test_languages.py", "test_page_serving.py"}
-BOTH = {"test_index_ids.py", "test_stream_v1.py"}
+BOTH = {"test_index_ids.py", "test_page_csp.py", "test_stream_v1.py"}
 if not (GEN / "ci.env").exists() or PROFILE not in ("example", "tu"):
     collect_ignore_glob = ["test_*.py"]
 elif PROFILE == "tu":
