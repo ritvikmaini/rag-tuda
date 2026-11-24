@@ -6,6 +6,7 @@ import dataclasses
 from pathlib import Path
 from urllib.parse import urlsplit
 
+import httpx
 import pytest
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Roles, Sources
@@ -14,7 +15,7 @@ from indexer.connectors.crawl_setup import active_hosts
 from indexer.crawl.discover import Source, in_scope
 from indexer.crawl.extract import Extraction, Link
 from indexer.crawl.metadata import Candidate, pdf_metadata, select_documents, twin_keys
-from indexer.crawl.robots import Robots
+from indexer.crawl.fetch import Fetcher, Skipped
 
 TU = Path(__file__).resolve().parents[3] / "profiles" / "tu-informatik"
 HOST = "www.informatik.tu-darmstadt.de"
@@ -89,6 +90,8 @@ def test_pdf_twins_pair_the_english_pdfs_with_their_german_ones():
 
 TU_HOST = "www.tu-darmstadt.de"
 LADADI = "www.ladadi.de"
+# "02_studium_medien" is the study pages' folder; its neighbour "01_studieninteressierte_medien" (prospective students)
+# is a different folder and stays out
 TU_PDFS = "/media/daa_responsives_design/02_studium_medien/"
 LADADI_PDFS = "/medien/pdfs/fb-510-auslaenderwesen-visum/"
 FULL_PDFS = [
@@ -103,7 +106,7 @@ FULL_PDFS = [
 ]
 NOT_FULL_PDFS = [
     (TU_HOST, "/media/dezernat_ii/studierendensekretariat/rueckmeldung.pdf"),
-    (TU_HOST, "/media/daa_responsives_design/01_studieninteressierte_medien/x.pdf"),
+    (TU_HOST, "/media/daa_responsives_design/01_studieninteressierte_medien/x.pdf"),  # the folder beside TU_PDFS
     (TU_HOST, "/media/dezernat_ii/ordnungen/apb.pdf"),
     (LADADI, "/medien/pdfs/fb-300-bauen/antrag.pdf"),
     (LADADI, f"{TU_PDFS}a.pdf"),  # a folder of the other host
@@ -143,11 +146,23 @@ def test_exclusions_and_dot_segments_still_apply_in_the_media_folders():
     assert not in_scope(source, f"http://{TU_HOST}:8080{TU_PDFS}x.pdf")
 
 
-def test_robots_rules_of_the_hosts_still_apply_to_the_media_folders():
-    robots = Robots.parse("User-agent: *\nDisallow: /*view=\nDisallow: /*.form\n")
-    agent = "rag-tuda/1.0"
-    assert not robots.allowed(agent, f"https://{TU_HOST}{TU_PDFS}Wahl_FB__alle_StG.pdf?view=print")
-    assert robots.allowed(agent, f"https://{TU_HOST}{TU_PDFS}Wahl_FB__alle_StG.pdf")
+def test_robots_rules_of_the_host_still_apply_to_a_pdf_of_the_media_folder():
+    def robots_txt(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(
+                200, headers={"content-type": "text/plain"}, text="User-agent: *\nDisallow: /*view=\n"
+            )
+        return httpx.Response(200, headers={"content-type": "application/pdf"}, content=b"%PDF-1.4")
+
+    fetcher = Fetcher(
+        (TU_HOST,),
+        contact="dummy@example.invalid",
+        client=httpx.Client(transport=httpx.MockTransport(robots_txt)),
+        interval=0,
+    )
+    url = f"https://{TU_HOST}{TU_PDFS}Wahl_FB__alle_StG.pdf"
+    assert fetcher.get(f"{url}?view=print") == Skipped(f"{url}?view=print", "robots", f"{url}?view=print")
+    assert not isinstance(fetcher.get(url), Skipped)
 
 
 def _typed(text: str, name: str = "x.pdf"):
@@ -173,3 +188,9 @@ def test_a_typed_regulation_in_the_media_folder_fails_closed(text: str, name: st
     selection = select_documents([candidate], roles)
     assert not selection.kept
     assert [url for url, _ in selection.not_indexed] == [candidate.url]  # lacking programme and PO version
+
+
+def test_a_regulation_word_only_in_the_file_name_also_fails_closed():
+    roles, candidate = _typed("Download (PDF-Datei)", "Pruefungsordnung_FB3.pdf")
+    assert candidate.metadata.regulation == "po"
+    assert not select_documents([candidate], roles).kept
