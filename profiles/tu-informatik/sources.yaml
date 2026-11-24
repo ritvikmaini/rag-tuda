@@ -117,7 +117,7 @@ hosts:
     twins: false
     # unused
     selectors: {main: body, section: "section.content-section", drop: null}
-# the norms the residence pages and the questions of international students refer to; the XML paths are unverified
+# the norms the residence pages and the questions of international students refer to; both XML paths answer 200 and hold the norms named by `start` and `end`
 laws:
   - title: Aufenthaltsgesetz (AufenthG), § 16b Studium
     kind: Gesetz
