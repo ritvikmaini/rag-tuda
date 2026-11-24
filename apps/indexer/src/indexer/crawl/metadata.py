@@ -174,8 +174,13 @@ def _twin_key(url: str, section_id: str | None) -> str | None:
 
 
 def _lang(url: str, stem: str = "") -> str:
-    """English for a ".en.jsp"/".en.pdf" file name or an "english" in the file name, else German."""
-    return "en" if re.search(r"\.en\.\w+$", urlsplit(url).path) or "english" in _fold(stem) else "de"
+    """English for a ".en.jsp"/".en.pdf" file name, a file name ending in "-en" or naming "english" or "englisch", else
+    German."""
+    folded = _fold(stem)
+    english = (
+        re.search(r"\.en\.\w+$", urlsplit(url).path) or "english" in folded or folded.endswith((" en", "englisch"))
+    )
+    return "en" if english else "de"
 
 
 def _scope(

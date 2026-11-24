@@ -438,5 +438,6 @@ def test_the_joined_rest_has_no_valid_from_of_its_own():
 
 def test_language_of_a_pdf_name():
     hub = _hub("https://a.example/x.de.jsp")
-    for name, lang in (("apb.en.pdf", "en"), ("apb-english.pdf", "en"), ("apb.de.pdf", "de"), ("apb.pdf", "de")):
+    names = (("apb.en.pdf", "en"), ("apb-english.pdf", "en"), ("apb.de.pdf", "de"), ("apb.pdf", "de"))
+    for name, lang in (*names, ("Promotionsordnung-en.pdf", "en"), ("ESO_englisch.pdf", "en"), ("studien.pdf", "de")):
         assert pdf_metadata(_link(f"https://a.example/media/{name}", "APB"), hub, ROLES).lang == lang
