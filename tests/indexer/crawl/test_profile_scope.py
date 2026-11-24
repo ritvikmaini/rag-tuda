@@ -146,21 +146,38 @@ def test_exclusions_and_dot_segments_still_apply_in_the_media_folders():
     assert not in_scope(source, f"http://{TU_HOST}:8080{TU_PDFS}x.pdf")
 
 
-def _excludes() -> list[tuple[str, str]]:
-    return [
-        (h.source.host, e)
-        for h in active_hosts(load_profile(Sources, TU / "sources.yaml"), True).values()
-        for e in h.source.exclude
-    ]
+M = f"https://{TU_HOST}{TU_PDFS}02_studierende_medien/"
+ABROAD = f"{M}04_auslandsaufenthalte_medien/"
+# one real url (from the crawl) under each of the nine exclude entries of the TU-wide and Landkreis hosts
+EXCLUDED_PDFS = [
+    f"{ABROAD}01_austauschprogramme_outbound_medien/01_europa_erasmus_outbound_medien/20221114_IST_NMCI_TUDa.pdf",
+    f"{ABROAD}01_austauschprogramme_outbound_medien/02_austausch_in_die_welt_outbound_medien/"
+    "DAAD_Hinweise_Sicherheitsvorsorge_Projekte.pdf",
+    f"{ABROAD}02_auslandsaufenthalte_dokuemente/Leitfaden_Online_Bewerbung_Out.pdf",
+    f"{ABROAD}03_praktikum_erasmus_outbound_medien/Go_Out_Praesentation_Erasmus-Praktika.pdf",
+    f"{ABROAD}03_praktikum_erasmus_outbound_medien/stellenausschreibungen_2/Barcelona_Charging_SEAT_CUPRA_24.pdf",
+    f"{ABROAD}04_sommer_und_winterschulen_outbound_medien/auslandsauf_kurzzeit_flyers/2026_2027_snu_iwp_leaflet.pdf",
+    f"{M}06_internationale_studierende_medien/06_foerderung_und_stipendien_international_medien/"
+    "Nebenjob_Checkliste_ISS.pdf",
+    f"{M}stipendien_und_preise/freudenberg/Karte.pdf",
+    f"https://{LADADI}{LADADI_PDFS}antrag-verlaengerung-visum-stand-januar-2006.pdf?cid=38p",
+]
 
 
-@pytest.mark.parametrize(("host", "entry"), _excludes())
-def test_every_exclude_entry_of_the_profile_puts_out_the_urls_under_it_and_only_it(host: str, entry: str):
+@pytest.mark.parametrize("url", EXCLUDED_PDFS)
+def test_each_excluded_pdf_is_out_of_the_full_set_and_in_it_without_its_entry(url: str):
+    host, path = urlsplit(url).hostname, urlsplit(url).path
     source = _source(host, full=True)
-    under = f"https://{host}{entry}{'' if entry.endswith('.pdf') else 'x.pdf'}"
-    assert not in_scope(source, under)
-    others = dataclasses.replace(source, exclude=tuple(e for e in source.exclude if e != entry))
-    assert in_scope(others, under)  # the entry alone puts it out: a prefix matches and no other entry does
+    entries = [e for e in source.exclude if path.startswith(e)]
+    assert len(entries) == 1  # exactly one entry puts it out
+    assert not in_scope(source, url)
+    assert in_scope(dataclasses.replace(source, exclude=tuple(e for e in source.exclude if e not in entries)), url)
+
+
+def test_the_literal_urls_cover_every_exclude_entry_of_the_two_hosts():
+    entries = [e for host in (TU_HOST, LADADI) for e in _source(host, full=True).exclude]
+    assert len(entries) == len(EXCLUDED_PDFS) == 9
+    assert all(sum(urlsplit(u).path.startswith(e) for u in EXCLUDED_PDFS) == 1 for e in entries)
 
 
 def test_outdated_and_expired_pdfs_are_out_of_the_full_set_and_their_neighbours_stay():
