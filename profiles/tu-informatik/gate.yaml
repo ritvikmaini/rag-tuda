@@ -1,0 +1,24 @@
+# The TU Informatik profile's gate: one probe set, the smoke set (`rag eval --smoke`), and the fixed probes of the deploy smoke
+# (`rag eval`), which are three of its lookup questions. The numbers are placeholders (a profile measures its own baseline with
+# the first round on its index). `retrieval.volatile` lists the questions whose answer is a fee or a date: a changed answer is
+# reported `stale` by `evals run` and left out of the gate's counts, never a failure.
+baseline:
+  noise_floor: 1.0
+  per_set: {smoke: 1.0}
+  ttft_margin_s: 0.30
+retrieval:
+  sets: [smoke]
+  top_k: 14
+  floor: 0.97
+  volatile: [S07, S08, S14, S23]
+latency: {sets: [smoke]}
+answers: {rerun_runs: 3, regression_at: 2, hang_s: 125}
+core: [smoke]
+sets:
+  smoke: {file: smoke/smoke_v1.json}
+smoke:
+  max_ttft_s: 60
+  probes:
+    - {set: smoke, id: S01, turns: [1], kind: lookup}
+    - {set: smoke, id: S06, turns: [1], kind: lookup}
+    - {set: smoke, id: S09, turns: [1], kind: lookup}

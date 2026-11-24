@@ -226,6 +226,7 @@ dev = ["pytest", "pytest-asyncio", "pytest-cov", "hypothesis==6.168.5", "ruff", 
 testpaths = ["tests"]
 addopts = "--import-mode=importlib"
 pythonpath = ["src"]
+markers = ["local_crawl: reads the crawl and snapshots of a local build under .rag (skipped without them)"]
 
 [tool.coverage.run]
 branch = true

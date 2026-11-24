@@ -1,0 +1,834 @@
+{
+ "version": "smoke-v1",
+ "conversations": [
+  {
+   "id": "S01",
+   "set": "smoke",
+   "kind": "bsc",
+   "turns": [
+    {
+     "q": "Wie viele Wochen habe ich Zeit für die Bachelorarbeit?",
+     "chips": {
+      "degree": "bachelor",
+      "programme": "bsc-informatik",
+      "po": 2023
+     },
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf",
+      "page": 5,
+      "quote": "Die Abschlussarbeit umfasst einen Arbeitsaufwand von 12 CP (360 Stunden) und muss innerhalb von 26 Wochen angefertigt und eingereicht werden.",
+      "po_version": 2023
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "26 Wochen"
+      ],
+      "po_line_present": true,
+      "source_url_any": [
+       "Studiengangsordnung_Bachelor_Informatik_2023.pdf"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S02",
+   "set": "smoke",
+   "kind": "msc",
+   "turns": [
+    {
+     "q": "Wie viele Leistungspunkte hat die Masterarbeit im M.Sc. Informatik nach der PO 2023?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/pruefungsordnung_9/Ordnung_des_Studiengangs_M_Sc_Informatik_PO_2023.pdf",
+      "page": 5,
+      "quote": "Die Abschlussarbeit umfasst einen Arbeitsaufwand von 30 CP (900 Stunden) und muss innerhalb von 26 Wochen angefertigt und eingereicht werden.",
+      "po_version": 2023
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "30 CP",
+       "30 Leistungspunkte"
+      ],
+      "po_line_present": true,
+      "source_url_any": [
+       "Ordnung_des_Studiengangs_M_Sc_Informatik_PO_2023.pdf"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S03",
+   "set": "smoke",
+   "kind": "cs",
+   "turns": [
+    {
+     "q": "Welches Englischniveau brauche ich für den Master Computer Science?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studiengaenge_liste/msc_computer_science.de.jsp",
+      "heading": "Überblick",
+      "quote": "Englischkenntnisse auf dem Niveau: UNIcert Stufe III, TOEFL-Test (Paper 550, CBT 213, iBT 95), IELTS 7.0, CEFR C1 oder gleichwertig",
+      "also": [
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studiengaenge_liste/computer_science_msc.de.jsp",
+        "heading": "Überblick",
+        "quote": "Englischkenntnisse auf dem Niveau: UNIcert Stufe III, TOEFL-Test (Paper 550, CBT 213, iBT 95), IELTS 7.0, CEFR C1 oder gleichwertig"
+       }
+      ],
+      "rule": "any"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "C1",
+       "UNIcert"
+      ],
+      "source_url_any": [
+       "computer_science"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S04",
+   "set": "smoke",
+   "kind": "bsc",
+   "turns": [
+    {
+     "q": "Gibt es für den B.Sc. Informatik eine Zulassungsbeschränkung?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/wissenssammlung_studium_details_9344.de.jsp",
+      "heading": "NC für Bachelor?",
+      "quote": "Der Studiengang B.Sc. Informatik an der TU Darmstadt hat aktuell keine Zulassungsvoraussetzungen."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "keine Zulassungsvoraussetzungen",
+       "keine Zulassungsbeschränkung",
+       "kein NC"
+      ],
+      "polarity": "no",
+      "source_url_any": [
+       "wissenssammlung_studium_details_9344"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S05",
+   "set": "smoke",
+   "kind": "po_compare",
+   "turns": [
+    {
+     "q": "Was hat sich bei der Bachelorarbeit im B.Sc. Informatik zwischen der PO 2015 und der PO 2023 geändert?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2015/FSB-BScInformatik-PO2015.pdf",
+      "page": 4,
+      "quote": "Die Bewertung des universitätsöffentlichen Kolloquiums erfolgt durch den Prüfer oder die Prüferin und geht zu 15% in die Bewertung der Bachelor-Thesis ein.",
+      "po_version": 2015,
+      "also": [
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/Studiengangsordnung_Bachelor_Informatik_2023.pdf",
+        "page": 5,
+        "quote": "Die Abschlussarbeit umfasst einen Arbeitsaufwand von 12 CP (360 Stunden) und muss innerhalb von 26 Wochen angefertigt und eingereicht werden.",
+        "po_version": 2023
+       }
+      ],
+      "rule": "all"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "Kolloquium"
+      ],
+      "po_line_present": true,
+      "group_values": {
+       "scopes": {
+        "po2015": [
+         "2015"
+        ],
+        "po2023": [
+         "2023"
+        ]
+       },
+       "po2015": {
+        "any": [
+         "Kolloquium"
+        ]
+       },
+       "po2023": {
+        "none": [
+         "Kolloquium"
+        ]
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "S06",
+   "set": "smoke",
+   "kind": "apb",
+   "turns": [
+    {
+     "q": "Bis wann kann ich mich ohne Angabe von Gründen von einer Prüfung abmelden?",
+     "gold": {
+      "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf",
+      "page": 14,
+      "quote": "Ein Rücktritt von einer Prüfung ohne Angabe von Gründen ist bis sieben Tage vor dem Termin der Prüfungsleistung möglich."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "sieben Tage",
+       "7 Tage"
+      ],
+      "source_url_any": [
+       "dezernat_ii/ordnungen/apb.pdf"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S07",
+   "set": "smoke",
+   "kind": "deadline",
+   "turns": [
+    {
+     "q": "Bis wann muss ich mich für das Sommersemester 2027 zurückmelden?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/semestermine/index.de.jsp",
+      "heading": "Das aktuelle und die nächsten Semester",
+      "quote": "| Rückmeldefrist für SoSe 2027 | 15.01.2027 – 15.03.2027 |"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "15.03.2027",
+       "15. März"
+      ],
+      "source_url_any": [
+       "semestermine"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S08",
+   "set": "smoke",
+   "kind": "visa",
+   "turns": [
+    {
+     "q": "Welchen Betrag muss ich für die Aufenthaltserlaubnis zum Studium als gesicherten Lebensunterhalt nachweisen?",
+     "gold": {
+      "url": "https://digitales-rathaus.darmstadt.de/kategorien/aemter-und-einrichtungen/aufenthaltserlaubnis-zum-studium",
+      "heading": "Aufenthaltserlaubnis zum Studium",
+      "quote": "Nachweis über gesicherten Lebensunterhalt z.B. durch ein Girokonto bei einer deutschen Bank über mindestens 11.904,00 Euro bei der Ersterteilung (bei der Verlängerung können auch 5.952,00 Euro ausreichend sein), Verpflichtungserklärung oder ein Arbeitsvertrag."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "11.904"
+      ],
+      "visa_disclaimer_present": true,
+      "source_url_any": [
+       "aufenthaltserlaubnis-zum-studium"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S09",
+   "set": "smoke",
+   "kind": "phd",
+   "turns": [
+    {
+     "q": "Wie viele Veröffentlichungen braucht eine kumulative Dissertation mindestens?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/forschung_fb20/wissenschaftliche_karriere/promotion/index.de.jsp",
+      "heading": "Vorzeitige Beendigung des Doktorand:innenverhältnisses",
+      "quote": "Eine kumulative Dissertation besteht aus mindestens drei begutachteten Veröffentlichungen, die in Tagungsbänden oder Zeitschriften veröffentlicht oder zur Veröffentlichung angenommen wurden."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "drei Veröffentlichungen"
+      ],
+      "source_url_any": [
+       "promotion"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S10",
+   "set": "smoke",
+   "kind": "english",
+   "turns": [
+    {
+     "q": "How soon after I arrive in Germany do I have to register my address?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_204992.en.jsp",
+      "heading": "First Steps",
+      "quote": "Within two weeks of your arrival, you must register your address with the local City Hall (Einwohnermeldeamt/Bürgeramt).",
+      "also": [
+       {
+        "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_204992.de.jsp",
+        "heading": "Erste Schritte",
+        "quote": "Innerhalb von zwei Wochen nach Ihrer Ankunft müssen Sie sich beim örtlichen Einwohnermeldeamt/Bürgeramt anmelden."
+       }
+      ],
+      "rule": "any"
+     },
+     "expect": {
+      "answer_language_matches": "en",
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "two weeks",
+       "2 weeks",
+       "14 days"
+      ],
+      "visa_disclaimer_present": true,
+      "source_url_any": [
+       "artikel_details_de_en_204992"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S11",
+   "set": "smoke",
+   "kind": "english",
+   "turns": [
+    {
+     "q": "How many years may pass between my acceptance as a doctoral candidate and the start of the doctoral examination procedure?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/forschung_fb20/wissenschaftliche_karriere/promotion/index.en.jsp",
+      "heading": "Pursuing a Doctorate",
+      "quote": "In general, there must not be more than five years between acceptance as a doctoral candidate and the initiation of the doctoral examination procedure.",
+      "also": [
+       {
+        "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/Promotionsordnung-en.pdf",
+        "page": 8,
+        "quote": "In general, there must not be more than five years between acceptance as a doctoral candidate and the initiation of the doctoral examination procedure."
+       }
+      ],
+      "rule": "any"
+     },
+     "expect": {
+      "answer_language_matches": "en",
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "five years",
+       "5 years"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S12",
+   "set": "smoke",
+   "kind": "english",
+   "turns": [
+    {
+     "q": "Which English level do I need for the Master's programme Computer Science?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studiengaenge_liste/computer_science_msc.en.jsp",
+      "heading": "Overview",
+      "quote": "Applicants must provide proof of their English skills: UNIcert level III, TOEFL test (Paper 550, CBT 213, iBT 95), IELTS 7.0, CEFR C1 or equivalent."
+     },
+     "expect": {
+      "answer_language_matches": "en",
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "C1",
+       "UNIcert"
+      ],
+      "source_url_any": [
+       "computer_science"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S13",
+   "set": "smoke",
+   "kind": "english",
+   "turns": [
+    {
+     "q": "How many weeks do I have for the master's thesis in Computer Science?",
+     "chips": {
+      "degree": "master",
+      "programme": "msc-computer-science",
+      "po": 2023
+     },
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/ordnung_des_studiengangs_m_sc_computer_science_po_2023_14045087.en.pdf",
+      "page": 5,
+      "quote": "The thesis comprises a workload of 30 CP (900 hours) and must be completed and submitted within 26 weeks.",
+      "po_version": 2023
+     },
+     "expect": {
+      "answer_language_matches": "en",
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "26 weeks"
+      ],
+      "po_line_present": true,
+      "source_url_any": [
+       "computer_science_po_2023"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S14",
+   "set": "smoke",
+   "kind": "english",
+   "turns": [
+    {
+     "q": "By when do I have to apply for an exchange semester abroad at the Department of Computer Science?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/international/outgoings/bewerbung/index.en.jsp",
+      "heading": "Application Deadline",
+      "quote": "The deadline for the application period in the winter semester is **November 30th**, in the summer semester **May 31st**."
+     },
+     "expect": {
+      "answer_language_matches": "en",
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "November 30th",
+       "30 November",
+       "November 30"
+      ],
+      "source_url_any": [
+       "outgoings/bewerbung"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S15",
+   "set": "smoke",
+   "kind": "trap",
+   "turns": [
+    {
+     "q": "Wie fließt das Kolloquium nach der Bachelorarbeit in die Note ein, wenn ich nach der PO 2015 studiere?",
+     "chips": {
+      "degree": "bachelor",
+      "programme": "bsc-informatik",
+      "po": 2023
+     },
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2015/FSB-BScInformatik-PO2015.pdf",
+      "page": 4,
+      "quote": "Die Bewertung des universitätsöffentlichen Kolloquiums erfolgt durch den Prüfer oder die Prüferin und geht zu 15% in die Bewertung der Bachelor-Thesis ein.",
+      "po_version": 2015
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "15 Prozent"
+      ],
+      "po_line_present": true,
+      "source_url_any": [
+       "FSB-BScInformatik-PO2015.pdf"
+      ],
+      "group_values": {
+       "scopes": {
+        "po2015": [
+         "2015"
+        ],
+        "po2023": [
+         "2023"
+        ]
+       },
+       "po2015": {
+        "any": [
+         "Kolloquium"
+        ]
+       },
+       "po2023": {
+        "none": [
+         "Kolloquium"
+        ]
+       }
+      }
+     }
+    }
+   ]
+  },
+  {
+   "id": "S16",
+   "set": "smoke",
+   "kind": "trap",
+   "turns": [
+    {
+     "q": "Kann ich mich noch nach der PO 2015 in den M.Sc. Informatik einschreiben?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik.de.jsp#po_2015",
+      "heading": "Prüfungsordnung 2015",
+      "quote": "Die Einschreibung in den Studiengang ist nicht mehr möglich.",
+      "po_version": 2015
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "nicht mehr möglich"
+      ],
+      "polarity": "no",
+      "po_line_present": true,
+      "source_url_any": [
+       "ordnungen_msc_informatik"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S17",
+   "set": "smoke",
+   "kind": "trap",
+   "turns": [
+    {
+     "q": "Kann ich eine bestandene Prüfung noch einmal schreiben, um meine Note zu verbessern?",
+     "gold": {
+      "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf",
+      "page": 26,
+      "quote": "Die Ordnungen der Studiengänge können vorsehen, ob und für welche Prüfungen Prüflinge freiwillig eine bestandene Prüfung je Studiengang einmalig zwecks Notenverbesserung wiederholen können."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "Notenverbesserung"
+      ],
+      "polarity": "yes",
+      "source_url_any": [
+       "dezernat_ii/ordnungen/apb.pdf"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S18",
+   "set": "smoke",
+   "kind": "decline",
+   "turns": [
+    {
+     "q": "Wie hoch ist die Miete für ein Zimmer im Studierendenwohnheim?",
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "nichts Passendes",
+       "keine passenden",
+       "keine Informationen",
+       "keine Angaben",
+       "nicht gefunden",
+       "nichts gefunden",
+       "kann ich nicht beantworten",
+       "keine Quelle"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S19",
+   "set": "smoke",
+   "kind": "decline",
+   "turns": [
+    {
+     "q": "Wo kann ich auf dem Campus parken und was kostet ein Parkplatz?",
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "nichts Passendes",
+       "keine passenden",
+       "keine Informationen",
+       "keine Angaben",
+       "nicht gefunden",
+       "nichts gefunden",
+       "kann ich nicht beantworten",
+       "keine Quelle"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S20",
+   "set": "smoke",
+   "kind": "decline",
+   "turns": [
+    {
+     "q": "Wie viele Leistungspunkte hat die Masterarbeit im M.Sc. Physik an der TU Darmstadt?",
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "nichts Passendes",
+       "keine passenden",
+       "keine Informationen",
+       "keine Angaben",
+       "nicht gefunden",
+       "nichts gefunden",
+       "kann ich nicht beantworten",
+       "keine Quelle"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S21",
+   "set": "smoke",
+   "kind": "multi",
+   "turns": [
+    {
+     "q": "Ich reise visumsfrei zum Studium nach Darmstadt ein: Wann muss ich mich anmelden und wann die Aufenthaltserlaubnis beantragen?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_204992.de.jsp",
+      "heading": "Erste Schritte",
+      "quote": "Innerhalb von zwei Wochen nach Ihrer Ankunft müssen Sie sich beim örtlichen Einwohnermeldeamt/Bürgeramt anmelden.",
+      "also": [
+       {
+        "url": "https://digitales-rathaus.darmstadt.de/kategorien/aemter-und-einrichtungen/aufenthaltserlaubnis-zum-studium",
+        "heading": "Beschreibung",
+        "quote": "Wenn Sie visumsfrei eingereist sind, müssen Sie innerhalb von 90 Tagen nach Ihrer Einreise eine Aufenthaltserlaubnis beantragen."
+       }
+      ],
+      "rule": "all"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "zwei Wochen"
+      ],
+      "digits_any": [
+       "90"
+      ],
+      "visa_disclaimer_present": true,
+      "source_url_any": [
+       "aufenthaltserlaubnis-zum-studium"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S22",
+   "set": "smoke",
+   "kind": "multi",
+   "turns": [
+    {
+     "q": "Wie oft kann ich eine nicht bestandene Fachprüfung wiederholen, und wann kann ich sie im Fachbereich Informatik frühestens erneut schreiben?",
+     "gold": {
+      "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf",
+      "page": 26,
+      "quote": "Nicht bestandene Fachprüfungen können zwei Mal wiederholt werden.",
+      "also": [
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/wissenssammlung_studium_details_16128.de.jsp",
+        "heading": "Anzahl Prüfungsversuche",
+        "quote": "Im Fachbereich Informatik werden Fachprüfungen in der Regel jeweils einmal pro Semester angeboten."
+       }
+      ],
+      "rule": "all"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "zwei Mal",
+       "zweimal",
+       "zwei Wiederholungen"
+      ],
+      "source_url_any": [
+       "wissenssammlung_studium_details_16128"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S23",
+   "set": "smoke",
+   "kind": "table",
+   "turns": [
+    {
+     "q": "Wie hoch ist der Verwaltungskostenbeitrag, der im Semesterbeitrag enthalten ist?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studieren_von_a_bis_z/artikel_details_de_en_286144.de.jsp",
+      "heading": "Bankverbindung",
+      "quote": "| b) Verwaltungskostenbeitrag | 50,00 € |"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "50 Euro"
+      ],
+      "source_url_any": [
+       "artikel_details_de_en_286144"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S24",
+   "set": "smoke",
+   "kind": "table",
+   "turns": [
+    {
+     "q": "Wie viele Stunden Arbeitsaufwand hat das Modul Algorithmen und Datenstrukturen im B.Sc. Informatik nach der PO 2023?",
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/2022_09_30_MHB_BSC_INF.pdf",
+      "page": 16,
+      "quote": "Modul Nr. 20-00-0005 Leistungspun kte 10 CP Arbeitsaufwand 300 h Selbststudium 180 h",
+      "po_version": 2023
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "300 Stunden",
+       "300 h"
+      ],
+      "po_line_present": true,
+      "source_url_any": [
+       "2022_09_30_MHB_BSC_INF.pdf"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S25",
+   "set": "smoke",
+   "kind": "widening",
+   "turns": [
+    {
+     "q": "Kann ich schon Mastermodule belegen?",
+     "chips": {
+      "degree": "bachelor"
+     },
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/wissenssammlung_studium_details_12736.de.jsp",
+      "heading": "Vorgezogene Masterleistungen",
+      "quote": "Gemäß §20(3) der Allgemeinen Prüfungsbestimmungen der TU Darmstadt (APB) können insgesamt bis zu 30 CP an Leistungen aus einem Master bereits während des Bachelor-Studiums vorgezogen werden."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "30 CP"
+      ],
+      "contains_none": [
+       "nichts gefunden"
+      ],
+      "polarity": "yes",
+      "source_url_any": [
+       "wissenssammlung_studium_details_12736"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S26",
+   "set": "smoke",
+   "kind": "widening",
+   "turns": [
+    {
+     "q": "Was hat sich zwischen der PO 2015 und der PO 2023 bei der Masterarbeit geändert?",
+     "chips": {
+      "degree": "bachelor"
+     },
+     "gold": {
+      "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/pruefungsordnung_1/FSB-MScInformatik-PO2015.pdf",
+      "page": 4,
+      "quote": "Die Abschlussarbeit muss innerhalb von 26 Wochen angefertigt und eingereicht werden.",
+      "po_version": 2015,
+      "also": [
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/pruefungsordnung_9/Ordnung_des_Studiengangs_M_Sc_Informatik_PO_2023.pdf",
+        "page": 5,
+        "quote": "Die Abschlussarbeit umfasst einen Arbeitsaufwand von 30 CP (900 Stunden) und muss innerhalb von 26 Wochen angefertigt und eingereicht werden.",
+        "po_version": 2023
+       }
+      ],
+      "rule": "all"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "26 Wochen"
+      ],
+      "contains_none": [
+       "nichts gefunden"
+      ],
+      "po_line_present": true,
+      "source_url_any": [
+       "FSB-MScInformatik-PO2015.pdf",
+       "Ordnung_des_Studiengangs_M_Sc_Informatik_PO_2023.pdf"
+      ]
+     }
+    }
+   ]
+  }
+ ]
+}
