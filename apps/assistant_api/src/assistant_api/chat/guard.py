@@ -70,12 +70,14 @@ async def guard(
     on_end: Callable[[str, str | None], Awaitable[None]] | None = None,
     run_info: Callable[[], Mapping[str, Any]] | None = None,
     scope_fallback: Callable[[], bool] | None = None,
+    urgent: Callable[[], bool] | None = None,
 ) -> AsyncGenerator[str, None]:
     """Yield the encoded frames of producer_factory() within deadline_s in total and idle_s between two items. on_end(outcome, error)
     runs once when the request is over: the outcome of the `done` frame, `stopped` when the client left before it; error is the
     first error the guard sent (`<code>`, `exception:<Class>`), None for completed and stopped. run_info() (the turn record's run)
     is read when `done` is built: its index generation and prompt versions go into the frame. scope_fallback() tells whether the
-    turn was answered by the out-of-scope fallback: the frame says so only then, every other `done` keeps its bytes."""
+    turn was answered by the out-of-scope fallback: the frame says so only then, every other `done` keeps its bytes. urgent() tells
+    whether the turn's message was classified urgent: the guard's own failure texts then end with the profile's contact line."""
     queue: asyncio.Queue[Any] = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
@@ -85,7 +87,10 @@ async def guard(
         return fr.encode(fr.done(outcome, run.get("index_generation"), run.get("prompts") or None, fallback))
 
     def message(code: str, after_text: bool) -> fr.Chunk:
-        return fr.Chunk(content=("\n\n" if after_text else "") + messages[TEXT_KEYS.get(code, "guard.error")])
+        text = messages[TEXT_KEYS.get(code, "guard.error")]
+        if urgent is not None and urgent() and messages.get("answer.urgent_contacts"):
+            text += "\n\n" + messages["answer.urgent_contacts"]
+        return fr.Chunk(content=("\n\n" if after_text else "") + text)
 
     async def produce() -> None:
         try:

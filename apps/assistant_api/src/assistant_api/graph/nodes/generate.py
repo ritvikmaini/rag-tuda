@@ -5,7 +5,8 @@ node also tells the status groups and PO versions apart: a comparison, and a que
 groups or versions, get a prompt line; with the card's version table an answer citing several versions gets the side-by-side
 format; a German answer cited only from one side's sources is closed with a note on whom it concerns. Lines taken from the
 cited sources' metadata end the answer: the PO versions it rests on, the disclaimer on a residence source, the note on an
-English information translation. Which sources are searched is the question's hard filter, not this node's."""
+English information translation. An urgent reply missing a phone number of the profile's contact line gets the line, and the
+fallback text of a failed model call carries it too. Which sources are searched is the question's hard filter, not this node's."""
 
 import asyncio
 import logging
@@ -315,9 +316,10 @@ def make_generate(deps: GraphDeps):
                     logger.warning(f"[StatusGroups] note_failed={type(exc).__name__}")
             if intent == "urgent":
                 try:  # no cap on the line's words: the numbers are what the reply is for
-                    line = urgent_line(str(response.content), catalog.answer.urgent_contacts)
+                    answer = str(response.content)
+                    line = urgent_line(answer, catalog.answer.urgent_contacts)
                     if line:
-                        response = AIMessage(content=str(response.content) + "\n\n" + line)
+                        response = AIMessage(content="\n\n".join(part for part in (answer.strip(), line) if part))
                 except Exception as exc:  # the line never costs an answer: the model's is sent
                     logger.warning(f"[Urgent] line_failed={type(exc).__name__}")
             if sources:
@@ -355,6 +357,9 @@ def make_generate(deps: GraphDeps):
                     f"[ContextBudget] request rejected as too long: code={getattr(e, 'code', None)} "
                     f"type={getattr(e, 'type', None)}"
                 )
-            return {"messages": [], "generation": texts[failure]}
+            text = texts[failure]
+            if intent == "urgent" and catalog.answer.urgent_contacts:  # the numbers are what the person needs most
+                text += "\n\n" + catalog.answer.urgent_contacts
+            return {"messages": [], "generation": text}
 
     return generate

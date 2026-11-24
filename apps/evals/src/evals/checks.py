@@ -458,6 +458,7 @@ class AnswerTexts:
     po_programme: str = ""
     non_binding: str = ""
     visa_disclaimer: str = ""
+    urgent_contacts: str = ""
 
 
 # the metadata of a cited source that the appended lines depend on (rag_core.domain.notes reads these and no others)

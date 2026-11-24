@@ -57,6 +57,7 @@ def answered(
     earlier=(),
     seen=None,
     intent="lookup",
+    raises: Exception | None = None,
 ) -> str:
     """The answer the node sends for the given sources when the model writes `answer`; `earlier` is the stored conversation
     before the question, `seen` collects the prompts the model gets."""
@@ -65,6 +66,8 @@ def answered(
         async def ainvoke(self, prompt):
             if seen is not None:
                 seen.append(prompt)
+            if raises is not None:
+                raise raises
             return AIMessage(content=answer)
 
     def texts(language: str) -> Messages | None:
@@ -218,8 +221,9 @@ def test_grouped_citations_get_the_po_line_and_the_visa_disclaimer():
     for written in ("[1, 2]", "[1,2]", "[1][2]"):
         answer = answered([bound, residence, other], f"Frist und Antrag {written}.")
         assert answer.endswith("Grundlage: Prüfungsordnung 2023 des B.Sc. Informatik\n\n" + VISA), written
-    # a group that holds only an uncited source adds nothing
-    assert answered([bound, residence, other], "Antwort [3, 3].") == "Antwort [3, 3]."
+    # a group that cites only unbound sources adds nothing, the bound and the residence source stay uncited
+    plain = [bound, residence, other, doc("d", regulation="info")]
+    assert answered(plain, "Antwort [3, 4].") == "Antwort [3, 4]."
 
 
 GERMAN_LINE = (
@@ -260,3 +264,51 @@ def test_an_urgent_reply_with_every_number_is_left_alone():
 def test_only_an_urgent_reply_gets_the_contact_line_and_a_profile_without_one_adds_none():
     assert answered([], "Antwort.", intent="out_of_scope") == "Antwort."
     assert answered([], "Antwort.", intent="urgent", profile=EXAMPLE) == "Antwort."
+
+
+def test_an_empty_urgent_reply_is_the_line_alone():
+    assert answered([], "  ", intent="urgent") == GERMAN_LINE
+
+
+def timeout_error():
+    import httpx
+    import openai
+
+    return openai.APITimeoutError(request=httpx.Request("POST", "http://llm.test/v1"))
+
+
+def status_error(status: int):
+    import httpx
+    import openai
+
+    response = httpx.Response(status, request=httpx.Request("POST", "http://llm.test/v1"))
+    cls = openai.BadRequestError if status == 400 else openai.RateLimitError
+    return cls("never read", response=response, body={"code": None, "message": "x"})
+
+
+def test_a_failed_model_call_on_an_urgent_question_still_carries_the_contact_line():
+    de, en = (
+        yaml.safe_load((TU / "messages.de.yaml").read_text("utf-8")),
+        yaml.safe_load((TU / "messages.en.yaml").read_text("utf-8")),
+    )
+    for failure, key in ((timeout_error(), ("guard", "timeout")), (status_error(429), ("guard", "busy"))):
+        text = answered([], "", intent="urgent", raises=failure)
+        assert text == de[key[0]][key[1]] + "\n\n" + GERMAN_LINE
+        text = answered([], "", intent="urgent", english=True, raises=failure)
+        assert text == en[key[0]][key[1]] + "\n\n" + ENGLISH_LINE
+    too_long = answered([], "", intent="urgent", raises=status_error(400))
+    assert too_long == de["answer"]["context_too_long"] + "\n\n" + GERMAN_LINE
+    # any other question keeps the plain text
+    assert answered([], "", raises=timeout_error()) == de["guard"]["timeout"]
+
+
+def test_the_urgent_line_is_removed_from_the_history_the_model_gets():
+    asked = datetime.now(timezone.utc).isoformat()
+    earlier = [
+        HumanMessage(content="Es brennt", additional_kwargs={TS_KEY: asked}),
+        AIMessage(content="Bleiben Sie ruhig.\n\n" + GERMAN_LINE),
+    ]
+    seen: list = []
+    answered([], COMPLETE_DE, intent="urgent", earlier=earlier, seen=seen)
+    sent = "\n".join(str(m.content) for m in seen[0])
+    assert "Bleiben Sie ruhig." in sent and "Notrufe:" not in sent

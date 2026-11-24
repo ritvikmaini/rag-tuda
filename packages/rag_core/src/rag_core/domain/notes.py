@@ -1,6 +1,7 @@
 """The lines code appends to a finished answer, from the metadata of the sources it cites: the PO versions it rests on
 ("Grundlage: PO 2023 und PO 2015 des B.Sc. Informatik"), the disclaimer on a residence source and the note on an English
-information translation of a binding German text. The wording is the profile's, in the answer's language; a text the profile
+information translation of a binding German text; an urgent reply that leaves out a phone number of the profile's contact line
+gets the line. The wording is the profile's, in the answer's language; a text the profile
 leaves empty drops its line. Standard library only."""
 
 import re
@@ -11,6 +12,7 @@ from rag_core.domain.retrieval import BINDING_GERMAN
 from rag_core.domain.status_groups import join_labels, source_programmes, source_versions
 
 Metadata = Mapping[str, Any] | None
+NUMBER = re.compile(r"\d+(?: \d+)*")  # a phone number as the profile writes it: digit groups with single spaces
 
 
 class Texts(Protocol):
@@ -28,6 +30,8 @@ class Texts(Protocol):
     def non_binding(self) -> str: ...
     @property
     def visa_disclaimer(self) -> str: ...
+    @property
+    def urgent_contacts(self) -> str: ...  # the line an urgent reply gets when it leaves out one of its numbers
 
 
 def _years(programmes: Mapping[str, Mapping[str, Any]], name: str | None) -> set[int]:
@@ -93,9 +97,6 @@ def appended_lines(
     return [line for line in lines if line and _flat(line) not in have]
 
 
-NUMBER = re.compile(r"\d+(?: \d+)*")
-
-
 def urgent_line(answer: str, contacts: str) -> str:
     """The contact line (the profile's, in the answer's language) when the answer lacks any phone number the line names, else
     "". The numbers are the line's runs of digits and single spaces ("0800 111 0 111"); the answer holds one when its digits
@@ -121,7 +122,7 @@ def strip_lines(answer: str, texts: Sequence[Texts]) -> str:
     patterns = [
         p
         for t in texts
-        for p in map(_line_pattern, (t.po_line, t.po_line_term, t.non_binding, t.visa_disclaimer))
+        for p in map(_line_pattern, (t.po_line, t.po_line_term, t.non_binding, t.visa_disclaimer, t.urgent_contacts))
         if p is not None
     ]
     paragraphs = answer.split("\n\n")

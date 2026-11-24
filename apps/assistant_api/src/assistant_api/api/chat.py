@@ -106,6 +106,9 @@ async def main(
             scope_fallback=(lambda: getattr(record.result, "scope_fallback", False) is True)
             if record is not None
             else None,
+            urgent=(lambda: (getattr(record.result, "analysis", None) or {}).get("intent") == "urgent")
+            if record is not None
+            else None,
         ),
         media_type="text/event-stream",
     )

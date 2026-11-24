@@ -490,3 +490,28 @@ def test_a_failing_end_is_logged_and_never_breaks_the_stream(caplog):
     out = collect(rg.guard(producer, 5.0, 5.0, META, MESSAGES, on_end=on_end))
     assert [json.loads(f[6:])["type"] for f in out] == ["meta", "chunk", "done"]
     assert "the turn's end was not recorded: RuntimeError: store down" in caplog.text
+
+
+def test_the_guard_ends_an_urgent_turn_with_the_contact_line():
+    line = "Notrufe: 112 und 110."
+    messages = {**MESSAGES, "answer.urgent_contacts": line}
+
+    async def silent():
+        await asyncio.sleep(5)
+        yield frame("chunk", "late")
+
+    async def failing():
+        yield frame("chunk", "Rufen Sie")
+        raise RuntimeError("boom")
+        yield  # pragma: no cover
+
+    for factory, urgent, expected in (
+        (silent, True, [("error", "timeout"), ("chunk", MESSAGES["guard.timeout"] + "\n\n" + line)]),
+        (silent, False, [("error", "timeout"), ("chunk", MESSAGES["guard.timeout"])]),
+    ):
+        out = kinds_and_contents(
+            collect(rg.guard(factory, 10, 0.1, META, messages, urgent=lambda urgent=urgent: urgent))
+        )
+        assert out == expected
+    out = kinds_and_contents(collect(rg.guard(failing, 10, 5, META, messages, urgent=lambda: True)))
+    assert out[-1] == ("chunk", "\n\n" + MESSAGES["guard.error"] + "\n\n" + line)
