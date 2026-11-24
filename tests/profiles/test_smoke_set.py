@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
-import yaml
+from evals.gate import conversations, load_config
 from indexer.crawl.cache import Cache
 from indexer.crawl.extract import Selectors, extract
 from indexer.connectors.law_xml import law_markdown, xml_of_zip
@@ -32,6 +32,17 @@ CHECKS = {
     "contains_any", "contains_none", "digits_any", "source_url_any", "polarity", "group_values", "po_line_present",
     "visa_disclaimer_present", "sie_form", "answer_language_matches", "citations_map_to_sources",
 }  # fmt: skip
+CONTENT = ("contains_any", "digits_any", "source_url_any")  # the checks on what the answer says or cites
+# pages that answer the question without being a gold: a `source_url_any` pattern of them matches no gold url
+EXTRA_URL_PATTERNS = {
+    "S01": {"abschlussarbeiten_fb20"},  # the thesis periods of the Studienbüro page
+    "S03": {"bewerbung_2.en.jsp"},  # the application page of the English-taught masters
+    "S04": {"themen_9088"},  # the topic page of the Wissenssammlung entry
+    "S07": {"artikel_details_de_en_286144"},  # the semester fee page names the re-registration period
+    "S08": {"bewerbung_2.en.jsp"},
+    "S12": {"bewerbung_2.en.jsp"},
+    "S13": {"abschlussarbeiten_fb20"},
+}
 MINIMUM = {"english": 5, "trap": 3, "decline": 3, "multi": 2, "table": 2}  # the mix of the spec; the set may hold more
 WIDENING = [
     ("Kann ich schon Mastermodule belegen?", {"degree": "bachelor"}),
@@ -47,9 +58,8 @@ def squeeze(text: str) -> str:
 
 
 def load() -> list[dict[str, Any]]:
-    data = json.loads((TU / "smoke" / "smoke_v1.json").read_text(encoding="utf-8"))
-    assert data["version"] == "smoke-v1"
-    return data["conversations"]
+    """The conversations as `evals` reads them through the profile's gate.yaml."""
+    return [conv for _, conv in conversations(str(TU), load_config(str(TU))).values()]
 
 
 def sources_of(gold: dict[str, Any]) -> list[dict[str, Any]]:
@@ -58,14 +68,15 @@ def sources_of(gold: dict[str, Any]) -> list[dict[str, Any]]:
 
 def test_smoke_set_schema() -> None:
     convs = load()
-    gate = yaml.safe_load((TU / "gate.yaml").read_text(encoding="utf-8"))
+    gate = load_config(str(TU))
+    assert json.loads((TU / "smoke" / "smoke_v1.json").read_text(encoding="utf-8"))["version"] == "smoke-v1"
     roles = load_profile(Roles, TU / "roles.yaml")
     hosts = set(load_profile(Sources, TU / "sources.yaml").hosts)
     ids = [c["id"] for c in convs]
     assert len(set(ids)) == len(ids) >= 25  # the questions on the full set's sources come after the full build
-    assert gate["sets"]["smoke"]["file"] == "smoke/smoke_v1.json" and gate["core"] == ["smoke"]
-    assert set(gate["retrieval"]["volatile"]) <= set(ids)
-    assert all(p["id"] in ids and p["set"] == "smoke" and p["kind"] == "lookup" for p in gate["smoke"]["probes"])
+    assert gate.sets["smoke"].file == "smoke/smoke_v1.json" and gate.core == ["smoke"]
+    assert set(gate.retrieval.volatile) <= set(ids)
+    assert all(p.id in ids and p.set == "smoke" and p.kind == "lookup" for p in gate.smoke.probes)
     kinds = [c["kind"] for c in convs]
     assert set(kinds) <= KINDS and all(kinds.count(kind) >= n for kind, n in MINIMUM.items())
     for conv in convs:
@@ -73,6 +84,9 @@ def test_smoke_set_schema() -> None:
         turn = conv["turns"][0]
         expect = turn["expect"]
         assert turn["q"].strip() and set(expect) <= CHECKS, conv["id"]
+        assert any(expect.get(check) for check in CONTENT), conv[
+            "id"
+        ]  # a fact, a source or a decline phrase is expected
         english = expect.get("answer_language_matches") == "en"
         assert english == (conv["kind"] == "english") and ("sie_form" in expect) == (not english), conv["id"]
         assert ("gold" in turn) != (conv["kind"] == "decline"), conv["id"]  # a decline has no gold source
@@ -87,12 +101,18 @@ def test_smoke_set_schema() -> None:
                 v.year for v in roles.programmes[programme].po_versions
             ]
         if "gold" not in turn:
+            assert expect.get("contains_any"), conv["id"]  # a decline names the phrases that mark it
             continue
         gold = turn["gold"]
-        assert gold.get("rule", "any") in ("any", "all") and ("also" in gold) == ("rule" in gold), conv["id"]
+        assert gold.get("rule", "any") in ("any", "all") and bool(gold.get("also")) == ("rule" in gold), conv["id"]
+        assert gold.get("also", [None]), conv["id"]  # no empty `also`
+        urls = " ".join(s["url"] for s in sources_of(gold))
+        for pattern in expect.get("source_url_any", ()):
+            assert pattern in urls or pattern in EXTRA_URL_PATTERNS.get(conv["id"], ()), (conv["id"], pattern)
         for source in sources_of(gold):
             assert urlsplit(source["url"]).hostname in hosts, (conv["id"], source["url"])
-            assert isinstance(source.get("heading"), str) or isinstance(source.get("page"), int), conv["id"]
+            heading, page = source.get("heading"), source.get("page")
+            assert (isinstance(heading, str) and heading.strip()) or (isinstance(page, int) and page > 0), conv["id"]
             quote = source["quote"]
             assert 20 <= len(quote) <= 400 and "\n" not in quote, conv["id"]  # one sentence, whitespace-normalised
             assert quote == squeeze(quote), conv["id"]
@@ -150,7 +170,7 @@ def test_an_empty_snapshots_folder_skips_the_crawl_check(tmp_path: Path, monkeyp
 def test_gold_present_in_latest_snapshot() -> None:
     if not (RAG / "snapshots").is_dir() or not (RAG / "crawl").is_dir():
         pytest.skip("no local build: .rag/snapshots and .rag/crawl are missing")
-    volatile = set(yaml.safe_load((TU / "gate.yaml").read_text(encoding="utf-8"))["retrieval"]["volatile"])
+    volatile = set(load_config(str(TU)).retrieval.volatile)
     convs = [c for c in load() if "gold" in c["turns"][0]]
     texts = latest_texts({s["url"].partition("#")[0] for c in convs for s in sources_of(c["turns"][0]["gold"])})
     stale = {
