@@ -20,6 +20,7 @@ from rag_core.settings.profile import Embedding
 
 from indexer import gates
 from indexer.chunking.units import Parent, chunk_documents
+from indexer.crawl.manifest import manifest_urls, snapshots_dir
 from indexer.extract.documents import pdf_documents
 from indexer.extract.pdf import extract_pdfs
 from indexer.index import cache
@@ -165,6 +166,11 @@ def build_corpus(
     children = sum(len(p.children) for p in parents)
     checks["hosts"] = gates.hosts_gate(reports)
     checks["size"] = gates.size_gate(len(parents), previous, ingest.collections[settings.collection].min_build_ratio)
+    generation = previous.get("generation")
+    live_urls = (
+        manifest_urls(str(generation), directory=snapshots_dir(settings.overlay.paths.crawl_dir)) if generation else ()
+    )
+    checks["pages"] = gates.pages_gate(reports, live_urls, generation)
     if last and not previous:
         checks["size"]["skipped"] = "the last build was of another profile or source set"
     refused = None if limit else gates.refusal(checks)

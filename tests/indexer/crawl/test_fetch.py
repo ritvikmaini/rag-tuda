@@ -10,12 +10,13 @@ from pathlib import Path
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from rag_core.domain.sources import CorruptStateError
 from rag_testing import serve
 from rag_testing.minisite import pages
 
 from indexer.crawl.cache import Cache
 from indexer.crawl.fetch import Fetcher, Response, Skipped, blocking_meta, user_agent
-from indexer.crawl.manifest import ManifestDoc, snapshots_dir, write_manifest
+from indexer.crawl.manifest import ManifestDoc, manifest_urls, snapshots_dir, write_manifest
 from indexer.crawl.robots import Robots
 
 FACULTY = "faculty.test"
@@ -529,6 +530,16 @@ def test_a_failed_manifest_write_leaves_the_previous_one(tmp_path, monkeypatch):
 def test_a_generation_that_is_not_a_file_name_is_refused(tmp_path, generation):
     with pytest.raises(ValueError, match="generation"):
         write_manifest(generation, [], directory=tmp_path)
+
+
+def test_the_urls_of_a_manifest_are_read_back_and_a_broken_file_is_refused(tmp_path):
+    write_manifest("3", [ManifestDoc("https://a.test/b", "h", "2026-11-20")], directory=tmp_path)
+    assert (
+        manifest_urls("3", directory=tmp_path) == ["https://a.test/b"] and manifest_urls("4", directory=tmp_path) == []
+    )
+    (tmp_path / "5.json").write_text("{broken", encoding="utf-8")
+    with pytest.raises(CorruptStateError, match="5.json"):
+        manifest_urls("5", directory=tmp_path)
 
 
 def test_snapshots_sit_beside_the_crawl_folder():

@@ -163,6 +163,7 @@ def build_index(
                     "documents": documents,
                     "profile": built["profile"],
                     "sources": built["source_set"],
+                    "generation": published["generation"],
                 },
             )
             warnings += [] if recorded else [STATS_NOT_WRITTEN]
@@ -209,7 +210,7 @@ def publish(
     profile: str = "",
 ) -> int:
     """A staging generation goes live: verify again, publish, annotate, record the stats. No housekeeping here; the next
-    build housekeeps. The stats name the profile but no source set: the next build is not size-gated."""
+    build housekeeps. The stats name the profile and the generation but no source set: the next build is not size-gated."""
     lock = gen.BuildLock(target, f"cli publish {n}", connect_fn)
     try:
         lock.acquire()
@@ -241,7 +242,8 @@ def publish(
     finally:
         lock.release()
     if not gates.record_build_stats(
-        state_dir, {"parents": counts["parents"], "children": counts["children"], "profile": profile}
+        state_dir,
+        {"parents": counts["parents"], "children": counts["children"], "profile": profile, "generation": n},
     ):
         out(f"warning: {STATS_NOT_WRITTEN}")
     out(f"published generation {n} (previous {previous}) in {seconds} s")
@@ -324,6 +326,7 @@ def record_live_stats(conn: Any, wiring: Wiring, out: Callable[[str], None]) -> 
     counts = (live or {}).get("counts") or {}
     if not gates.record_build_stats(
         wiring.settings.overlay.paths.state_dir,
-        {k: counts[k] for k in ("parents", "children") if k in counts} | {"profile": wiring.settings.profile_name},
+        {k: counts[k] for k in ("parents", "children") if k in counts}
+        | {"profile": wiring.settings.profile_name, "generation": (live or {}).get("generation")},
     ):
         out(f"warning: {STATS_NOT_WRITTEN}")

@@ -46,7 +46,7 @@ def comparable(previous: Mapping[str, Any], profile: str, sources: Mapping[str, 
 
 def record_build_stats(state_dir: str, result):
     """Called after a successful swap, a publish or a rollback; the next build of the same profile and source set is
-    compared against these counts (`result` names them: parents, children, documents, profile and sources; a
+    compared against these counts (`result` names them: parents, children, documents, profile, sources and the live generation; a
     publish or a rollback does not know its source set, and the next build still compares against it). The file also marks the index as built.
     Returns False (and logs) when the file cannot be written: the swap has happened, so
     the reply must not fail because of the stats file."""
@@ -54,7 +54,11 @@ def record_build_stats(state_dir: str, result):
         os.makedirs(state_dir, exist_ok=True)  # a native first build starts without the folder
         write_json_atomic(
             os.path.join(state_dir, STATS_NAME),
-            {k: result[k] for k in ("parents", "children", "documents", "profile", "sources") if k in result}
+            {
+                k: result[k]
+                for k in ("parents", "children", "documents", "profile", "sources", "generation")
+                if k in result
+            }
             | {"built_at": datetime.now().isoformat()},
         )
         return True
@@ -80,8 +84,17 @@ def size_gate(parents: int, previous: Mapping[str, Any], ratio: float) -> dict[s
     return {"count": parents, "last": last, "ratio": ratio, "passed": not last or parents >= ratio * last}
 
 
+def pages_gate(reports: Mapping[str, Mapping[str, Any]], live_urls: Iterable[str], generation: Any) -> dict[str, Any]:
+    """Passes when no page whose main content was not found (`empty_pages` in a source's report) is a page of the live
+    generation (`live_urls`: its snapshot manifest, whose URLs may carry a `#section`): a site that changed under the
+    selector is not a smaller corpus the ratio may absorb."""
+    live = {url.partition("#")[0] for url in live_urls}
+    empty = [p["url"] for report in reports.values() for p in report.get("empty_pages", ()) if p["url"] in live]
+    return {"empty": empty, "generation": generation, "passed": not empty}
+
+
 def refusal(gates: Mapping[str, Mapping[str, Any]]) -> str | None:
-    """The first failed gate's message, in the order the gates were added (the sources in profile order, then the hosts, then size)."""
+    """The first failed gate's message, in the order the gates were added (the sources in profile order, then the hosts, size and pages)."""
     for name, gate in gates.items():
         if gate["passed"]:
             continue
@@ -89,6 +102,10 @@ def refusal(gates: Mapping[str, Mapping[str, Any]]) -> str | None:
             return f"{', '.join(gate['down'])} could not be reached (robots.txt unreadable); swap refused"
         if name == "size":
             return f"corpus shrank to {gate['count']} parents (last build {gate['last']}); swap refused"
+        if name == "pages":
+            more = len(gate["empty"]) - 3
+            shown = ", ".join(gate["empty"][:3]) + (f" and {more} more" if more > 0 else "")
+            return f"{shown}: main content not found, and generation {gate['generation']} (live) has it; swap refused"
         what = "PDFs produced documents" if gate["kind"] == "pdfs" else "documents"
         return f"only {gate['count']} {gate['source']} {what} (minimum {gate['minimum']}); swap refused"
     return None

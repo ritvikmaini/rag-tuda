@@ -53,3 +53,15 @@ def test_the_first_failed_gate_names_itself_and_says_swap_refused():
         "a.test could not be reached (robots.txt unreadable); swap refused"
     )
     assert gates.refusal({"size": size}) == "corpus shrank to 10 parents (last build 100); swap refused"
+
+
+def test_an_empty_page_of_the_live_manifest_fails_the_pages_gate_and_names_itself():
+    live = ["https://a.test/hub.de.jsp#po_2023", "https://a.test/other.de.jsp"]
+    empty = [{"url": "https://a.test/hub.de.jsp", "problem": "x"}, {"url": "https://a.test/new.de.jsp", "problem": "x"}]
+    pages = gates.pages_gate({"web": {"empty_pages": empty}}, live, 4)
+    assert pages == {"empty": ["https://a.test/hub.de.jsp"], "generation": 4, "passed": False}
+    assert gates.refusal({"pages": pages}) == (
+        "https://a.test/hub.de.jsp: main content not found, and generation 4 (live) has it; swap refused"
+    )
+    assert gates.pages_gate({"web": {"empty_pages": empty}}, [], None)["passed"]
+    assert gates.pages_gate({"web": {}}, live, 4)["passed"]

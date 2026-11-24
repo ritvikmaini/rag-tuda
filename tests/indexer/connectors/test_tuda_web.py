@@ -639,6 +639,34 @@ def test_shrunk_build_keeps_live_generation(builder, tmp_path):
     )
 
 
+UMBAU = ("text/html", "<html><head><title>Umbau</title></head><body><p>Neue Seite.</p></body></html>")
+
+
+def test_a_hub_whose_selector_finds_nothing_keeps_the_live_generation(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    live = list(builder.published)
+    stats = (tmp_path / "state" / gates.STATS_NAME).read_text(encoding="utf-8")
+    code, lines = builder({**EXTRA_PAGES, EXTRA_HUB: UMBAU}, TODAY + timedelta(days=1))
+    refused = [line for line in lines if line.startswith("refused:")]
+    assert code == 1 and len(refused) == 1 and refused[0].startswith(f"refused: {EXTRA_HUB}: main content not found")
+    assert "generation 1 (live)" in refused[0] and "swap refused" in refused[0] and "corpus shrank" not in refused[0]
+    assert builder.published == live and (tmp_path / "state" / gates.STATS_NAME).read_text(encoding="utf-8") == stats
+    named = f"warning: tu_web: empty page {EXTRA_HUB} (main content selector '.main-column' matched nothing)"
+    assert named in lines and lines.index(named) < lines.index(refused[0])
+
+
+def test_an_empty_page_that_is_not_in_the_live_manifest_is_reported_not_refused(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    empty = f"warning: tu_web: empty page {EMPTY_PAGE} (main content selector '.main-column' matched nothing)"
+    # EMPTY_PAGE is empty again and was never in a manifest
+    code, lines = builder(EXTRA_PAGES, TODAY + timedelta(days=1))
+    assert code == 0 and empty in lines
+    (tmp_path / "snapshots" / "2.json").unlink()  # the live generation has no manifest
+    code, lines = builder({**EXTRA_PAGES, EXTRA_HUB: UMBAU}, TODAY + timedelta(days=2))
+    assert code == 0 and not any(line.startswith("refused:") for line in lines)
+    assert f"warning: tu_web: empty page {EXTRA_HUB} (main content selector '.main-column' matched nothing)" in lines
+
+
 def test_a_shrunk_build_right_after_a_publish_or_rollback_is_refused(builder, tmp_path):
     assert builder(EXTRA_PAGES)[0] == 0
     live = list(builder.published)

@@ -36,7 +36,10 @@ Both need Docker and the stack's Postgres to be up, which a first `rag up` does.
 cron line and one launchd example. `RAG__CRAWL__CONTACT` in the environment adds a contact to the crawler's user agent.
 
 The indexer refuses a build that shrank against the last build, and compares only with a build of the same profile and source
-set (core or full, plus registered folders); a build of another profile or source set is not compared and says so. `rag rollback`
+set (core or full, plus registered folders); a build of another profile or source set is not compared and says so. It also
+refuses a build in which a page of the live generation (as its snapshot manifest lists it) yields no main content, because the
+site changed under the host's selector; a page that was not in the live generation is only named in the summary. Both refusals
+are lifted the same way: `rag reindex --full`, or delete `corpus_build_stats.json` in the state folder. `rag rollback`
 re-records the stats of the generation it makes live, and it stops when the index was built for another profile than the stack
 runs. After a profile switch, go back with `rag up --profile <name>`, not with `rag rollback`.
 

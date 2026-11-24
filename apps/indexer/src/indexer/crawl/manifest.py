@@ -8,10 +8,12 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from rag_core.domain.sources import CorruptStateError
+
 from indexer.crawl.cache import write_atomic
 from indexer.crawl.fetch import Response
 
-__all__ = ["ManifestDoc", "snapshots_dir", "write_manifest"]
+__all__ = ["ManifestDoc", "manifest_urls", "snapshots_dir", "write_manifest"]
 
 
 @dataclass(frozen=True)
@@ -42,3 +44,15 @@ def write_manifest(generation: str, docs: Iterable[ManifestDoc], *, directory: s
     path = folder / f"{generation}.json"
     write_atomic(path, text.encode("utf-8") + b"\n")
     return path
+
+
+def manifest_urls(generation: str, *, directory: str | Path) -> list[str]:
+    """The URLs `<directory>/<generation>.json` lists; none when the generation has no manifest. A file that exists but is
+    not a manifest raises CorruptStateError."""
+    path = Path(directory) / f"{generation}.json"
+    try:
+        return [d["url"] for d in json.loads(path.read_text(encoding="utf-8"))["documents"]]
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise CorruptStateError(f"{path} cannot be read ({exc}); fix or delete it before the next build") from exc
