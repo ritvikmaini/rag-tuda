@@ -157,7 +157,13 @@ def _eval(args: argparse.Namespace) -> int:
         facts = stack.gather(root, current, card, doctor.gather(), up)
         steps = [] if same else stack.plan_up(current, facts, up)
         job = rag_eval.plan(  # its checks come first: nothing is confirmed for a run that cannot happen
-            current, facts, up, retrieval_only=args.retrieval_only, ablation=args.ablation, check_ready=same
+            current,
+            facts,
+            up,
+            retrieval_only=args.retrieval_only,
+            ablation=args.ablation,
+            smoke_set=args.smoke,
+            check_ready=same,
         )
         if not _confirm(steps, args.yes, up.profile, up.mode):
             return 1
@@ -246,10 +252,10 @@ def main(argv: list[str] | None = None) -> int:
     r.set_defaults(run=_reindex)
     b = sub.add_parser("rollback", help="make the previous index generation live again and restart the backend")
     b.set_defaults(run=_rollback)
-    e = sub.add_parser("eval", help="run the eval against the running stack (the smoke unless told otherwise)")
+    e = sub.add_parser("eval", help="run the eval against the running stack (the deploy smoke unless told otherwise)")
     kind = e.add_mutually_exclusive_group()
     kind.add_argument(
-        "--smoke", action="store_true", help="the deploy smoke: five fixed probes, stream structure only (default)"
+        "--smoke", action="store_true", help="the profile's smoke set: every question, with its answer checks"
     )
     kind.add_argument("--retrieval-only", action="store_true", help="the gold sources' rank after fusion and reranking")
     e.add_argument("--ablation", action="store_true", help="with --retrieval-only: one row per retrieval switch")

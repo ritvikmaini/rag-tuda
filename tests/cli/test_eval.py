@@ -46,6 +46,21 @@ def test_eval_smoke_maps_to_the_evals_runner(tmp_path):
     assert "token" not in " ".join(step.argv).lower()
 
 
+def test_eval_smoke_maps_to_runner(tmp_path):
+    """--smoke plays the profile's smoke set (the set `smoke` of its gate.yaml) with the answer checks, not the deploy smoke."""
+    step = job(tmp_path, stack.Args(S4B["name"], profile="tu-informatik"), smoke_set=True)
+    assert step.argv[:5] == ("uv", "run", "--frozen", "--package", "evals")
+    assert step.argv[5:] == ("evals", "run", "smoke", "--label", S4B["name"])
+    assert step.env["RAG__EVALS__PROFILE_DIR"] == f"{tmp_path}/profiles/tu-informatik"
+    assert "smoke set eval" in step.text
+    a = stack.Args(S4B["name"], "compose")
+    out = f"{tmp_path}/.rag/eval_runs"
+    _, compose = rag_eval.plan(
+        recorded(tmp_path, a), facts(tmp_path), a, retrieval_only=False, ablation=False, smoke_set=True
+    )
+    assert compose.argv[-4:] == ("run", "smoke", "--label", S4B["name"]) and f"{out}:{out}" in compose.argv
+
+
 def test_retrieval_only_runs_the_assistants_module(tmp_path):
     step = job(tmp_path, retrieval_only=True)
     assert step.argv[3:] == ("--package", "assistant-api", "python", "-m", "assistant_api.retrieval_eval")
@@ -136,6 +151,17 @@ def test_the_checks_of_the_run_come_before_the_download_confirmation(repo, monke
     monkeypatch.setattr(cli, "_confirm", lambda steps, yes, profile: asked.append(steps) or True)
     assert cli.main(["eval", "--card", S35["name"], "--retrieval-only"]) == 1
     assert "native stack" in capsys.readouterr().err and asked == [] and system.ran == []
+
+
+def test_the_smoke_flag_runs_the_smoke_set_and_no_flag_the_deploy_smoke(repo, monkeypatch):
+    system = Recorder()
+    monkeypatch.setattr(stack, "System", lambda: system)
+    monkeypatch.setattr(stack, "gather", lambda root, current, card, hardware, a, *r: facts(repo, card))
+    assert cli.main(["eval", "--smoke"]) == 0 and cli.main(["eval"]) == 0
+    card = S4B["name"]
+    smoke_set, deploy = [a[-5:] for a in system.ran]
+    assert smoke_set == ("evals", "run", "smoke", "--label", card)  # --smoke: the set, as the runner plays it
+    assert deploy == ("evals", "evals", "smoke", "--label", card)  # no flag: the five fixed probes
 
 
 def test_the_command_runs_the_job_on_the_recorded_card(repo, monkeypatch, capsys):

@@ -1,8 +1,9 @@
 """`rag eval`: the evals job against the running stack, as one step for the executor.
 
-The smoke runs in the evals job (`evals smoke`, the native stack's token read from its secret file); the retrieval-only
-eval and its ablation are the assistant's module `assistant_api.retrieval_eval`, run natively with the backend's settings
-(it needs the database and the model servers, and the card's analysis model)."""
+The deploy smoke runs in the evals job (`evals smoke`, the native stack's token read from its secret file); `--smoke` plays the
+profile's whole smoke set with its answer checks (`evals run smoke`); the retrieval-only eval and its ablation are the
+assistant's module `assistant_api.retrieval_eval`, run natively with the backend's settings (it needs the database and the
+model servers, and the card's analysis model)."""
 
 import os
 
@@ -15,9 +16,17 @@ NEEDS = {"smoke": ("backend",), "retrieval": ("embedding", "reranker")}
 
 
 def plan(
-    state: State, facts: Facts, args: Args, *, retrieval_only: bool, ablation: bool, check_ready: bool = True
+    state: State,
+    facts: Facts,
+    args: Args,
+    *,
+    retrieval_only: bool,
+    ablation: bool,
+    smoke_set: bool = False,
+    check_ready: bool = True,
 ) -> list[Step]:
-    """The step that runs the eval on the card of `args`. `check_ready` false when the plan before it brings the stack up."""
+    """The step that runs the eval on the card of `args`: the retrieval eval, the profile's smoke set (`smoke_set`) or the deploy
+    smoke. `check_ready` false when the plan before it brings the stack up."""
     kind = "retrieval" if retrieval_only else "smoke"
     llm = runtime.resolve(facts.card, args.mode, model=args.model, llm_url=args.llm_url)
     if check_ready and (missing := [n for n in NEEDS[kind] if n not in facts.ready]):
@@ -34,7 +43,8 @@ def plan(
         )
         text = f"retrieval-only eval ({'ablation' if ablation else 'hit@k and MRR'}) on card {llm.card}"
         return [Step("run", name="eval", text=text, argv=argv, cwd=root, env=env, inherit=_key(llm))]
-    text = f"smoke eval on card {llm.card}"
+    text = f"{'smoke set' if smoke_set else 'smoke'} eval on card {llm.card}"
+    command = ("run", "smoke") if smoke_set else ("smoke",)  # the set `smoke` of the profile's gate.yaml
     if args.mode == "compose":
         out = f"{rag}/eval_runs"
         # The folder is mounted at its own host path, so the "Results:" line the job prints is a path on this machine; it is
@@ -52,7 +62,7 @@ def plan(
             "-e",
             f"RAG__EVALS__OUT_DIR={out}",
             "evals",
-            "smoke",
+            *command,
             "--label",
             llm.card,
         )
@@ -67,7 +77,7 @@ def plan(
         "RAG__EVALS__RUNS_DIR": f"{rag}/eval_runs",
         "RAG__EVALS__OUT_DIR": f"{rag}/eval_runs",
     }
-    argv = uv_argv("--package", "evals", "evals", "smoke", "--label", llm.card)
+    argv = uv_argv("--package", "evals", "evals", *command, "--label", llm.card)
     return [Step("run", name="eval", text=text, argv=argv, cwd=root, env=env)]
 
 
