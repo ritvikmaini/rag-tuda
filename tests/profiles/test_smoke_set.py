@@ -6,6 +6,7 @@ a stale volatile one (a fee or a date) is only a warning."""
 
 import json
 import re
+import sys
 import warnings
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,7 @@ import pytest
 import yaml
 from indexer.crawl.cache import Cache
 from indexer.crawl.extract import Selectors, extract
+from indexer.connectors.law_xml import law_markdown, xml_of_zip
 from indexer.crawl.manifest import manifest_urls, snapshots_dir
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Roles, Sources
@@ -106,10 +108,15 @@ def test_smoke_set_schema() -> None:
 def latest_texts(urls: set[str]) -> dict[str, list[str]]:
     """url -> the whitespace-squeezed texts of the latest crawl: a PDF's extracted text, a page's documents."""
     snapshots = snapshots_dir(RAG / "crawl")
-    generation = max(int(p.stem) for p in snapshots.glob("*.json"))
-    listed = set(manifest_urls(str(generation), directory=snapshots))
+    if not (generations := [int(p.stem) for p in snapshots.glob("*.json")]):
+        pytest.skip("no snapshot manifest in .rag/snapshots")
+    generation = max(generations)
+    listed = {
+        u.partition("#")[0] for u in manifest_urls(str(generation), directory=snapshots)
+    }  # a split page lists its parts
     sources = load_profile(Sources, TU / "sources.yaml")
     cache = Cache(RAG / "crawl")
+    laws = {law.page_url: law for law in sources.laws}
     pdfs: dict[str, list[str]] = {}
     for path in (RAG / "crawl" / "extracted").glob("*.json"):
         entry = json.loads(path.read_text(encoding="utf-8"))
@@ -118,6 +125,9 @@ def latest_texts(urls: set[str]) -> dict[str, list[str]]:
     for url in urls & listed:
         if url in pdfs:
             texts[url] = pdfs[url]
+        elif url in laws and (entry := cache.entry(laws[url].xml_url)):  # a statute is read from its XML, not crawled
+            law = laws[url]
+            texts[url] = [squeeze(law_markdown(xml_of_zip(cache.body(entry)), law.start, law.end)[1])]
         elif entry := cache.entry(url):
             selectors = {
                 k: v for k, v in sources.hosts[urlsplit(url).hostname or ""].selectors.model_dump().items() if v
@@ -125,6 +135,13 @@ def latest_texts(urls: set[str]) -> dict[str, list[str]]:
             page = extract(cache.body(entry), url, Selectors(**selectors), entry.content_type)
             texts[url] = [squeeze(d.markdown) for d in page.documents]
     return texts
+
+
+def test_an_empty_snapshots_folder_skips_the_crawl_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "snapshots").mkdir()
+    monkeypatch.setattr(sys.modules[__name__], "RAG", tmp_path)
+    with pytest.raises(pytest.skip.Exception):
+        latest_texts({"https://example.org/"})
 
 
 @pytest.mark.local_crawl
