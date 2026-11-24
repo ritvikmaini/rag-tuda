@@ -461,6 +461,11 @@ class Session:
             # settle() saw the old document read everything; a held answer ends with it, uncounted by the page
             self.read_before = self.server.sent + self.server.holding
             page.reload()
+        elif "click" in step and step.get("reloads"):
+            # the click starts a reload after its handler returns: without waiting for the new document, settle() could run
+            # a tick of the shared clock on the old one, and a run would have one tick more than another
+            with page.expect_navigation():
+                page.locator(step["click"]).first.click()
         elif "click" in step:
             page.locator(step["click"]).first.click()
         elif "choose" in step:  # the chips, in the order the selectors narrow each other: degree, programme, PO year
@@ -605,7 +610,7 @@ SCENARIOS: list[dict[str, Any]] = [
         ],
     },
     # the page in English: the switch reloads it, the question then carries lang=en
-    {"id": "english", "steps": [{"label": "switched", "click": "#lang-switch"}, ask(ENGLISH_T)]},
+    {"id": "english", "steps": [{"label": "switched", "click": "#lang-switch", "reloads": True}, ask(ENGLISH_T)]},
     {
         "id": "chart",
         "synthetic": True,
