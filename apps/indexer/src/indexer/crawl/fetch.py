@@ -10,8 +10,9 @@ by hand, and every hop passes the same checks as the first URL. Host names are c
 without a trailing dot. A fetcher is for one thread: the rate limit and the robots rules are plain dictionaries.
 
 One response is bounded in time and size, or the URL is skipped (no retry, nothing cached): `deadline` seconds in total
-(a monotonic clock, apart from the rate limit's), `page_limit` bytes for anything but a PDF and for robots.txt, `pdf_limit`
-bytes for a PDF. A Content-Length above the limit is refused before the body is read. A PDF goes to a `.part` file in the
+(a monotonic clock, apart from the rate limit's), `page_limit` bytes for anything but a PDF or a zip and for robots.txt,
+`pdf_limit` bytes for a PDF, `zip_limit` bytes for a zip (the official law archives). A Content-Length
+above the limit is refused before the body is read. A PDF goes to a `.part` file in the
 cache as it arrives, never into memory beside it.
 
 robots.txt is read once per host (RFC 9309): a 4xx answer allows everything; a server error, no answer, a 429 or a 200 that
@@ -50,6 +51,7 @@ REDIRECTS = frozenset({301, 302, 303, 307, 308})
 MAX_REDIRECTS = 5
 PAGE_LIMIT = 5 * 1024 * 1024
 PDF_LIMIT = 100 * 1024 * 1024
+ZIP_LIMIT = 32 * 1024 * 1024
 DEADLINE = 120.0
 RETRY_AFTER_CAP = 120.0
 RETRY_AFTER_DEFAULT = 30.0  # the slower interval after a 429 or 503 that names none
@@ -134,6 +136,10 @@ def _is_pdf(url: str, content_type: str) -> bool:
     return "pdf" in content_type.lower() or (_parts(url) or urlsplit("")).path.lower().endswith(".pdf")
 
 
+def _is_zip(url: str, content_type: str) -> bool:
+    return "zip" in content_type.lower() or (_parts(url) or urlsplit("")).path.lower().endswith(".zip")
+
+
 def blocking_meta(body: bytes) -> str | None:
     """The first blocking token of the page's `<meta name="robots">` tags, or None."""
     try:
@@ -171,6 +177,7 @@ class Fetcher:
         deadline: float = DEADLINE,
         page_limit: int = PAGE_LIMIT,
         pdf_limit: int = PDF_LIMIT,
+        zip_limit: int = ZIP_LIMIT,
         monotonic: Callable[[], float] = time.monotonic,
         cache: Cache | None = None,
         since: date | None = None,
@@ -185,6 +192,7 @@ class Fetcher:
         self._intervals: dict[str, float] = {}  # a host that asked to slow down
         self._robots: dict[str, Robots] = {}
         self._deadline, self._page_limit, self._pdf_limit, self._monotonic = deadline, page_limit, pdf_limit, monotonic
+        self._zip_limit = zip_limit
         self._cache, self._since, self._today, self._offline = cache, since, today, offline
 
     def get(self, url: str) -> Response | Skipped:
@@ -360,7 +368,9 @@ class Fetcher:
         with self._client.stream("GET", url, headers={"User-Agent": self.user_agent, **headers}) as reply:
             status = reply.status_code
             pdf = 200 <= status < 300 and _is_pdf(url, reply.headers.get("content-type", ""))
-            limit = self._pdf_limit if pdf else self._page_limit
+            content_type = reply.headers.get("content-type", "")
+            zipped = 200 <= status < 300 and not pdf and _is_zip(url, content_type)
+            limit = self._pdf_limit if pdf else self._zip_limit if zipped else self._page_limit
             declared = reply.headers.get("content-length")
             try:
                 size = int(declared) if declared is not None else None

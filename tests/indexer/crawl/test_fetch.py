@@ -625,6 +625,22 @@ def test_a_pdf_streams_into_the_cache_and_leaves_no_part_file(tmp_path):
     assert not list((tmp_path / "crawl").rglob("*.part"))
 
 
+def test_a_zip_has_its_own_limit_above_the_page_limit(tmp_path):
+    url = f"http://{FACULTY}/laws/xml.zip"
+    body = b"PK" + b"z" * 6_000
+    net = Net({url: served("application/zip", httpx.ByteStream(body))})
+    ok = caching(net, tmp_path, page_limit=1000, zip_limit=10_000).get(url)
+    assert isinstance(ok, Response) and ok.body == body
+    big = b"PK" + b"z" * (5 * 1024 * 1024)  # above the default page limit
+    assert isinstance(
+        caching(Net({url: served("application/zip", httpx.ByteStream(big))}), tmp_path / "big").get(url), Response
+    )
+    over = caching(net, tmp_path / "other", page_limit=1000, zip_limit=5_000).get(url)
+    assert isinstance(over, Skipped) and over.reason == "too large"
+    page = caching(net, tmp_path / "page", page_limit=1000, zip_limit=10_000).get(HUB)
+    assert isinstance(page, Skipped) and page.reason == "too large"  # the larger limit is for a zip only
+
+
 def test_a_robots_txt_over_the_limit_disallows_the_host(tmp_path):
     net = Net(robots_served(200, "User-agent: *\n" + "# padding\n" * 500))
     result = caching(net, tmp_path, page_limit=1000).get(HUB)

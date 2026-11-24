@@ -158,6 +158,12 @@ def test_a_law_that_is_down_or_unreadable_is_listed_not_indexed(make_context, se
     ]
 
 
+def test_a_zip_member_that_unpacks_too_large_is_listed_not_read(make_context, served, monkeypatch):
+    monkeypatch.setattr("indexer.connectors.law_xml.MAX_XML_BYTES", 100)
+    result = connector(serve(served, ZIPS)).collect(make_context())
+    assert result.items == [] and all(s["reason"].startswith("unreadable") for s in result.report["skipped"])
+
+
 def test_the_zip_goes_through_the_fetchers_rules_and_the_cache(make_context, served):
     net = serve(served, ZIPS)
     ctx = make_context()
