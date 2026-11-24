@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import stat
 import sys
 import tomllib
@@ -58,6 +59,12 @@ def test_the_download_tool_is_the_huggingface_hub_the_model_servers_lock():
         lock = tomllib.loads((ROOT / "model_servers" / name / "uv.lock").read_text(encoding="utf-8"))
         locked = [p["version"] for p in lock["package"] if p["name"] == "huggingface-hub"]
         assert locked == [stack.HF_HUB_VERSION], name
+
+
+def test_the_readme_downloads_the_pinned_models_with_the_pinned_tool():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    found = re.findall(r"huggingface_hub==(\S+) huggingface-cli download (\S+) --revision (\S+)", readme)
+    assert sorted(found) == sorted((stack.HF_HUB_VERSION, pin.repo, pin.revision) for pin in stack.PINNED.values())
 
 
 def test_a_child_does_not_inherit_rag_variables_the_settings_loader_would_refuse():
