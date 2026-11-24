@@ -131,3 +131,15 @@ laws:
     page_url: https://www.gesetze-im-internet.de/aufenthv/__45.html
     start: "§ 45"
     end: "§ 45"
+# the English counterparts of German PDFs (a pair is both PDFs of one text: they share the German URL as their twin key); a
+# renamed file loses its pair, which is then indexed twice
+pdf_twins:
+  - {de: https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf, en: https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb-english.pdf}
+  - {de: https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/ESO_3._Novelle__2025-04-30.pdf, en: https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/ESO_englisch.pdf}
+  - {de: https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/promotionsordnung.pdf, en: https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/Promotionsordnung-en.pdf}
+  - de: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/Studien-_und_Pruefungsplan_M_Sc_Computer_Science_PO_2023.de.pdf
+    en: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/Studien-_und_Pruefungsplan_M_Sc_Computer_Science_PO_2023.en.pdf
+  - de: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/ordnung_des_studiengangs_m_sc_computer_science_po_2023_14045087.de.pdf
+    en: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/ordnung_des_studiengangs_m_sc_computer_science_po_2023_14045087.en.pdf
+  - de: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/2023_05_11_MHB_MSC_CS.de.pdf
+    en: https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/pruefungsordnungen_cs_2023/2023_05_11_MHB_MSC_CS.en.pdf

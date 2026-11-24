@@ -2,12 +2,14 @@
 programmes' hubs and pages and the rest of the faculty's site are out. Nothing is fetched."""
 
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Sources
 
 from indexer.crawl.discover import Source, in_scope
+from indexer.crawl.metadata import twin_keys
 
 TU = Path(__file__).resolve().parents[3] / "profiles" / "tu-informatik"
 HOST = "www.informatik.tu-darmstadt.de"
@@ -69,3 +71,12 @@ def test_the_study_area_of_the_configured_programmes_is_in_scope(source: Source,
 @pytest.mark.parametrize("path", OUT)
 def test_other_programmes_and_the_rest_of_the_site_are_out_of_scope(source: Source, path: str):
     assert not in_scope(source, f"https://{HOST}{path}")
+
+
+def test_pdf_twins_pair_the_english_pdfs_with_their_german_ones():
+    sources = load_profile(Sources, TU / "sources.yaml")
+    keys = twin_keys(sources.pdf_twins)
+    assert len(sources.pdf_twins) == 6
+    for pair in sources.pdf_twins:
+        assert pair.de != pair.en and keys[pair.en] == keys[pair.de] == pair.de
+        assert urlsplit(pair.de).hostname in sources.hosts and urlsplit(pair.en).hostname in sources.hosts
