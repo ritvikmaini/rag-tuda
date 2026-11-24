@@ -5,8 +5,9 @@ and text and the file name (never by a model).
 version ("Prüfungsordnung 2023") is a document of its own, every other section is joined into one document of the page.
 `pdf_metadata` classifies a linked PDF; its programme, degree and PO version come from the hub page it is linked from (its
 URL folder, the section's id and heading, the link's text and title), not from the PDF's own path, which may not name them
-(the PO folder number is not the PO year). `select_documents` applies the fail-closed rule and drops hub copies of a
-university-wide regulation whose original is in the same set.
+(the PO folder number is not the PO year); a link of an aside takes its programme from its own URL and no section scope
+from the page. `select_documents` applies the fail-closed rule and drops hub copies of a university-wide regulation whose
+current original (not archived, not "Ausführungsbestimmungen") is in the same set, undated or older copies included.
 
 Fields: `regulation` (po, mhb, spp, apb, eso, promotion, residence, info, form); `degree`, `programme` and `po_version`
 are tuples or None; None means "applies to all" and is never an empty tuple. The PO, Modulhandbuch and Studien- und
@@ -317,7 +318,9 @@ def select_documents(candidates: Iterable[Candidate], roles: Roles) -> Selection
     university-wide regulation (a PDF in a programme's folder) is skipped when an original is in the set: the same known
     hash, the same regulation and language with the same date in force, or, whatever the date (the hub may carry an older
     Novelle), a current original of that regulation and language. Archived documents and "Ausführungsbestimmungen" are
-    never current: they are kept and never stand for a copy. A missing hash or date never matches."""
+    never current: they are kept and never stand for a copy. A copy without hash or date is skipped by the last rule only (an
+    undated copy and an undated original of the same regulation and language qualify); a missing hash or date alone never
+    matches."""
     kept, listed = [], []
     for c in candidates:
         (listed if c.metadata.missing else kept).append(c)
