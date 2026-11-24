@@ -201,3 +201,14 @@ def test_a_failing_metadata_lookup_costs_the_lines_not_the_answer(monkeypatch: p
 
     monkeypatch.setattr(generate, "fit_context", broken)
     assert answered([doc("a", **BSC, po_version=[2023])], "Antwort [1].") == "Antwort [1]."
+
+
+def test_grouped_citations_get_the_po_line_and_the_visa_disclaimer():
+    bound = doc("a", **BSC, po_version=[2023])
+    residence = doc("b", regulation="residence")
+    other = doc("c", regulation="info")
+    for written in ("[1, 2]", "[1,2]", "[1][2]"):
+        answer = answered([bound, residence, other], f"Frist und Antrag {written}.")
+        assert answer.endswith("Grundlage: Prüfungsordnung 2023 des B.Sc. Informatik\n\n" + VISA), written
+    # a group that holds only an uncited source adds nothing
+    assert answered([bound, residence, other], "Antwort [3, 3].") == "Antwort [3, 3]."

@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, List, Optional, Sequence, Tuple
 
 from rag_core.domain.filters import Filter
+from rag_core.domain.source_meta import CITATION_GROUP
 from rag_core.domain.types import Message
 
 Turn = Tuple[Any, Any]
@@ -26,7 +27,7 @@ MESSAGE_OVERHEAD_TOKENS = 8  # the per-message allowance context_budget uses
 ELLIPSIS = " …"
 UUID_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 # "[2]", "[1, 3]": the markers the page links (its CITATION_PATTERN), with the space before them
-CITATION_MARKER = re.compile(r"\s?\[\d{1,2}(?:\s*,\s*\d{1,2})*\]")
+CITATION_MARKER = re.compile(r"\s?" + CITATION_GROUP.pattern)
 SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 
 

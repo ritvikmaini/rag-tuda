@@ -82,7 +82,13 @@ def describe_source(metadata, labels):
     return {"title": title, "origin": origin, "type": doc_type, "date": date, "url": url}
 
 
-CITATION = re.compile(r"\[(\d{1,2})\]")
+# "[1]", "[1, 2]", "[1,2,3]"; "[1][2]" is two markers. The page links the same form (its CITATION_PATTERN).
+CITATION_GROUP = re.compile(r"\[\d{1,2}(?:\s*,\s*\d{1,2})*\]")
+
+
+def cited_numbers(text):
+    """The source numbers a text cites, in order of appearance (a number cited twice is listed twice)."""
+    return [int(n) for found in CITATION_GROUP.findall(text or "") for n in re.findall(r"\d+", found)]
 
 
 def select_sources_for_display(sources, answer, mode):
@@ -90,6 +96,6 @@ def select_sources_for_display(sources, answer, mode):
     those cited as [n] ("cited", falling back to all seen when the answer cites none)."""
     if mode != "cited":
         return list(sources)
-    cited = {int(n) for n in CITATION.findall(answer or "")}
+    cited = set(cited_numbers(answer))
     chosen = [s for s in sources if s.get("n") in cited]
     return chosen or list(sources)

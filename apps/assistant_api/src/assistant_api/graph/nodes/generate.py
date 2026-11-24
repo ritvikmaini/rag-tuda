@@ -9,7 +9,6 @@ English information translation. Which sources are searched is the question's ha
 
 import asyncio
 import logging
-import re
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -30,6 +29,7 @@ from rag_core.domain.history import context_turns, conversation_state, select_tu
 from rag_core.domain.language import PROMPT_NAMES
 from rag_core.domain.notes import appended_lines
 from rag_core.domain.query_analysis import RETRIEVAL_INTENTS
+from rag_core.domain.source_meta import cited_numbers
 from rag_core.domain.status_groups import GENERAL, Scope, note_for, question_scope, scope_lines, source_group
 from rag_core.settings.profile import StatusGroup
 
@@ -38,7 +38,6 @@ from assistant_api.graph.history import as_messages, insert_history, line_texts,
 from assistant_api.graph.state import AgentState, GraphDeps, messages_for
 
 logger = logging.getLogger(__name__)
-CITATION = re.compile(r"\[(\d+)\]")
 
 
 def with_reminder(messages, reminder):
@@ -93,7 +92,7 @@ def past_event_reply(answer: str, context: str, today: date, texts: Any) -> str 
         text = texts.past_events.format(dates=", ".join(dates[:-1]) + " und " + dates[-1])
     if not any(day >= today for _, _, day in written_dates(context, today)):
         text += texts.no_newer_event
-    cites = CITATION.findall(found[0][2]) or CITATION.findall(answer)
+    cites = cited_numbers(found[0][2]) or cited_numbers(answer)
     return text + (" [%s]" % cites[0] if cites else "") + "."
 
 
@@ -297,7 +296,7 @@ def make_generate(deps: GraphDeps):
             ):
                 try:
                     answer = str(response.content)
-                    numbers = {int(n) for n in CITATION.findall(answer)}
+                    numbers = set(cited_numbers(answer))
                     cited = [g for n, g in group_of.items() if n in numbers]
                     note = note_for(table, scope, cited, answer)
                     logger.info(
@@ -317,7 +316,7 @@ def make_generate(deps: GraphDeps):
             if sources:
                 try:
                     answer = str(response.content)
-                    numbers = {int(n) for n in CITATION.findall(answer)}
+                    numbers = set(cited_numbers(answer))
                     applied = state.get("filter")
                     lines = appended_lines(
                         [m for s, m in zip(sources, shown) if s["n"] in numbers],

@@ -308,3 +308,21 @@ def test_the_declared_language_picks_the_lines(tu_profile):
     german_line = with_lines(short, [BSC_2023], "de")  # the detector alone would read this as German and pass it
     assert "po_line_present" in run(german_line, meta, po_line_present=True, answer_language_matches="en")
     assert run(german_line, meta, po_line_present=True) == []
+
+
+def test_grouped_citations_are_read_by_the_answer_checks():
+    grouped = "Das gilt [1, 2] und [3,4]."
+    assert citations_map_to_sources(grouped, {1, 2, 3, 4})
+    assert not citations_map_to_sources(grouped, {1, 2, 3})  # [4] has no source
+    assert not citations_map_to_sources("Das gilt [1][5].", {1, 2})
+    assert evaluate_turn(grouped, [], [], {})["citations"] == [1, 2, 3, 4]
+
+
+def test_the_line_checks_read_a_grouped_citation():
+    meta = {1: BSC_2023, 2: VISA}
+    answer = "Frist und Antrag [1, 2]."
+    full = with_lines(answer, [BSC_2023, VISA])
+    assert po_line_present(full, meta, TEXTS["de"], PROGRAMMES, "de")
+    assert not po_line_present(answer, meta, TEXTS["de"], PROGRAMMES, "de")
+    assert visa_disclaimer_present(full, meta, TEXTS["de"], PROGRAMMES, "de")
+    assert not visa_disclaimer_present(answer, meta, TEXTS["de"], PROGRAMMES, "de")

@@ -14,13 +14,13 @@ import yaml
 from evals.settings import load_settings
 from rag_core.domain.language import QUOTED, detect
 from rag_core.domain.notes import appended_lines, po_line
+from rag_core.domain.source_meta import cited_numbers as _cited_numbers
 
 LEAK_PATTERN = re.compile(r"PdfPipelineOptions|Image not available|\[Page \d+\]|Dokumentenauszüge")
 EMOJI_PATTERN = re.compile("[\U0001f300-\U0001faff\U0001f1e6-\U0001f1ff☀-➿⭐⭕]")
 # Scripts that never belong in a German (or English) answer: Cyrillic, Hebrew, Arabic, CJK, Hangul
 NON_LATIN_PATTERN = re.compile("[\u0400-\u04ff\u0590-\u06ff\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af\uf900-\ufaff]")
 INFORMAL_PATTERN = re.compile(r"\b(du|dich|dir|dein|deine|deinen|deinem|deiner|deines)\b", re.IGNORECASE)
-CITATION_PATTERN = re.compile(r"\[(\d{1,2})\]")
 
 
 def informal_pronouns(text):
@@ -479,7 +479,7 @@ def load_answer_texts(profile_dir: str) -> tuple[dict[str, AnswerTexts], Mapping
 
 def cited_numbers(answer: str) -> set[int]:
     """The source numbers an answer cites, from [1], [1, 2] and [1][2]."""
-    return {int(n) for found in FMT_CITE.findall(answer) for n in re.findall(r"\d+", found)}
+    return set(_cited_numbers(answer))
 
 
 def _prose(answer: str) -> str:
@@ -603,7 +603,7 @@ def evaluate_turn(answer, sources, errors, expect, meta=None):
         "words": len(answer.split()),
         "n_sources": len(sources),
         "internal_sources": sum(1 for s in sources if s["internal"]),  # kept so old and new rows stay comparable
-        "citations": sorted({int(n) for n in CITATION_PATTERN.findall(answer)}),
+        "citations": sorted(cited_numbers(answer)),
     }
     failed = []
     if errors:

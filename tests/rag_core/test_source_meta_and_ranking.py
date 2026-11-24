@@ -200,3 +200,16 @@ def test_years_ignore_encoded_digits_and_future_years():
     assert adj[0] == 0.5 and adj[1] == 0.5 and adj[3] == 0.5  # no recency bonus for unknown years
     assert round(adj[2], 4) == 0.55  # next year still counts (full bonus)
     assert round(adj[4], 4) == 0.55  # the decoded fragment's 2026, not "%2011"
+
+
+def test_cited_numbers_read_single_grouped_and_adjacent_markers():
+    assert sm.cited_numbers("Eins [1], zwei [2, 3], drei [4,5,6], vier [7][8].") == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert sm.cited_numbers("[2] und [2]") == [2, 2]
+    assert sm.cited_numbers("Kein Beleg, nur [x] und [].") == []
+    assert sm.cited_numbers(None) == []
+
+
+def test_grouped_citations_pick_the_displayed_sources():
+    src = [{"n": 1}, {"n": 2}, {"n": 3}]
+    assert [s["n"] for s in sm.select_sources_for_display(src, "Antwort [1, 3].", "cited")] == [1, 3]
+    assert [s["n"] for s in sm.select_sources_for_display(src, "Antwort [2,3][1].", "cited")] == [1, 2, 3]

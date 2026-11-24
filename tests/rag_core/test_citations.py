@@ -143,3 +143,10 @@ def test_quotes_drop_the_markdown_heading_markers_of_the_chunk():
     chunk = "## § 2 Geltungsbereich\nDiese Ordnung gilt für Studierende.\n### (1) Absatz\nText # kein Marker."
     [entry] = ct.entries([source(1, "a")], [doc("a", chunk)])
     assert entry["quote"] == "§ 2 Geltungsbereich Diese Ordnung gilt für Studierende. (1) Absatz Text # kein Marker."
+
+
+def test_the_frame_holds_one_entry_per_source_whatever_form_the_answer_cites_in():
+    sources = [source(1, "a"), source(2, "b")]
+    docs = [doc("a", "Erster Satz."), doc("b", "Zweiter Satz.")]
+    assert [e["n"] for e in content(citations_frame(sources, docs))] == [1, 2]
+    assert [e["n"] for e in ct.entries(sources, docs)] == [1, 2]

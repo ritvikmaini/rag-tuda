@@ -603,3 +603,9 @@ test("the counter and the limit text use the page language's number format; Germ
     assert.equal(page.lengthState("x".repeat(1700)).counter, "1.700 / 2.000");
     assert.ok(page.lengthState("x".repeat(2001)).hint.includes("2.000"));
 });
+
+test("a grouped citation is split into one reference per number", () => {
+    assert.deepEqual(plain(page.citationParts("Ja [1, 2] und [3,4][5].")), [
+        { text: "Ja " }, { refs: [1, 2] }, { text: " und " }, { refs: [3, 4] }, { refs: [5] }, { text: "." },
+    ]);
+});
