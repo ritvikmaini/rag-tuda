@@ -71,6 +71,9 @@ class Metadata:
     official_url: str | None
     # the PO year an "Ausführungsbestimmungen" document names, when no version has it
     unconfigured_year: int | None = None
+    implementing: bool = (
+        False  # "Ausführungsbestimmungen" (implementing provisions), which no copy of the APB stands for
+    )
 
     @property
     def missing(self) -> tuple[str, ...]:
@@ -151,10 +154,14 @@ def _version(programme: str | None, roles: Roles, *sources: str | None) -> tuple
     return None
 
 
+def _implementing(*texts: str | None) -> bool:
+    return "ausfuehrungsbestimmung" in _fold(*texts)
+
+
 def _unconfigured_year(regulation: str, programme: str | None, roles: Roles, *texts: str | None) -> int | None:
     """The one year the texts of an "Ausführungsbestimmungen" document on a programme's hub name (dates and a file name's
     date prefix are no PO year), when the programme has no PO version of that year; None for any other document."""
-    if regulation != "apb" or not programme or "ausfuehrungsbestimmung" not in _fold(*texts):
+    if regulation != "apb" or not programme or not _implementing(*texts):
         return None
     years = set().union(*(_years(t) for t in texts))
     configured = {v.year for v in roles.programmes[programme].po_versions}
@@ -293,6 +300,7 @@ def pdf_metadata(link: Link, hub: Extraction, roles: Roles, twins: Mapping[str, 
         (twins or {}).get(link.url),
         _official_url(programme, po_version, roles),
         _unconfigured_year(regulation, programme, roles, link.text, link.title, DATE_PREFIX.sub("", stem)),
+        _implementing(link.text, link.title, DATE_PREFIX.sub("", stem)),
     )
 
 
@@ -304,7 +312,9 @@ def twin_keys(pairs: Iterable[PdfTwin]) -> dict[str, str]:
 def select_documents(candidates: Iterable[Candidate], roles: Roles) -> Selection:
     """Fail closed: a programme regulation lacking its programme or PO version is listed, not kept. A hub's copy of a
     university-wide regulation (a PDF in a programme's folder) is skipped when an original is in the set: the same known
-    hash, or the same regulation and language with the same date in force. A missing hash or date never matches."""
+    hash, the same regulation and language with the same date in force, or, whatever the date (the hub may carry an older
+    Novelle), a current original of that regulation and language. Archived documents and "Ausführungsbestimmungen" are
+    never current: they are kept and never stand for a copy. A missing hash or date never matches."""
     kept, listed = [], []
     for c in candidates:
         (listed if c.metadata.missing else kept).append(c)
@@ -313,6 +323,9 @@ def select_documents(candidates: Iterable[Candidate], roles: Roles) -> Selection
         return c.metadata.regulation in HUB_COPIED and any(
             c.url.startswith(p.pdf_prefix) for p in roles.programmes.values()
         )
+
+    def current(c: Candidate) -> bool:
+        return not c.metadata.archived and not c.metadata.implementing
 
     originals = [c for c in kept if c.metadata.regulation in HUB_COPIED and not hub_copy(c)]
     copies = [
@@ -325,6 +338,7 @@ def select_documents(candidates: Iterable[Candidate], roles: Roles) -> Selection
             and (
                 bool(c.sha256 and o.sha256 == c.sha256)
                 or (o.metadata.valid_from and o.metadata.valid_from == c.metadata.valid_from)
+                or (current(c) and current(o))
             )
             for o in originals
         )

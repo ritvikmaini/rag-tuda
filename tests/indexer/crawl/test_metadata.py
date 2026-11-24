@@ -181,11 +181,11 @@ def test_hub_apb_copy_yields_to_intern_original():
         copy_link.url, "other", pdf_metadata(_link(copy_link.url, "APB", "in Kraft seit 13.01.2022"), PO_HUB, ROLES)
     )
     assert select_documents([other_hash, original], ROLES).kept == (original,)
-    # an older version of the hub is not a copy of the original
+    # an older Novelle on the hub yields too: the intern original is the one current text
     older = Candidate(
         copy_link.url, "other", pdf_metadata(_link(copy_link.url, "APB", "in Kraft seit 01.01.2018"), PO_HUB, ROLES)
     )
-    assert select_documents([older, original], ROLES).kept == (older, original)
+    assert select_documents([older, original], ROLES).copies == (older.url,)
     # without an original the copy stays; the same file on two hubs does not hide the original
     assert select_documents([copy], ROLES).kept == (copy,)
     assert select_documents([original, original], ROLES).kept == (original, original)
@@ -388,18 +388,29 @@ def test_a_modulhandbuch_naming_the_apb_stays_a_modulhandbuch():
     )
 
 
-def test_unknown_hashes_never_make_a_copy():
+def test_archived_and_implementing_documents_neither_yield_nor_stand_for_a_copy():
     copy_url = f"{MEDIA}/ordnungen_bsc/allgemeine_bestimmungen/apb.pdf"
     intern = _hub("https://www.intern.tu-darmstadt.de/x.de.jsp")
-    copy = Candidate(copy_url, None, pdf_metadata(_link(copy_url, "APB", "in Kraft seit 01.01.2018"), PO_HUB, ROLES))
-    original = Candidate(
-        INTERN_APB, None, pdf_metadata(_link(INTERN_APB, "APB", "in Kraft seit 13.01.2022"), intern, ROLES)
-    )
-    assert select_documents([copy, original], ROLES).kept == (copy, original)
+
+    def candidate(url, text, hub, title=""):
+        return Candidate(url, None, pdf_metadata(_link(url, text, title), hub, ROLES))
+
+    original = candidate(INTERN_APB, "APB", intern, "in Kraft seit 13.01.2022")
+    archived = candidate(copy_url, "Archiv: APB", PO_HUB, "in Kraft seit 01.10.2015")
+    implementing = candidate(f"{MEDIA}/ordnungen_bsc/ab.pdf", "Ausführungsbestimmungen zu den APB", PO_HUB)
+    assert archived.metadata.archived and implementing.metadata.implementing
+    assert select_documents([archived, implementing, original], ROLES).kept == (archived, implementing, original)
+    # an archived or implementing original is no current text for a hub copy to yield to
+    copy = candidate(copy_url, "APB", PO_HUB)
+    for other in (
+        candidate(INTERN_APB, "Archiv: APB", intern),
+        candidate("https://www.intern.tu-darmstadt.de/ab.pdf", "Ausführungsbestimmungen zu den APB", intern),
+    ):
+        assert select_documents([copy, other], ROLES).kept == (copy, other)
     undated = Candidate(copy_url, None, pdf_metadata(_link(copy_url, "APB"), PO_HUB, ROLES))
     undated_original = Candidate(INTERN_APB, None, pdf_metadata(_link(INTERN_APB, "APB"), intern, ROLES))
-    assert select_documents([undated, undated_original], ROLES).kept == (undated, undated_original)
-    # a known equal hash is a copy; so is the same date in the same language, but not in another language
+    assert select_documents([undated, undated_original], ROLES).copies == (copy_url,)
+    # a copy is skipped for an original of its own language only
     assert select_documents(
         [Candidate(copy_url, "h", undated.metadata), Candidate(INTERN_APB, "h", undated_original.metadata)], ROLES
     ).copies == (copy_url,)
