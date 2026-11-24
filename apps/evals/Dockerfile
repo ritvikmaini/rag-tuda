@@ -15,8 +15,9 @@ RUN uv sync --frozen --no-default-groups --no-editable --package evals
 
 FROM ${PYTHON_IMAGE} AS base
 ARG PROFILE=example
-# /app/out: everything a command writes (evals.settings out_dir); the deploy copies it out with docker cp, because the job's
-# non-root user may not be able to write the bind mount data/eval_runs, which the job reads read-only
+# /app/out: everything a command writes (evals.settings out_dir); `rag eval` points out_dir at a mounted host folder, a by-hand run
+# copies it out with docker cp, because the job's non-root user may not be able to write the bind mount data/eval_runs, which the
+# job reads read-only
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin evals && install -d -o evals -g evals /app/out
 COPY --from=builder /app/.venv /app/.venv
 COPY profiles/${PROFILE}/ /app/profile/

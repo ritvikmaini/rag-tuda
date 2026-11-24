@@ -4,6 +4,8 @@ The smoke runs in the evals job (`evals smoke`, the native stack's token read fr
 eval and its ablation are the assistant's module `assistant_api.retrieval_eval`, run natively with the backend's settings
 (it needs the database and the model servers, and the card's analysis model)."""
 
+import os
+
 from rag_tuda import runtime
 from rag_tuda.stack import Args, Facts, Step, StackError, compose_for, uv_argv
 from rag_tuda.state import State
@@ -34,18 +36,30 @@ def plan(
         return [Step("run", name="eval", text=text, argv=argv, cwd=root, env=env, inherit=_key(llm))]
     text = f"smoke eval on card {llm.card}"
     if args.mode == "compose":
+        out = f"{rag}/eval_runs"
+        # The folder is mounted at its own host path, so the "Results:" line the job prints is a path on this machine; it is
+        # made first because Docker would create it as root, and the job runs as this user to write into it.
         argv = (
             *compose_for(facts, rag, llm),
             "--profile",
             "evals",
             "run",
             "--rm",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
+            "-v",
+            f"{out}:{out}",
+            "-e",
+            f"RAG__EVALS__OUT_DIR={out}",
             "evals",
             "smoke",
             "--label",
             llm.card,
         )
-        return [Step("run", name="eval", text=text, argv=argv, cwd=root)]
+        return [
+            Step("run", name="eval-folder", argv=("mkdir", "-p", out), cwd=root),
+            Step("run", name="eval", text=text, argv=argv, cwd=root),
+        ]
     env = {
         "RAG__EVALS__ASSISTANT_URL": runtime.endpoint("backend"),
         "RAG_SECRETS_DIR": str(state.secrets_dir("backend")),  # holds backend_token, the token file the job reads

@@ -249,7 +249,8 @@ services:
           memory: 1G
 
   # --- Evals job: probe runs, gate and smoke against the backend over HTTP ---
-  # Never started by `up` (profile evals). Every invocation, by name and without --rm:
+  # Never started by `up` (profile evals). `rag eval` runs it with --rm and a host folder (.rag/eval_runs) mounted as the job's
+  # out_dir, so the results stay on the host. By hand, every invocation, by name and without --rm:
   #   docker compose --env-file .env -f deploy/compose.yaml --profile evals run --no-deps --name evals-run evals <command>
   #   docker cp evals-run:/app/out/. data/eval_runs/   (the job writes into its own /app/out; data/eval_runs is read-only)
   #   docker rm evals-run

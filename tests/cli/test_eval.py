@@ -2,6 +2,7 @@
 stack onto it first."""
 
 import json
+import os
 
 import pytest
 
@@ -72,8 +73,14 @@ def test_the_run_needs_the_stack_it_measures(tmp_path):
 
 def test_compose_runs_the_smoke_in_the_evals_container_and_refuses_the_retrieval_run(tmp_path):
     a = stack.Args(S4B["name"], "compose")
-    step = job(tmp_path, a)
-    assert step.argv[-8:] == ("--profile", "evals", "run", "--rm", "evals", "smoke", "--label", S4B["name"])
+    out = f"{tmp_path}/.rag/eval_runs"
+    folder, step = rag_eval.plan(recorded(tmp_path, a), facts(tmp_path), a, retrieval_only=False, ablation=False)
+    assert folder.argv == ("mkdir", "-p", out)  # made by this user: Docker would create it as root
+    user = f"{os.getuid()}:{os.getgid()}"
+    assert step.argv[step.argv.index("run") :] == (
+        "run", "--rm", "--user", user, "-v", f"{out}:{out}", "-e", f"RAG__EVALS__OUT_DIR={out}",
+        "evals", "smoke", "--label", S4B["name"],
+    )  # fmt: skip
     with pytest.raises(stack.StackError, match="native"):
         job(tmp_path, a, retrieval_only=True)
 
