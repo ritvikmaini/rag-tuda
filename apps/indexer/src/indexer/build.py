@@ -167,9 +167,9 @@ def build_corpus(
     checks["hosts"] = gates.hosts_gate(reports)
     checks["size"] = gates.size_gate(len(parents), previous, ingest.collections[settings.collection].min_build_ratio)
     generation = previous.get("generation")
-    live_urls = (
-        manifest_urls(str(generation), directory=snapshots_dir(settings.overlay.paths.crawl_dir)) if generation else ()
-    )
+    live_urls = ()  # a limit build is not gated, so its manifest is not read
+    if generation and not limit:
+        live_urls = manifest_urls(str(generation), directory=snapshots_dir(settings.overlay.paths.crawl_dir))
     checks["pages"] = gates.pages_gate(reports, live_urls, generation)
     if last and not previous:
         checks["size"]["skipped"] = "the last build was of another profile or source set"

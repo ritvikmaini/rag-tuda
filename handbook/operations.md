@@ -38,8 +38,12 @@ cron line and one launchd example. `RAG__CRAWL__CONTACT` in the environment adds
 The indexer refuses a build that shrank against the last build, and compares only with a build of the same profile and source
 set (core or full, plus registered folders); a build of another profile or source set is not compared and says so. It also
 refuses a build in which a page of the live generation (as its snapshot manifest lists it) yields no main content, because the
-site changed under the host's selector; a page that was not in the live generation is only named in the summary. Both refusals
-are lifted the same way: `rag reindex --full`, or delete `corpus_build_stats.json` in the state folder. `rag rollback`
+site changed under the host's selector; a page that was not in the live generation is only named in the summary. Only a build of the
+same source set as the last one is checked for this. To accept either refusal on purpose, delete `corpus_build_stats.json` in the
+state folder: the next build has no reference (the index then counts as not built, see above). `rag reindex --full` also gets
+past them when the last build was of the core set, since a build of another source set is not compared; a second `--full`
+is checked again. A snapshot manifest the build cannot read (`.rag/snapshots/<generation>.json`) fails the build; delete that file
+to go on. `rag rollback`
 re-records the stats of the generation it makes live, and it stops when the index was built for another profile than the stack
 runs. After a profile switch, go back with `rag up --profile <name>`, not with `rag rollback`.
 

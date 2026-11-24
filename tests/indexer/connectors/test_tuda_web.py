@@ -700,6 +700,24 @@ def test_an_empty_page_that_is_not_in_the_live_manifest_is_reported_not_refused(
     assert f"warning: tu_web: empty page {EXTRA_HUB} (main content selector '.main-column' matched nothing)" in lines
 
 
+def test_stats_without_a_generation_do_not_gate_the_pages(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    stats_file = tmp_path / "state" / gates.STATS_NAME
+    stats = json.loads(stats_file.read_text(encoding="utf-8"))
+    stats_file.write_text(json.dumps({k: v for k, v in stats.items() if k != "generation"}), encoding="utf-8")
+    code, lines = builder({**EXTRA_PAGES, EXTRA_HUB: UMBAU}, TODAY + timedelta(days=1))
+    assert code == 0 and not any(line.startswith("refused:") for line in lines)
+
+
+def test_a_broken_live_manifest_fails_the_build_and_keeps_the_live_generation(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    live = list(builder.published)
+    (tmp_path / "snapshots" / "1.json").write_text("{broken", encoding="utf-8")
+    code, lines = builder(EXTRA_PAGES, TODAY + timedelta(days=1))
+    assert code == 1 and any(line.startswith("failed: CorruptStateError") and "1.json" in line for line in lines)
+    assert builder.published == live
+
+
 def test_a_shrunk_build_right_after_a_publish_or_rollback_is_refused(builder, tmp_path):
     assert builder(EXTRA_PAGES)[0] == 0
     live = list(builder.published)

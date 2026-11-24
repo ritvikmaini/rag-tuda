@@ -5,7 +5,7 @@ import json
 import logging
 
 import pytest
-from rag_core.domain.sources import PageItem, PdfItem
+from rag_core.domain.sources import CorruptStateError, PageItem, PdfItem
 
 from indexer import build, gates
 
@@ -141,6 +141,16 @@ def test_a_limit_build_skips_the_gates(settings, fakes, monkeypatch):
     assert result["status"] == "success" and len(result["units"]) == result["parents"]
     assert not result["gates"]["web"]["passed"] and not result["gates"]["pdfs"]["passed"]
     assert [s.asked[0].limit for s in sources.values()] == [5, 5, 5]
+
+
+def test_a_limit_build_does_not_read_the_live_manifest(settings, fakes, monkeypatch, tmp_path):
+    stub_pdfs(monkeypatch)
+    fakes.stats.write_text(json.dumps({"parents": 100, "generation": 3, **same_build(settings)}), encoding="utf-8")
+    (tmp_path / "snapshots").mkdir()
+    (tmp_path / "snapshots" / "3.json").write_text("{broken", encoding="utf-8")
+    assert build.build_corpus(settings, three_sources(fakes), limit=5, embedding=fakes.Embedding(None))["units"]
+    with pytest.raises(CorruptStateError, match="3.json"):
+        build.build_corpus(settings, three_sources(fakes), embedding=fakes.Embedding(None))
 
 
 @pytest.mark.parametrize(
