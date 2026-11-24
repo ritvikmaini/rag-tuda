@@ -1246,7 +1246,15 @@
      "gold": {
       "url": "https://www.tu-darmstadt.de/studieren/studieren_von_a_bis_z/artikel_details_de_en_41920.de.jsp",
       "heading": "Beachten Sie die Folgen einer Exmatrikulation:",
-      "quote": "Nach 90 Tage haben Sie keinen Zugriff mehr auf Ihre Studienbescheinigungen und Nachweise im TUCaN, da Ihr TUCaN-Account gesperrt wird."
+      "quote": "Nach 90 Tage haben Sie keinen Zugriff mehr auf Ihre Studienbescheinigungen und Nachweise im TUCaN, da Ihr TUCaN-Account gesperrt wird.",
+      "also": [
+       {
+        "url": "https://www.tu-darmstadt.de/studieren/studieren_von_a_bis_z/artikel_details_de_en_41920.en.jsp",
+        "heading": "Please note the consequences of de-registration:",
+        "quote": "After 90 days, you will no longer have access to your certificates of enrolment and other documents in TUCaN, as your TUCaN"
+       }
+      ],
+      "rule": "any"
      },
      "expect": {
       "answer_language_matches": "de",
@@ -1272,18 +1280,28 @@
      "gold": {
       "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_77952.en.jsp",
       "heading": "2. Students from countries with social-security agreements",
-      "quote": "If you come from a country that has a social security agreement with Germany (Bosnia-Herzegovina, Macedonia, Montenegro, Serbia, Tunisia, Turkey, United Kingdom), you can use your statutory insurance from your home country."
+      "quote": "If you come from a country that has a social security agreement with Germany (Bosnia-Herzegovina, Macedonia, Montenegro, Serbia, Tunisia, Turkey, United Kingdom), you can use your statutory insurance from your home country.",
+      "also": [
+       {
+        "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_77952.de.jsp",
+        "heading": "2. Studierende aus Ländern mit einem Versicherungsabkommen",
+        "quote": "Wenn du aus Ländern kommst, mit den ein Sozialversicherungsabkommen (Bosnien-Herzegowina, Mazedonien, Montenegro, Serbien, Tunesien, Türkei, Vereinigtes Königsreich) besteht, kannst du deine Versicherung in Deutschland anerkennen lassen."
+       }
+      ],
+      "rule": "any"
      },
      "expect": {
       "answer_language_matches": "en",
       "citations_map_to_sources": true,
       "contains_any": [
-       "A/T 11"
+       "A/T 11",
+       "A/T11"
       ],
       "visa_disclaimer_present": true,
       "source_url_any": [
        "artikel_details_de_en_77952"
-      ]
+      ],
+      "polarity": "yes"
      }
     }
    ]
@@ -1304,6 +1322,11 @@
         "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf",
         "page": 21,
         "quote": "Die Frist kann von der Prüfungskommission in begründeten Fällen um die Hälfte der Bearbeitungszeit, höchstens aber um 13 Wochen, verlängert werden."
+       },
+       {
+        "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/studienorganisation_und_tucan/hilfe_und_faq/artikel_details_de_en_319360.en.jsp",
+        "heading": "Extending the deadline for theses",
+        "quote": "In “justified cases”, the examination board can agree to an extend the deadline of a thesis up to a maximum of half of the regular processing time (max. 13 weeks for full-time studies)."
        }
       ],
       "rule": "any"
@@ -1360,7 +1383,7 @@
    "kind": "visa",
    "turns": [
     {
-     "q": "Meine Eltern wohnen im Landkreis Darmstadt-Dieburg und wollen eine Verpflichtungserklärung für mein Studium abgeben. Welchen Nettobetrag im Monat muss mindestens eines ihrer Einkommen übersteigen, wenn sie sich als Ehegatten zusammen verpflichten?",
+     "q": "Meine Eltern wohnen im Landkreis Darmstadt-Dieburg und wollen sich als Ehegatten zusammen mit einer Verpflichtungserklärung für mein Studium (Aufenthalt über 90 Tage) verpflichten. Welchen Nettobetrag im Monat muss mindestens eines der beiden Einkommen übersteigen?",
      "gold": {
       "url": "https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/verpflichtungserklaerung-landkreis-darmstadt-dieburg/",
       "heading": "Wichtige allgemeine Informationen zur Abgabe einer Verpflichtungserklärung",
