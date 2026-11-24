@@ -23,7 +23,7 @@ and why) and `hosts_down` (a host of the source set whose robots.txt could not b
 build refuses to swap). `fetcher_options` are Fetcher's own (a test injects a client and a clock)."""
 
 import dataclasses
-from collections.abc import Iterator, Mapping
+from collections.abc import Collection, Iterator, Mapping
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -62,6 +62,7 @@ EXCLUDED_ON_PURPOSE = (
     "host never fetched",
     "not an http url",
     "redirected out of scope",
+    "excluded",
 )
 MANIFEST_KEYS = (  # the fields of Metadata that `derived` gives
     "regulation",
@@ -202,7 +203,8 @@ class TudaWeb:
         kept = {c.url for c in selection.kept}
         items: list[PageItem | PdfItem] = [self._page_item(d) for d in crawl.docs if d.url in kept]
         merged = self._union_scopes({url: p for url, p in crawl.pdfs.items() if url in kept})
-        synced = self._sync(ctx, [self._pdf_entry(p) for p in merged.values()], crawl.pdfs)
+        dropped = {s["url"] for s in crawl.skipped if s["reason"] == "excluded"}
+        synced = self._sync(ctx, [self._pdf_entry(p) for p in merged.values()], crawl.pdfs, dropped)
         pdf_dir = ctx.paths["pdf_dir"]
         not_indexed = [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed]
         excluded = {url for url, _ in selection.not_indexed} | set(selection.copies)
@@ -292,7 +294,12 @@ class TudaWeb:
             for link in page.pdfs:
                 owner = hosts.get(urlsplit(link.url).hostname or "")
                 if owner is None or not in_scope(owner.source, link.url):
-                    continue  # not the listing host's: a bundle of acts, say
+                    # not the listing host's: a bundle of acts, say. A link only an `exclude` entry puts out is named, so the
+                    # sync drops the PDF it registered
+                    if owner and in_scope(dataclasses.replace(owner.source, exclude=()), link.url):
+                        if not any(s["url"] == link.url for s in crawl.skipped):
+                            crawl.skipped.append({"url": link.url, "reason": "excluded"})
+                    continue
                 known = crawl.pdfs.get(link.url)
                 if (
                     known and known.link.aside and not link.aside
@@ -374,12 +381,14 @@ class TudaWeb:
         return PdfEntry(link.url, title, pdf.reply.content_hash, meta)
 
     @staticmethod
-    def _sync(ctx: SourceContext, entries: list[PdfEntry], pdfs: Mapping[str, Pdf]) -> SyncResult:
+    def _sync(
+        ctx: SourceContext, entries: list[PdfEntry], pdfs: Mapping[str, Pdf], dropped: Collection[str]
+    ) -> SyncResult:
         """The kept PDFs through the PDF sync, which copies the complete files the fetcher holds into the PDF folder, registers
-        them by hash and keeps a PDF that this crawl missed for a few builds."""
+        them by hash and keeps a PDF that this crawl missed for a few builds (not one in `dropped`, which it removes)."""
         files = {url: pdf.reply.path for url, pdf in pdfs.items() if pdf.reply.path}
         with_files = dataclasses.replace(ctx, fetch=PdfFiles(files))  # pyright: ignore[reportArgumentType]
-        result = sync_pdfs(entries, with_files, pdf_dir=ctx.paths["pdf_dir"], allow_empty=True)
+        result = sync_pdfs(entries, with_files, pdf_dir=ctx.paths["pdf_dir"], allow_empty=True, dropped=dropped)
         if result.check.get("corrupt"):
             raise CorruptStateError(f"the PDF list state cannot be used: {result.check['error']}")
         return result

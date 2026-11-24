@@ -400,6 +400,59 @@ def test_a_pdf_this_crawl_excluded_on_purpose_is_not_kept_while_a_vanished_one_i
     assert sorted(gone.report["pdf_sync"]["retained"]) == sorted([PO_PDF, APB_ORIGINAL])
 
 
+def exclude_in_profile(profile_dir: Path, *prefixes: str) -> None:
+    sources = yaml.safe_load((profile_dir / "sources.yaml").read_text(encoding="utf-8"))
+    sources["hosts"][FB20]["exclude"] = list(prefixes)
+    (profile_dir / "sources.yaml").write_text(yaml.safe_dump(sources), encoding="utf-8")
+
+
+def test_a_pdf_a_new_exclude_entry_removes_is_gone_from_the_index_and_the_registry_at_once(tu, make_context, served):
+    ctx = make_context()
+    connector(site(served)).collect(ctx)
+    kept = local_path(PO_PDF, ctx.paths["pdf_dir"])
+    assert PO_PDF in registry(ctx) and kept.is_file()
+    exclude_in_profile(tu, urlsplit(PO_PDF).path)
+    later = connector(site(served), TODAY + timedelta(days=1)).collect(ctx)
+    assert PO_PDF not in pdfs(later) and APB_ORIGINAL in pdfs(later)
+    assert PO_PDF not in registry(ctx) and not kept.exists() and APB_ORIGINAL in registry(ctx)
+    sync = later.report["pdf_sync"]
+    assert PO_PDF not in sync["retained"] and sync["list_check"]["shrunk"] is False
+    assert not [m for m in later.report["manifest"] if m["url"] == PO_PDF]
+    assert later.report["skipped"].count({"url": PO_PDF, "reason": "excluded"}) == 1
+    assert f"note: tu_web: not fetched (excluded): {PO_PDF}" in cli.summary_lines("tu_web", later.report)
+
+
+def test_a_pdf_out_of_scope_for_another_reason_is_not_named(tu, make_context, served):
+    index = (
+        '<html><body><div class="main-column"><section class="content-section" id="apb"><h3>APB</h3>'
+        f'<a href="{pages.APB_ORIGINAL_PDF}">APB</a> <a href="{BUNDLE}">Satzungsbeilage 2023 II</a>'
+        "</section></div></body></html>"
+    )
+    result = collect(site(served, {INTERN_INDEX: ("text/html", index)}), make_context)
+    assert BUNDLE not in {s["url"] for s in result.report["skipped"]}
+
+
+def test_a_pdf_comes_back_when_its_exclude_entry_is_deleted(tu, make_context, served):
+    ctx = make_context()
+    connector(site(served)).collect(ctx)
+    exclude_in_profile(tu, urlsplit(PO_PDF).path)
+    connector(site(served), TODAY + timedelta(days=1)).collect(ctx)
+    exclude_in_profile(tu)
+    back = connector(site(served), TODAY + timedelta(days=2)).collect(ctx)
+    assert PO_PDF in pdfs(back) and PO_PDF in registry(ctx) and local_path(PO_PDF, ctx.paths["pdf_dir"]).is_file()
+    assert PO_PDF not in {s["url"] for s in back.report["skipped"]}
+
+
+def test_an_excluded_pdf_in_a_first_build_is_named_and_never_fetched(tu, make_context, served):
+    exclude_in_profile(tu, urlsplit(PO_PDF).path)
+    net = site(served)
+    ctx = make_context()
+    result = connector(net).collect(ctx)
+    assert PO_PDF not in pdfs(result) and PO_PDF not in registry(ctx) and PO_PDF not in net.urls()
+    assert {"url": PO_PDF, "reason": "excluded"} in result.report["skipped"]
+    assert result.report["pdf_sync"]["list_check"].get("error") is None
+
+
 MSC_HUB = f"https://{FB20}{pages.ORDNUNGEN}/ordnungen_msc_informatik.de.jsp"
 MSC_PDF = (
     f"https://{FB20}/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/"

@@ -25,6 +25,8 @@ never fetched.
 - Discovery: XML sitemaps filtered by the configured prefixes, plus link-following inside the allowed prefixes to a configured
   depth (0 for hosts with listed seeds only). A `.de.jsp` page gets its `.en.jsp` twin; a twin that is really German is dropped.
 - PDFs: links ending in `.pdf` on allowed hosts are downloaded, hashed with SHA-256 and registered.
+  A PDF that vanishes from the crawl's list is kept for a few builds; one that a profile `exclude` entry now puts out of scope
+  is removed with the next build, named in the summary as `not fetched (excluded)`, and returns when the entry is deleted.
 - Page text keeps its headings; page chrome is dropped by selector, and text hidden in the markup (`hidden`, `aria-hidden="true"`, inline `display:none` or `visibility:hidden`) is dropped; text hidden by a CSS class and PDF text are not covered. A page whose content selector
   finds nothing is reported in the build summary, so a site change shows up.
 - One document per page section that carries its own PO version, one document per PDF.
