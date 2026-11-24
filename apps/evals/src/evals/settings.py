@@ -1,10 +1,10 @@
 """Settings of the evals job: one technical section, evals, read by rag_core.settings.load.
 
-In the container the token is the compose secret backend_token (/run/secrets/backend_token, or in RAG_SECRETS_DIR); finished runs are read from
-runs_dir (data/eval_runs, mounted read-only) and every command writes into out_dir, the container's own folder (the job's
-non-root user may not be able to write the bind mount; rag eval mounts a host folder over out_dir to keep the results). On a development machine
-the environment sets what differs, e.g. RAG__EVALS__PROFILE_DIR=profiles/example and RAG__EVALS__RUNS_DIR and
-RAG__EVALS__OUT_DIR both =data/eval_runs."""
+In the container the token is the compose secret backend_token (/run/secrets/backend_token, or in RAG_SECRETS_DIR); finished
+runs are read from runs_dir (data/eval_runs, mounted read-only) and every command writes into out_dir, the container's own
+folder (the job's non-root user may not be able to write the bind mount; rag eval mounts a host folder over out_dir to keep
+the results). On a development machine the environment sets what differs, e.g.
+RAG__EVALS__PROFILE_DIR=profiles/example and RAG__EVALS__RUNS_DIR and RAG__EVALS__OUT_DIR both =data/eval_runs."""
 
 import os
 from collections.abc import Mapping
