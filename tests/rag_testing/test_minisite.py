@@ -19,7 +19,7 @@ FB20_PAGES = [
     (pages.BSC_HUB + ".de.jsp", 'id="allg_pruefungsbest___dateiliste"', 'class="serif-h3"'),
     (pages.BSC_HUB + ".de.jsp", 'name="generator" content="FirstSpirit', "(PDF-Datei,"),
     (pages.BSC_HUB + ".en.jsp", "The content of this page is only available in German", "Prüfungsordnung 2023"),
-    (pages.ORDNUNGEN + "/index.de.jsp", "ordnungen_msc_visual_computing.de.jsp", "ordnungen_bsc_informatik.de.jsp"),
+    (pages.ORDNUNGEN + "/index.de.jsp", "ordnungen_visual_computing.de.jsp", "ordnungen_bsc_informatik.de.jsp"),
     (pages.EXCLUDED_HUB + ".de.jsp", "Visual Computing", "nicht indexiert"),
     (pages.STUDIENBUERO + "/index.de.jsp", "Sprechstunde", "pruefungen/index.de.jsp?view=print"),
     (pages.STUDIENBUERO + "/index.en.jsp", "Office hours", 'lang="en"'),

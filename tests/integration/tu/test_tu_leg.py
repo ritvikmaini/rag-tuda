@@ -73,6 +73,7 @@ def test_the_index_holds_the_in_scope_pages_and_pdfs_of_the_two_hosts_only(
         f"{HUB}#pruefungsordnung_2023",
         f"{HUB}#pruefungsordnung_2015",
         f"{HUB}#allg_pruefungsbest___dateiliste",
+        f"{FACULTY}{pages.ORDNUNGEN}/index.de.jsp#ordnungen_liste",
         PO_PDF,
         APB_ORIGINAL,
         OFFICE,

@@ -8,8 +8,8 @@
 hosts:
   www.informatik.tu-darmstadt.de:
     set: core
-    # the Ordnungen hubs of the three programmes, the Studienbüro pages and the promotion page; the other programmes'
-    # hubs stay out by the prefixes below. The programme, FAQ and knowledge-base pages are not listed (paths unverified).
+    # the Ordnungen hubs of the three programmes, the Studienbüro pages and the promotion page; discovery then takes the
+    # whole study area (programme pages, FAQ, knowledge base) from the sitemap, less the other programmes' hubs and pages
     seeds:
       - https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik.de.jsp
       - https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik.de.jsp
@@ -18,17 +18,32 @@ hosts:
       - https://www.informatik.tu-darmstadt.de/forschung_fb20/wissenschaftliche_karriere/promotion/index.de.jsp
     sitemap: [https://www.informatik.tu-darmstadt.de/sitemap.de.xml]
     prefixes:
-      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc_informatik
-      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_msc_informatik
-      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_cs
-      - /studium_fb20/im_studium/studienbuero/
+      - /studium_fb20/
       - /forschung_fb20/wissenschaftliche_karriere/promotion/
       # the PDFs of those pages: one media folder per programme, and the promotion documents
       - /media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/
       - /media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_msc/
       - /media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_cs/
       - /media/informatik/fb20_dekanat/dokumente_promotion/
-    exclude: []
+    # the other programmes: their Ordnungen hubs and their programme pages
+    exclude:
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/informatik_lehramt_an_gymnasien
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/itsecurity_msc
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_aim
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_asur
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_autonome_systeme
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_internet_und_webbasierte
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_it_sicherheit
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_mdss
+      - /studium_fb20/im_studium/formulare_und_dokumente/ordnungen/ordnungen_visual_computing
+      - /studium_fb20/im_studium/studiengaenge_liste/aim_msc
+      - /studium_fb20/im_studium/studiengaenge_liste/asur_msc
+      - /studium_fb20/im_studium/studiengaenge_liste/autonome_systeme_msc
+      - /studium_fb20/im_studium/studiengaenge_liste/entrace_examination_mdss
+      - /studium_fb20/im_studium/studiengaenge_liste/informatik_lehramt_an_gymnasien
+      - /studium_fb20/im_studium/studiengaenge_liste/internet__und_web_basierte_systeme
+      - /studium_fb20/im_studium/studiengaenge_liste/itsecurity_msc
+      - /studium_fb20/im_studium/studiengaenge_liste/visual_computing_fb20
     depth: 1
     twins: true
     # .main-column holds the content of the hub and article pages; the programme pages have no such element, so their

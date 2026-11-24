@@ -13,7 +13,7 @@ from rag_testing.minisite.pdf import make_pdf
 
 ORDNUNGEN = "/studium_fb20/im_studium/formulare_und_dokumente/ordnungen"
 BSC_HUB = f"{ORDNUNGEN}/ordnungen_bsc_informatik"
-EXCLUDED_HUB = f"{ORDNUNGEN}/ordnungen_msc_visual_computing"
+EXCLUDED_HUB = f"{ORDNUNGEN}/ordnungen_visual_computing"
 STUDIENBUERO = "/studium_fb20/im_studium/studienbuero"
 NOAI_PAGE = f"{STUDIENBUERO}/wissenssammlung_studium_beispiel.de.jsp"
 LOGIN_PAGE = f"{STUDIENBUERO}/index.login"

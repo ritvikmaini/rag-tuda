@@ -200,7 +200,7 @@ def test_dot_segments_cannot_lead_out_of_a_prefix():
         f"{base}/studium_fb20/%2e%2e/intern/b.de.jsp",
         f"{base}/studium_fb20/x/..//../intern/c.de.jsp",
         f"{base}/studium_fb20/{pages.EXCLUDED_HUB.rsplit('/', 1)[1]}/../../x.de.jsp",
-        f"{base}{pages.EXCLUDED_HUB.replace('/ordnungen_msc', '//./ordnungen_msc')}.de.jsp",
+        f"{base}{pages.EXCLUDED_HUB.replace('/ordnungen_visual', '//./ordnungen_visual')}.de.jsp",
         f"{base}/studium_fb20/in/../ok.de.jsp",
     )
     listing = "".join(f"<url><loc>{u}</loc></url>" for u in entries)
