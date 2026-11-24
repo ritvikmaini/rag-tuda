@@ -210,3 +210,20 @@ def test_text_is_decoded_in_the_declared_charset(head, encoded, content_type):
     text = page.replace("€", "") if encoded == "latin-1" else page
     result = extract(text.encode(encoded), HUB_URL, content_type=content_type)
     assert result.documents[0].markdown == "# Prüfungsordnung für Übungen" + ("" if encoded == "latin-1" else " €")
+
+
+def test_alternatives_of_the_main_selector_are_tried_in_the_order_written():
+    page = (
+        b"<html><body><main><p>Rahmen</p><div class='main-column'><p>Inhalt</p></div></main></body></html>",
+        b"<html><body><main><p>Nur Rahmen</p></main></body></html>",
+    )
+    url = f"{FACULTY}/a/page.de.jsp"
+    texts = [
+        extract(body, url, Selectors(main=main)).documents[0].markdown
+        for body, main in (
+            (page[0], ".main-column, main"),
+            (page[0], "main, .main-column"),
+            (page[1], ".main-column, main"),
+        )
+    ]
+    assert texts == ["Inhalt", "Rahmen\n\nInhalt", "Nur Rahmen"]

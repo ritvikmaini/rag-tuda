@@ -12,6 +12,7 @@ from indexer.crawl.extract import extract
 
 TU = Path(__file__).resolve().parents[3] / "profiles" / "tu-informatik"
 RATHAUS = "digitales-rathaus.darmstadt.de"
+FACULTY = "www.informatik.tu-darmstadt.de"
 
 
 def selectors(host: str):
@@ -36,3 +37,38 @@ def test_rathaus_content_is_read_from_the_page_container(frame_id):
     text = "\n".join(d.markdown for d in page.documents)
     assert "Melden Sie Ihren Wohnsitz" in text and "# Anmeldung des Wohnsitzes" in text
     assert "Startseite" not in text and "Impressum" not in text
+
+
+def faculty_page(content: str) -> bytes:
+    return f"""<!DOCTYPE html><html lang="de"><head><title>Seite</title></head><body><div id="app"><div id="site">
+    <header id="site-header"><nav id="breadcrumb-navigation">Startseite</nav></header>
+    {content}
+    <footer id="site-footer">Datenschutz</footer></div></div></body></html>""".encode()
+
+
+def test_faculty_hub_page_is_read_from_its_main_column():
+    page = faculty_page(
+        '<main id="site-main"><div class="cell-md-9"><section id="page-lead"><p>Einleitung</p></section>'
+        '<div class="main-column"><section class="content-section" id="po_2023"><h3>Prüfungsordnung 2023</h3>'
+        "<p>Text</p></section></div></div><div class='cell-md-3'><button>Kontakt</button></div></main>"
+    )
+    result = extract(page, f"https://{FACULTY}/studium_fb20/hub.de.jsp", selectors(FACULTY))
+    assert [d.section_id for d in result.documents] == ["po_2023"]
+    assert "Einleitung" not in result.documents[0].markdown
+
+
+@pytest.mark.parametrize("wrapper", ['<div id="toc_content">{}</div>', "{}"])
+def test_faculty_programme_page_without_a_main_column_is_read_from_main(wrapper):
+    sections = '<section id="page-lead"><p>Einleitung</p></section>' + wrapper.format(
+        '<section class="content-section" id="infobox"><h3>Auf einen Blick</h3><p>Regelstudienzeit</p></section>'
+        '<section id="neuerungen"><p>Neuerungen</p></section>'
+    )
+    result = extract(
+        faculty_page(f'<main id="site-main">{sections}</main>'),
+        f"https://{FACULTY}/studium_fb20/p.de.jsp",
+        selectors(FACULTY),
+    )
+    assert result.problem is None
+    text = "\n".join(d.markdown for d in result.documents)
+    assert all(word in text for word in ("Einleitung", "Regelstudienzeit", "Neuerungen"))
+    assert "Startseite" not in text and "Datenschutz" not in text

@@ -1,9 +1,10 @@
 # The crawl's host allow-list; every other host is refused. A core host is built by every build, a full host only by a
 # full build; a core host with a `full` block lists more pages in a full build. Prefixes are URL paths.
 # www.darmstadt.de (Darmstadt's main site) and h-da.de are never listed.
-# Selectors: only the FB20 host's section selector is read from a page's markup; every other selector is unverified. The
-# statutes of gesetze-im-internet.de are not crawled as pages; they come from the official XML (`laws`, read by the law
-# connector through the same fetcher, so the host is on the allow-list and robots.txt applies).
+# Selectors: `main` is the element a host's pages keep their content in (alternatives are tried in the order written),
+# `section` the element a page splits into documents at. The statutes of gesetze-im-internet.de are not crawled as pages;
+# they come from the official XML (`laws`, read by the law connector through the same fetcher, so the host is on the
+# allow-list and robots.txt applies).
 hosts:
   www.informatik.tu-darmstadt.de:
     set: core
@@ -30,8 +31,9 @@ hosts:
     exclude: []
     depth: 1
     twins: true
-    # .main-column is unverified
-    selectors: {main: .main-column, section: "section.content-section", drop: null}
+    # .main-column holds the content of the hub and article pages; the programme pages have no such element, so their
+    # <main> is taken
+    selectors: {main: ".main-column, main", section: "section.content-section", drop: null}
   www.intern.tu-darmstadt.de:
     set: core
     # the APB, the Einschreibeordnung and the Promotionsordnung with their English information versions: the sitemap lists
@@ -43,7 +45,6 @@ hosts:
     exclude: []
     depth: 1
     twins: false
-    # unverified
     selectors: {main: "main, .main-column, #content", section: "section.content-section", drop: null}
   www.tu-darmstadt.de:
     set: core
@@ -58,7 +59,6 @@ hosts:
     exclude: []
     depth: 0
     twins: true
-    # unverified
     selectors: {main: "main, .main-column, #content", section: "section.content-section", drop: null}
     # full: the TU-wide study rules, found through the sitemap
     full:
@@ -90,7 +90,6 @@ hosts:
     exclude: []
     depth: 0
     twins: false
-    # unverified
     selectors: {main: "main, #content, .main-column", section: "section.content-section", drop: null}
   www.gesetze-im-internet.de:
     set: core

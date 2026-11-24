@@ -1,8 +1,10 @@
 """Extraction of a fetched HTML page: Markdown documents (one per section of the page) and the PDFs it links to.
 
-The main content is the first element matching `Selectors.main`; elements matching `Selectors.drop` (navigation, header,
-footer, scripts, ...) are removed from it before anything is read, as are elements hidden from readers (`hidden`,
-`aria-hidden="true"`, an inline style with `display:none` or `visibility:hidden`), so that invisible text is never indexed. Each outermost element matching `Selectors.section`
+The main content is the first visible element of the first alternative of `Selectors.main` that matches one (alternatives are
+tried in the order written, so `.main-column, main` takes `main` only on a page without `.main-column`); elements matching
+`Selectors.drop` (navigation, header, footer, scripts, ...) are removed from it before anything is read, as are elements hidden
+from readers (`hidden`, `aria-hidden="true"`, an inline style with `display:none` or `visibility:hidden`), so that invisible
+text is never indexed. Each outermost element matching `Selectors.section`
 becomes one `PageDocument` with the section's id and heading, so a hub page with several regulation sections gives one
 document per section; text outside any section is a document of its own (first), unless it is only headings. Without
 sections the whole main content is one document. The Markdown keeps headings (`h1`-`h6` as `#`..`######`), paragraphs,
@@ -267,10 +269,17 @@ def extract(body: bytes, url: str, selectors: Selectors = Selectors(), content_t
     except (ValueError, etree.ParserError):
         return Extraction(url, "", (), (), "page is not parseable HTML")
     title = " ".join((tree.findtext(".//title") or "").split())
-    found = [m for m in tree.xpath(_xpath(selectors.main)) if not m.xpath(f"ancestor-or-self::*{HIDDEN}")]
-    if not found:
+    main = next(
+        (
+            m
+            for alternative in selectors.main.split(",")
+            for m in tree.xpath(_xpath(alternative))
+            if not m.xpath(f"ancestor-or-self::*{HIDDEN}")
+        ),
+        None,
+    )
+    if main is None:
         return Extraction(url, title, (), (), f"main content selector {selectors.main!r} matched nothing")
-    main: html.HtmlElement = found[0]
     for element in main.xpath(f"{_xpath(selectors.drop)} | .//*{HIDDEN}"):  # a union lists each element once
         element.drop_tree()
     matched = main.xpath(_xpath(selectors.section))
