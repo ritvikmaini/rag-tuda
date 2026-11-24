@@ -63,7 +63,7 @@ EXCLUDED_ON_PURPOSE = (
     "not an http url",
     "redirected out of scope",
 )
-MANIFEST_KEYS = (  # the keys of `derived`
+MANIFEST_KEYS = (  # the fields of Metadata that `derived` gives
     "regulation",
     "degree",
     "programme",
@@ -89,19 +89,17 @@ DOC_TYPES = {
 
 def derived(metadata: Metadata) -> dict[str, Any]:
     """The document metadata in JSON form (lists, ISO text) without its empty values: NULL is an absent key, never an empty
-    list."""
-    values = {
-        "regulation": metadata.regulation,
-        "degree": list(metadata.degree) if metadata.degree else None,
-        "programme": list(metadata.programme) if metadata.programme else None,
-        "po_version": list(metadata.po_version) if metadata.po_version else None,
-        "archived": metadata.archived,
-        "valid_from": metadata.valid_from.isoformat() if metadata.valid_from else None,
-        "lang": metadata.lang,
-        "twin_key": metadata.twin_key,
-        "official_url": metadata.official_url,
-    }
-    return {k: v for k, v in values.items() if v is not None}
+    list. Its keys are MANIFEST_KEYS."""
+    values: dict[str, Any] = {}
+    for key in MANIFEST_KEYS:
+        value = getattr(metadata, key)
+        if isinstance(value, tuple):
+            value = list(value) or None
+        elif isinstance(value, date):
+            value = value.isoformat()
+        if value is not None:
+            values[key] = value
+    return values
 
 
 def manifest_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
@@ -211,13 +209,15 @@ class TudaWeb:
         excluded |= {s["url"] for s in crawl.skipped if s["reason"] in EXCLUDED_ON_PURPOSE}
         retained = [e for e in synced.retained if e.url not in excluded]  # absence keeps its grace, exclusion does not
         pdf_docs: list[ManifestDoc] = []
+        # a retained file after a failed download is older than this crawl, so it has no fetch date of the crawl's
+        fresh = {r["url"] for r in synced.results if r["status"] in ("downloaded", "cached") and r["url"] in crawl.pdfs}
         for e in [e for e in synced.entries if e not in synced.retained] + retained:
             if missing := lacks(e.meta):
                 not_indexed.append({"url": e.url, "missing": list(missing)})
             elif (path := local_path(e.url, pdf_dir)).is_file():
                 digest = file_hash(path)
                 items.append(PdfItem(str(path), e.url, digest, e.meta))
-                fetched = crawl.pdfs[e.url].reply.fetched if e.url in crawl.pdfs else _file_day(path)
+                fetched = crawl.pdfs[e.url].reply.fetched if e.url in fresh else _file_day(path)
                 pdf_docs.append(ManifestDoc(e.url, digest, fetched, manifest_metadata(e.meta)))
         if not ctx.reuse:
             ctx.state.save(

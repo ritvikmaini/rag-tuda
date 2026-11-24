@@ -34,8 +34,8 @@ also downloads docling's layout and table models and the EasyOCR weights at the 
 
 The indexer writes a new **generation** of the index (tables plus the metadata of each document) and repoints the views
 `rag_chunks` and `rag_sections` to it in one swap. The backend reloads the new generation on its next start, which
-`rag reindex` triggers. `rag rollback` repoints the views to the previous generation. Every build, a staged one too, also writes a snapshot
-manifest in `.rag/snapshots/`: per document the URL, content hash, fetch date and metadata.
+`rag reindex` triggers. `rag rollback` repoints the views to the previous generation. Every build, a staged one too, also writes a
+snapshot manifest in `.rag/snapshots/`: per document the URL, content hash, fetch date and metadata.
 
 Each document and its sections carry typed columns: `regulation` (`po`, `mhb`, `spp`, `apb`, `eso`, `promotion`, `residence`,
 `info`, `form`), `degree`, `programme`, `po_version`, `archived`, `valid_from`, `lang` and `twin_key`. The crawler fills them

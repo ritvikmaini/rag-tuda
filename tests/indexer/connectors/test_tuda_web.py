@@ -3,10 +3,11 @@ of the source set, the documents and PDFs with their metadata, the fail-closed s
 complete files, the crawl cache and resume, and the contact in the user agent. No request leaves the process."""
 
 import json
+import os
 import re
 import shutil
 from collections import Counter
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from importlib.metadata import entry_points
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -301,6 +302,20 @@ def test_an_interrupted_download_keeps_the_pdf_the_registry_already_holds(tu, ma
     assert PO_PDF in pdfs(later) and later.report["pdf_sync"]["retained"] == [
         PO_PDF
     ]  # kept for a few builds, not dropped
+
+
+def test_a_pdf_kept_after_a_failed_download_is_dated_by_its_file_not_by_the_crawl(tu, make_context, served):
+    ctx = make_context()
+    first = connector(site(served)).collect(ctx)
+    day = date(2026, 1, 5)
+    os.utime(pdfs(first)[PO_PDF].path, (t := datetime(day.year, day.month, day.day, 12).timestamp(), t))
+    later = connector(site(served, {PO_PDF: truncated(pages.PO_2023)}), TODAY + timedelta(days=1)).collect(ctx)
+    listed = {m["url"]: m for m in later.report["manifest"]}
+    assert PO_PDF in later.report["pdf_sync"]["retained"]
+    assert (
+        listed[PO_PDF]["fetched"] == day.isoformat()
+        and listed[APB_ORIGINAL]["fetched"] == (TODAY + timedelta(days=1)).isoformat()
+    )
 
 
 def without_pdf_links(page: str) -> str:
