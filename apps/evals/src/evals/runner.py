@@ -422,8 +422,8 @@ def play(
     client_factory=httpx.Client,
 ):
     """Play one probe file; returns its run folder <out_dir>/<folder_label>_<stamp>. replay: conversation id -> the replay
-    dict of run_conversation. volatile: ids (fees, dates) whose failed answer is printed `stale`, not `FAIL`: the page may have
-    changed; the row itself keeps its checks."""
+    dict of run_conversation. volatile: ids (fees, dates) whose failed answer is printed `stale`, not `FAIL`, when only content checks failed: the page may
+    have changed; the row itself keeps its checks."""
     with open(probes_path, encoding="utf-8") as fh:
         spec = json.load(fh)
     convs = [c for c in spec["conversations"] if (not groups or c.get("set") in groups) and (not ids or c["id"] in ids)]

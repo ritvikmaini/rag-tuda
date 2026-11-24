@@ -13,7 +13,7 @@ whitespace-normalised, copied from the extracted text for a PDF; a gold of sever
 shape) and `rule`, `any` (twins of one page) or `all` (several documents). `chips` are the page's `degree`, `programme` and `po`,
 sent with the question. A question with no answer in the corpus has no gold. The fees and dates are listed as `retrieval.volatile` in
 `gate.yaml`. A gold whose quote is no longer found in any section of its url is reported **stale**, not failed, by
-`rag eval --retrieval-only` (and a failed volatile answer is `stale` in `rag eval --smoke`). The test `test_gold_present_in_latest_snapshot`
+`rag eval --retrieval-only` (and a failed volatile answer is `stale` in `rag eval --smoke` when only content checks failed). The test `test_gold_present_in_latest_snapshot`
 (marker `local_crawl`) checks the quotes against a local crawl. The questions on the full source set (TU-wide study pages, the
 Landkreis pages) are added after the full build. The example profile has its own probes in `profiles/example/probes/`.
 
