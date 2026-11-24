@@ -9,19 +9,28 @@ pinned by revision in the profile, docling's models follow the version of doclin
   docling-project/docling-layout-heron       PDF layout (docling)  licence stated on its model card: apache-2.0
   docling-project/docling-models             PDF tables (docling)  licence stated on its model card: cdla-permissive-2.0
 
+Embedder and reranker candidates (downloaded from Hugging Face; the licence is the `license:` field of the README.md
+(README.MD for arctic-embed-l-v2.0) in the local snapshot under ~/.cache/huggingface/hub/)
+  Snowflake/snowflake-arctic-embed-l-v2.0    embedder candidate    apache-2.0 (snapshot ac6544c)
+  Qwen/Qwen3-Embedding-4B                    embedder candidate    apache-2.0 (snapshot 5cf2132)
+  Qwen/Qwen3-Reranker-0.6B                   reranker candidate    apache-2.0 (snapshot e61197e)
+  Qwen/Qwen3-Reranker-4B                     reranker candidate    apache-2.0 (snapshot 22e6836)
+
 Answer models named by the model cards in models/cards/ (pulled by Ollama or served by Groq or vLLM; none is shipped here)
   Qwen3 4B Instruct 2507 (s-qwen3-4b-instruct-2507, the default card)
                                              Apache License 2.0 (as printed by `ollama show --license`)
   gpt-oss 20B (l-groq-gpt-oss-20b)           Apache License 2.0 (as printed by `ollama show --license`)
-  Qwen3.5 4B (s-qwen3.5-4b)                  Apache License 2.0 (read from the LICENSE of the local Hugging Face snapshot 851bf6e)
-  Qwen3.6 35B-A3B, Qwen3.8 27B, Gemma 4 E4B and 31B, gpt-oss 120B, and the vLLM example's Qwen3-235B-A22B
+  Qwen3.5 4B (s-qwen3.5-4b)                  Apache License 2.0 (as printed by `ollama show --license qwen3.5:4b`)
+  Gemma 4 E4B (s-gemma4-e4b)                 Apache License 2.0 (as printed by `ollama show --license gemma4:e4b`)
+  Qwen3.6 35B-A3B, Qwen3.8 27B, Gemma 4 31B, gpt-oss 120B, and the vLLM example's Qwen3-235B-A22B
   Instruct 2507 FP8
-                                             licence not read here (its page could not be reached from this machine);
+                                             licence not read here (not downloaded on this machine);
                                              check before publishing
   Models reached through Groq are also bound by Groq's terms for its hosted service.
 
 OCR weights fetched by docling[easyocr] at first use (not shipped here)
-  EasyOCR detection and recognition models   licence not read here; check before publishing
+  EasyOCR detection and recognition models   licence not read here (the downloaded weights in ~/.EasyOCR/model/ come
+                                             without a licence file); check before publishing
 
 Libraries vendored in web/page/vendor/ (versions, sources and integrity hashes in web/page/vendor.json)
   showdown 2.1.0         MIT
