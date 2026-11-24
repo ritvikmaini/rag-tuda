@@ -255,6 +255,24 @@ def test_a_gold_with_several_sources_ranks_by_its_rule() -> None:
     assert not ev.valid_gold({**GOLD, "also": [{"quote": "x"}]}) and not ev.valid_gold({**GOLD, "rule": "some"})
 
 
+def test_the_score_of_a_gold_with_several_sources_follows_its_rule() -> None:
+    other = {"url": "https://example.test/anderes", "quote": "Der Urlaub beträgt"}
+    unscored = {"url": "https://example.test/fehlt"}
+    sections = [
+        Section("s1", "Der Urlaub beträgt 24", {"url": GOLD["url"]}),
+        Section("s2", "Der Urlaub beträgt", {"url": other["url"]}),
+        Section("s3", "Der Urlaub beträgt 30", {"url": GOLD["url"]}),
+        Section("s4", "x", {"url": unscored["url"]}),
+    ]
+    scores = {"s1": 0.2, "s2": 0.9, "s3": 0.6}  # s4 was not scored
+    assert ev.gold_score(GOLD, sections, scores) == 0.6  # one source: the best of its sections
+    assert ev.gold_score({**GOLD, "also": [other]}, sections, scores) == 0.9  # any: the best source
+    assert ev.gold_score({**GOLD, "also": [other], "rule": "all"}, sections, scores) == 0.6  # all: the worst
+    assert ev.gold_score({**GOLD, "also": [unscored]}, sections, scores) == 0.6  # any: the scored one
+    assert ev.gold_score({**GOLD, "also": [unscored], "rule": "all"}, sections, scores) is None  # all: one unscored
+    assert ev.gold_score(unscored, sections, scores) is None
+
+
 def test_a_source_whose_quote_is_in_no_section_of_its_url_is_stale() -> None:
     texts = {
         GOLD["url"]: ["Davor.", "Der\nUrlaub  beträgt 24 Werktage."],
