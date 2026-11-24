@@ -139,9 +139,10 @@ def build_corpus(
             )
             minutes["extract"] += time.monotonic() - t
             hashes = {d["metadata"]["file_hash"] for d in pdf_docs}
-            no_text = [
-                i.url for i in pdfs if i.file_hash in seen_hashes - earlier - hashes
-            ]  # extracted, no usable page
+            waiting = {i.url: extracted.get("ocr_pending", {}).get(Path(i.path).name, 0) for i in pdfs}
+            ocr_pending = [{"url": url, "pages": n} for url, n in waiting.items() if n]
+            # read from the cache, yet no page of text and none waiting for OCR
+            no_text = [i.url for i in pdfs if i.file_hash in seen_hashes - earlier - hashes and not waiting[i.url]]
             count, kind = sum(1 for i in pdfs if i.file_hash in hashes), "pdfs"
             pages += [{**d, "source": connector} for d in pdf_docs]
             report |= {
@@ -149,6 +150,7 @@ def build_corpus(
                 "with_documents": count,
                 "missing_cache": missing,
                 "no_text": no_text,
+                "ocr_pending": ocr_pending,
                 "extract": {k: extracted.get(k) for k in ("processed", "cached", "failed", "skipped_page_limit")},
             }
         docs += pages

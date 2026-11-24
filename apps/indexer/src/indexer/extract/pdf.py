@@ -169,9 +169,12 @@ def _pdf_page_count(pdf_path: str) -> int:
         doc.close()
 
 
-def _assess_cached_entry(cache_path: str, pdf_path: str, filename: str, ocr_budget: int, ocr_for) -> int:
+def _assess_cached_entry(
+    cache_path: str, pdf_path: str, filename: str, ocr_budget: int, ocr_for, pending: dict[str, int]
+) -> int:
     """Quality check of one cached extraction: decode substituted glyph codes, OCR pages without text within the run's page budget,
-    never keep unreadable text. Returns the number of pages sent to OCR."""
+    never keep unreadable text. Returns the number of pages sent to OCR; the pages still waiting for OCR are put into
+    `pending` under the file name."""
     try:
         with open(cache_path, "r", encoding="utf-8") as f:
             entry = json.load(f)
@@ -187,6 +190,8 @@ def _assess_cached_entry(cache_path: str, pdf_path: str, filename: str, ocr_budg
         )
         write_json_atomic(cache_path, new)
         quality = new["quality"]
+        if quality["pending_ocr_pages"]:
+            pending[filename] = len(quality["pending_ocr_pages"])
         if quality["ocr_pages"] or quality["pending_ocr_pages"]:
             logging.info(
                 f"[PdfQuality] {filename}: "
@@ -207,7 +212,7 @@ def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir
     """
     os.makedirs(extracted_dir, exist_ok=True)
 
-    results = {"processed": 0, "cached": 0, "failed": 0, "skipped_page_limit": 0, "files": []}
+    results = {"processed": 0, "cached": 0, "failed": 0, "skipped_page_limit": 0, "files": [], "ocr_pending": {}}
     skipped_page_limit_files = []
     # Quality check of every extraction: at most
     # ocr_pages_per_run pages go to OCR per run, so a run keeps its time window
@@ -221,7 +226,9 @@ def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir
         cache_path = os.path.join(extracted_dir, f"{file_hash}.json")
 
         if os.path.exists(cache_path):
-            ocr_budget -= _assess_cached_entry(cache_path, pdf_path, filename, ocr_budget, ocr_for)
+            ocr_budget -= _assess_cached_entry(
+                cache_path, pdf_path, filename, ocr_budget, ocr_for, results["ocr_pending"]
+            )
             logging.info(f"Cached: {filename} ({file_hash[:12]}...)")
             results["cached"] += 1
             results["files"].append(
@@ -306,7 +313,7 @@ def extract_pdfs(*, inventory: list[dict], extraction: Extraction, extracted_dir
             "text": text,
         }
         write_json_atomic(cache_path, cache_entry)
-        ocr_budget -= _assess_cached_entry(cache_path, pdf_path, filename, ocr_budget, ocr_for)
+        ocr_budget -= _assess_cached_entry(cache_path, pdf_path, filename, ocr_budget, ocr_for, results["ocr_pending"])
 
         logging.info(f"Extracted: {filename} ({len(text)} chars, {method})")
         results["processed"] += 1

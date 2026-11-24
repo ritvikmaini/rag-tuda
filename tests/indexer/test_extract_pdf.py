@@ -90,3 +90,15 @@ def test_a_cached_entry_is_counted_and_not_extracted_again(tmp_path, monkeypatch
     )
     assert (result["cached"], result["processed"]) == (1, 0)
     assert result["files"][0]["status"] == "cached"
+
+
+def test_pages_left_waiting_for_ocr_are_reported_by_file_name(tmp_path, monkeypatch):
+    path = tmp_path / "scan.json"
+    path.write_text(
+        json.dumps({"extraction_method": "pypdfium2", "text": "[Page 1]\nLesbarer Text der ersten Seite hier."}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(pdf, "_pdf_page_count", lambda path: 3)
+    pending: dict[str, int] = {}
+    assert pdf._assess_cached_entry(str(path), "scan.pdf", "scan.pdf", 0, lambda p: None, pending) == 0
+    assert pending == {"scan.pdf": 2}

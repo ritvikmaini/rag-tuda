@@ -122,6 +122,7 @@ def test_the_documents_reach_the_chunker_in_profile_order_then_the_gates(setting
         "with_documents": 1,
         "missing_cache": 1,
         "no_text": [],
+        "ocr_pending": [],
         "extract": EXTRACTED,
     }
     assert result["sources"]["web"] == {"crawl": "kept", "crawl_pages": 2, "documents": 2}
@@ -147,6 +148,30 @@ def test_a_pdf_without_usable_text_is_named_in_the_report_not_counted_as_a_docum
     report = result["sources"]["pdfs"]
     assert report["no_text"] == [PDF.url] and report["with_documents"] == 0
     assert cli.summary_lines("pdfs", report) == [f"warning: pdfs: no usable text, not indexed: {PDF.url}"]
+
+
+def test_a_pdf_with_pages_waiting_for_ocr_is_named_as_waiting_not_as_without_text(settings, fakes, monkeypatch):
+    monkeypatch.setattr(build, "extract_pdfs", lambda **_: {**EXTRACTED, "ocr_pending": {"a.pdf": 3}})
+
+    def pdf_documents(items, seen_hashes, extracted_dir, clean):
+        seen_hashes.add("h1")  # no page of text yet: all wait for OCR
+        return [], 0
+
+    monkeypatch.setattr(build, "pdf_documents", pdf_documents)
+    result = build.build_corpus(settings, three_sources(fakes), limit=5, embedding=fakes.Embedding(None))
+    report = result["sources"]["pdfs"]
+    assert report["no_text"] == [] and report["ocr_pending"] == [{"url": PDF.url, "pages": 3}]
+    [line] = cli.summary_lines("pdfs", report)
+    assert line.startswith("warning: pdfs: 3 pages wait for OCR") and line.endswith(PDF.url)
+    docs = [{"page_content": "PDF", "metadata": {"file_hash": "h1"}}]  # some pages read, the rest waiting
+    monkeypatch.setattr(build, "pdf_documents", lambda items, seen, extracted_dir, clean: (docs, 0))
+    again = build.build_corpus(settings, three_sources(fakes), limit=5, embedding=fakes.Embedding(None))
+    assert again["sources"]["pdfs"]["ocr_pending"] == [{"url": PDF.url, "pages": 3}]
+    many = {"ocr_pending": [{"url": f"u{n}", "pages": 1} for n in range(25)]}
+    assert (
+        len(cli.summary_lines("pdfs", many)) == 21
+        and "5 more PDFs waiting for OCR" in cli.summary_lines("pdfs", many)[-1]
+    )
 
 
 def test_a_limit_build_skips_the_gates(settings, fakes, monkeypatch):
