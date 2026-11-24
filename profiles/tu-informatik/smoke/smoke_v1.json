@@ -42,7 +42,7 @@
        "abschlussarbeiten_fb20"
       ],
       "contains_none": [
-       "Prüfungsordnung 2015 des"
+       "Prüfungsordnung 2015 des B.Sc. Informatik"
       ]
      }
     }
@@ -86,7 +86,7 @@
        "2023_05_11_MHB_MSC_INF.pdf"
       ],
       "contains_none": [
-       "Prüfungsordnung 2015 des"
+       "Prüfungsordnung 2015 des M.Sc. Informatik"
       ]
      }
     }
@@ -123,7 +123,9 @@
       "citations_map_to_sources": true,
       "contains_any": [
        "C1",
-       "UNIcert"
+       "UNIcert",
+       "IELTS",
+       "TOEFL"
       ],
       "source_url_any": [
        "computer_science",
@@ -650,7 +652,8 @@
       "sie_form": true,
       "citations_map_to_sources": true,
       "contains_any": [
-       "nicht mehr"
+       "nicht mehr",
+       "nicht möglich"
       ],
       "polarity": "no",
       "po_line_present": true,
@@ -687,7 +690,7 @@
        "MHB_BSC_MSC_Informatik.pdf"
       ],
       "contains_none": [
-       "Prüfungsordnung 2023 des"
+       "Prüfungsordnung 2023 des B.Sc. Informatik"
       ],
       "po_line_present": true
      },
@@ -713,6 +716,7 @@
       "contains_any": [
        "nichts Passendes",
        "keine passenden",
+       "keine Informationen",
        "keine Information",
        "keine Angabe",
        "nicht gefunden",
@@ -721,7 +725,12 @@
        "keine Quelle",
        "nicht enthalten",
        "nicht genannt",
-       "nicht aufgeführt"
+       "nicht aufgeführt",
+       "enthalten keine",
+       "keine Preise",
+       "nicht hervor",
+       "gehört zu",
+       "steht in den Quellen nichts"
       ]
      }
     }
@@ -741,6 +750,7 @@
       "contains_any": [
        "nichts Passendes",
        "keine passenden",
+       "keine Informationen",
        "keine Information",
        "keine Angabe",
        "nicht gefunden",
@@ -749,7 +759,12 @@
        "keine Quelle",
        "nicht enthalten",
        "nicht genannt",
-       "nicht aufgeführt"
+       "nicht aufgeführt",
+       "enthalten keine",
+       "keine Preise",
+       "nicht hervor",
+       "gehört zu",
+       "steht in den Quellen nichts"
       ]
      }
     }
@@ -769,6 +784,7 @@
       "contains_any": [
        "nichts Passendes",
        "keine passenden",
+       "keine Informationen",
        "keine Information",
        "keine Angabe",
        "nicht gefunden",
@@ -777,7 +793,12 @@
        "keine Quelle",
        "nicht enthalten",
        "nicht genannt",
-       "nicht aufgeführt"
+       "nicht aufgeführt",
+       "enthalten keine",
+       "keine Preise",
+       "nicht hervor",
+       "gehört zu",
+       "steht in den Quellen nichts"
       ]
      }
     }
@@ -848,16 +869,31 @@
       "sie_form": true,
       "citations_map_to_sources": true,
       "contains_any": [
-       "12 CP",
-       "12 Leistungspunkte"
+       "13 Wochen",
+       "dreizehn Wochen"
       ],
       "source_url_any": [
        "dezernat_ii/ordnungen/apb.pdf"
       ],
-      "digits_any": [
-       "13"
-      ],
-      "po_line_present": true
+      "po_line_present": true,
+      "group_values": {
+       "scopes": {
+        "cp": [
+         "12",
+         "zwölf"
+        ]
+       },
+       "cp": {
+        "any": [
+         "12 cp",
+         "12 leistungspunkt",
+         "12 kreditpunkt",
+         "12 lp",
+         "12 ects",
+         "zwölf"
+        ]
+       }
+      }
      },
      "chips": {
       "degree": "bachelor",
@@ -928,7 +964,7 @@
        "2022_09_30_MHB_BSC_INF.pdf"
       ],
       "contains_none": [
-       "Prüfungsordnung 2015 des"
+       "Prüfungsordnung 2015 des B.Sc. Informatik"
       ]
      }
     }
@@ -1056,7 +1092,7 @@
        "4 Kreditpunkte"
       ],
       "contains_none": [
-       "Prüfungsordnung 2015 des"
+       "Prüfungsordnung 2015 des B.Sc. Informatik"
       ],
       "po_line_present": true,
       "source_url_any": [
@@ -1094,7 +1130,9 @@
        "ausgeschlossen",
        "nicht möglich",
        "nicht rückwirkend",
-       "keine rückwirkende"
+       "keine rückwirkende",
+       "nicht zulässig",
+       "unzulässig"
       ],
       "polarity": "no",
       "source_url_any": [
@@ -1137,7 +1175,8 @@
       "visa_disclaimer_present": true,
       "source_url_any": [
        "aufenthg_2004/__16b",
-       "aufenthaltserlaubnis-zum-studium"
+       "aufenthaltserlaubnis-zum-studium",
+       "bewerbung_2.en.jsp"
       ]
      }
     }
@@ -1166,6 +1205,12 @@
         "page": 8,
         "quote": "20-00-0017-iv Software Engineering St K 90 1 3 o iV 5",
         "po_version": 2023
+       },
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/media/informatik/fb20_studium/formulare_und_dokumente/ordnungen/ordnungen_bsc/pruefungsordnung_2023/2022_09_30_MHB_BSC_INF.pdf",
+        "page": 26,
+        "quote": "[20-00-0017-iv] (Fachprüfung, Klausur, Standard) Klausur (Dauer 90 min.)",
+        "po_version": 2023
        }
       ],
       "rule": "any"
@@ -1180,11 +1225,12 @@
       ],
       "po_line_present": true,
       "contains_none": [
-       "Prüfungsordnung 2015 des"
+       "Prüfungsordnung 2015 des B.Sc. Informatik"
       ],
       "source_url_any": [
        "SPP_B.Sc._Informatik.pdf",
-       "Studiengangsordnung_Bachelor_Informatik_2023.pdf"
+       "Studiengangsordnung_Bachelor_Informatik_2023.pdf",
+       "2022_09_30_MHB_BSC_INF.pdf"
       ]
      }
     }

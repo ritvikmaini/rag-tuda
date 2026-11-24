@@ -41,6 +41,7 @@ EXTRA_URL_PATTERNS = {
     "S07": {"artikel_details_de_en_286144"},  # the semester fee page names the re-registration period
     "S08": {"bewerbung_2.en.jsp"},
     "S12": {"bewerbung_2.en.jsp"},
+    "S29": {"bewerbung_2.en.jsp"},  # the application page's part-time work rule (140 full days)
     "S13": {"abschlussarbeiten_fb20"},
 }
 MINIMUM = {"english": 5, "trap": 3, "decline": 3, "multi": 2, "table": 2}  # the mix of the spec; the set may hold more
