@@ -38,14 +38,15 @@ PROGRAMME_BOUND = ("po", "mhb", "spp")  # these need a programme and a PO versio
 UNIVERSAL = ("apb", "eso", "promotion", "residence")  # these apply beyond one programme
 HUB_COPIED = ("apb", "eso")  # university-wide regulations a faculty hub may carry a copy of
 # checked in order against the folded text, the most specific kind first (a Modulhandbuch may name the APB); the first
-# match is the regulation. A form is checked before the PO: "Erklärung zum PO-Wechsel" is a form, not a PO.
+# match is the regulation. A form is checked before the PO: "Erklärung zum PO-Wechsel" is a form, not a PO; a
+# "Zuordnung" (assignment) is no Ordnung.
 REGULATIONS = (
     ("mhb", re.compile(r"modulhandbuch|\bmhb\b")),
     ("spp", re.compile(r"studien und pruefungsplan|studienplan|\bspp\b")),
     ("apb", re.compile(r"\bapb\b|allg\w* pruefungsbest")),
     ("eso", re.compile(r"\beso\b|einschreibeordnung")),
     ("form", re.compile(r"erklaerung|antrag|formular")),
-    ("po", re.compile(r"ordnung")),
+    ("po", re.compile(r"(?<!zu)ordnung")),
 )
 # a section heading names a regulation only by these kinds (its "Ordnung" alone is no PO); a PO year in it names the PO
 HEADING_REGULATIONS = ("mhb", "spp", "apb", "eso")

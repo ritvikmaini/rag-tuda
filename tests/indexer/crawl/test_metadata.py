@@ -524,3 +524,10 @@ def test_implementing_provisions_name_their_unconfigured_year_beside_a_date():
     ):
         link = _link(f"{base}/{name}", text, section_id="pruefungsord__209_dateiliste")
         assert pdf_metadata(link, hub, ROLES).unconfigured_year == year, name
+
+
+def test_a_zuordnung_is_no_ordnung():
+    page = _hub("https://www.tu-darmstadt.de/studieren/a.de.jsp")
+    code = _link("https://www.tu-darmstadt.de/media/x/ISCEDZuordnungen-2.pdf", "ISCED – Code Zuordnung (PDF-Datei)")
+    assert pdf_metadata(code, page, ROLES).regulation == "info"
+    assert pdf_metadata(_link(code.url, "Studienordnung"), page, ROLES).regulation == "po"
