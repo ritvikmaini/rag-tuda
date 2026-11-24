@@ -23,6 +23,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -32,6 +33,9 @@ from evals.checks import LINE_METADATA, evaluate_turn, turn_expect
 from evals.gate import load_config, read_rows, replay_problem
 from evals.settings import load_settings
 from evals.sse import parse_sse
+
+
+CHIPS = ("degree", "programme", "po")  # the selectors /api/chat takes beside the question
 
 
 def section_id(item, url):
@@ -101,12 +105,14 @@ def ask(
     variant_select=None,
     meta=None,
     record=None,
+    chips=None,
 ):
     """One request; returns (answer, docs_content, errors, first_token_s, total_s, event_types). abort_after_s closes the
     connection after that many seconds (a client stop: the backend sees a disconnect); event_types then ends 'aborted'.
     kept (with replace_from): the ids of the questions the page still shows before the replaced one.
     formats, variant, variant_of, variant_select: response formats; meta (a dict) receives the shape, citations (their
     numbers, and as source_metadata each cited document's line metadata from the docs frame, joined after the stream), variant and status-step frames.
+    chips: the page's selectors {degree, programme, po}, sent with the question; none are sent without it.
     record: a path stem; the response bytes go to <stem>.raw exactly as received, the
     HTTP status, the response headers and the query parameters (never the token) to <stem>.json. Recorded or not, the
     bytes pass the same incremental UTF-8 decoder, so a recorded run measures like any other."""
@@ -116,6 +122,7 @@ def ask(
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     parts, errors, types = [], [], []
     params = {"question": question, "conversation_id": user}
+    params.update({k: v for k, v in (chips or {}).items() if k in CHIPS and v is not None})
     if turn_id:
         params["turn_id"] = turn_id
     if replace_from:
@@ -268,6 +275,7 @@ def run_conversation(conv, ask_fn, min_interval, label, stamp, emit, formats=Non
                 "kept": kept,
                 "formats": formats,
                 "meta": {},
+                **({"chips": turn["chips"]} if turn.get("chips") else {}),
             }
             if cut and replay:  # a replay's first question: the retry of its stored turn
                 opts["replace_from"], opts["kept"], cut = (
@@ -305,6 +313,7 @@ def run_conversation(conv, ask_fn, min_interval, label, stamp, emit, formats=Non
             "expect": expect,
             "aborted": "aborted" in types,
             "replace_from_turn": k or None,
+            **({"chips": opts["chips"]} if opts.get("chips") else {}),
             "shape": meta.get("shape"),
             "variant": turn.get("variant") or turn.get("select"),
             "citations": meta.get("citations"),
@@ -386,6 +395,13 @@ def write_summary(path, label, rows):
         fh.write("\n".join(lines) + "\n")
 
 
+def verdict(row, volatile):
+    """ok, FAIL, or stale: a volatile conversation's failed turn is not counted as a failure."""
+    if row["checks"]["auto_pass"]:
+        return "ok"
+    return "stale" if row["id"] in volatile else "FAIL"
+
+
 def play(
     probes_path,
     folder_label,
@@ -397,10 +413,12 @@ def play(
     formats=None,
     record_dir=None,
     replay=None,
+    volatile=frozenset(),
     client_factory=httpx.Client,
 ):
     """Play one probe file; returns its run folder <out_dir>/<folder_label>_<stamp>. replay: conversation id -> the replay
-    dict of run_conversation."""
+    dict of run_conversation. volatile: ids (fees, dates) whose failed answer is printed `stale`, not `FAIL`: the page may have
+    changed; the row itself keeps its checks."""
     with open(probes_path, encoding="utf-8") as fh:
         spec = json.load(fh)
     convs = [c for c in spec["conversations"] if (not groups or c.get("set") in groups) and (not ids or c["id"] in ids)]
@@ -428,11 +446,11 @@ def play(
                 out.flush()
                 c = row["checks"]
                 print(
-                    "%-6s t%d %-4s %5.1fs %s"
+                    "%-6s t%d %-5s %5.1fs %s"
                     % (
                         row["id"],
                         row["turn"],
-                        "ok" if c["auto_pass"] else "FAIL",
+                        verdict(row, volatile),
                         row["total_s"],
                         ",".join(c["failed"]),
                     ),
@@ -459,6 +477,11 @@ def play(
             for client in clients:
                 client.close()
     write_summary(os.path.join(run_dir, "summary.md"), folder_label, rows)
+    tally = Counter(verdict(row, volatile) for row in rows)
+    print(
+        "RESULT %s: %d ok, %d FAIL, %d stale of %d turns"
+        % (folder_label, tally["ok"], tally["FAIL"], tally["stale"], len(rows))
+    )
     print("Results: " + run_dir)
     return run_dir
 
@@ -528,10 +551,12 @@ def main(argv=None, client_factory=httpx.Client):
         print("no backend token: mount the compose secret backend_token or set RAG__EVALS__TOKEN", file=sys.stderr)
         return 2
     given = {i for i in args.ids.split(",") if i}
+    volatile = frozenset()
     if args.probes:
         jobs = [(args.label, args.probes, args.formats or None, given)]
     else:
         cfg = load_config(settings.profile_dir)
+        volatile = frozenset(cfg.retrieval.volatile)
         unknown = [s for s in args.sets if s not in cfg.sets]
         if unknown:
             ap.error("unknown set %s (gate.yaml: %s)" % (", ".join(unknown), ", ".join(cfg.sets)))
@@ -565,6 +590,7 @@ def main(argv=None, client_factory=httpx.Client):
             settings,
             ids=ids,
             replay=replay,
+            volatile=volatile,
             groups={g for g in args.groups.split(",") if g},
             concurrency=args.concurrency,
             formats=formats,

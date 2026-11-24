@@ -1,7 +1,9 @@
 import hashlib
 import json
+import pathlib
 
 import httpx
+import yaml
 
 from evals import checks, sse
 from evals import runner as rp
@@ -291,6 +293,53 @@ def test_a_probe_file_runs_with_its_own_label_and_the_formats_flag(env, fake_bac
     seen = []
     assert rp.main(["--probes", str(plan), "--label", "rec", "--formats", "v1"], client_factory=fake_backend(seen)) == 0
     assert seen[0]["formats"] == "v1" and [p.name.rsplit("_", 1)[0] for p in env.iterdir() if p.is_dir()] == ["rec"]
+
+
+def test_a_turn_sends_its_chips_beside_the_question_and_the_row_keeps_them(env, fake_backend, tmp_path):
+    plan = tmp_path / "plan.json"
+    chips = {"degree": "bachelor", "programme": "bsc-informatik", "po": 2023}
+    turns = [{"q": "Mit Chips?", "chips": chips}, {"q": "Ohne Chips?"}]
+    plan.write_text(json.dumps({"conversations": [{"id": "Q1", "turns": turns}]}), encoding="utf-8")
+    seen = []
+    assert rp.main(["--probes", str(plan), "--label", "c"], client_factory=fake_backend(seen)) == 0
+    assert [(p.get("degree"), p.get("programme"), p.get("po")) for p in seen] == [
+        ("bachelor", "bsc-informatik", "2023"),
+        (None,) * 3,
+    ]
+    (run,) = [p for p in env.iterdir() if p.is_dir()]
+    first, second = [json.loads(line) for line in (run / "results.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert first["chips"] == chips and "chips" not in second
+
+
+def test_a_failed_volatile_turn_is_stale_not_failed(env, fake_backend, capsys):
+    """C1 is volatile in the test gate.yaml: the answer of the fake backend lacks the fact the probe expects."""
+    plan = {
+        "conversations": [
+            {"id": cid, "turns": [{"q": "Frage?", "expect": {"contains_any": ["Zehn Tage"]}}]} for cid in ("C1", "G01")
+        ]
+    }
+    (env / "p.json").write_text(json.dumps(plan), encoding="utf-8")
+    assert rp.play(
+        str(env / "p.json"), "v", rp.load_settings().evals, volatile=frozenset({"C1"}), client_factory=fake_backend()
+    )
+    out = capsys.readouterr().out
+    assert "C1     t1 stale" in out and "G01    t1 FAIL" in out
+    assert "RESULT v: 0 ok, 1 FAIL, 1 stale of 2 turns" in out
+
+
+def test_the_runner_reads_the_volatile_ids_from_the_profiles_gate(env, fake_backend, monkeypatch, tmp_path, capsys):
+    profile = tmp_path / "profile"
+    (profile / "probes").mkdir(parents=True)
+    gate = yaml.safe_load((pathlib.Path(__file__).parent / "profile" / "gate.yaml").read_text(encoding="utf-8"))
+    gate["retrieval"]["volatile"] = ["V1"]
+    gate["sets"]["fees"] = {"file": "probes/fees.json"}
+    (profile / "gate.yaml").write_text(yaml.safe_dump(gate), encoding="utf-8")
+    turn = {"q": "Gebühr?", "expect": {"contains_any": ["Zehn Euro"]}}
+    probes = {"conversations": [{"id": i, "set": "fees", "turns": [turn]} for i in ("V1", "N1")]}
+    (profile / "probes" / "fees.json").write_text(json.dumps(probes), encoding="utf-8")
+    monkeypatch.setenv("RAG__EVALS__PROFILE_DIR", str(profile))
+    assert rp.main(["fees", "--label", "t"], client_factory=fake_backend()) == 0
+    assert "RESULT t-fees: 0 ok, 1 FAIL, 1 stale of 2 turns" in capsys.readouterr().out
 
 
 def test_record_keeps_one_raw_and_one_sidecar_per_turn(env, fake_backend, lookup_body):
