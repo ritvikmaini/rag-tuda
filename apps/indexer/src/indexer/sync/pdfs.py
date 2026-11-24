@@ -6,6 +6,7 @@ list safeguard, so a PDF missing from one list is kept for a few runs."""
 
 import logging
 from collections import Counter
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -51,14 +52,20 @@ class SyncResult:
 
 
 def sync_pdfs(
-    entries: list[PdfEntry], ctx: SourceContext, *, pdf_dir: str | Path | None = None, allow_empty: bool = False
+    entries: list[PdfEntry],
+    ctx: SourceContext,
+    *,
+    pdf_dir: str | Path | None = None,
+    allow_empty: bool = False,
+    dropped: Collection[str] = (),
 ) -> SyncResult:
     """Sync `entries` into pdf_dir (default: the context's paths.pdf_dir). ctx.reuse (frozen inputs): nothing is fetched,
     a PDF whose file is missing counts as missing, the registry is not written and the safeguard runs dry. ctx.limit: only
     the first N entries, and no safeguard. A corrupt registry raises CorruptStateError; a corrupt list state is reported in `check` (corrupt) with
     every missing PDF kept. An URL listed twice is synced once (the first entry wins). An empty list raises ValueError: it
     is a failed crawl, not a list, unless `allow_empty`: then the list safeguard treats it as a list that shrank to nothing, so
-    every registered PDF is kept for its grace runs."""
+    every registered PDF is kept for its grace runs. A registered link in `dropped` (left out on purpose) is removed with its file
+    at once, and its absence is no shrinking of the list."""
     entries = list({entry.url: entry for entry in reversed(entries)}.values())[::-1]
     if not entries and not allow_empty:
         raise ValueError("no PDF entries to sync")
@@ -76,7 +83,13 @@ def sync_pdfs(
         safeguard = Safeguard.from_settings(ctx.settings)
         try:
             retained, check, removed = safeguard.apply(
-                entries, registry, ctx.state.path(LIST_STATE), ctx.cache_dir, pdf_dir, dry_run=ctx.reuse
+                entries,
+                registry,
+                ctx.state.path(LIST_STATE),
+                ctx.cache_dir,
+                pdf_dir,
+                dry_run=ctx.reuse,
+                dropped=dropped,
             )
         except Exception as exc:
             # never let the safeguard itself delete or drop documents

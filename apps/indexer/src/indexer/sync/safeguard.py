@@ -9,7 +9,7 @@ import hashlib
 import json
 import logging
 import os
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -41,15 +41,18 @@ class Safeguard:
         cache_dir: Path,
         pdf_dir: str | Path,
         dry_run: bool = False,
+        dropped: Collection[str] = (),
     ) -> tuple[list[PdfEntry], dict, int]:
         """Counts this list against the state at state_path. Links no longer listed are removed from `registry` (and
         their file deleted) after grace_runs misses. dry_run (frozen inputs): the retained entries are computed from the
-        current state; nothing is counted, removed or saved. Returns (retained entries, list check report, number of
+        current state; nothing is counted, removed or saved. A registered link in `dropped` (left out on purpose, not lost) is
+        removed with its file at once, without a miss, and does not count towards the list's shrinking. Returns (retained entries, list check report, number of
         removed links)."""
         grace = self.grace_runs
         state = _load_state(state_path)
         today = datetime.now().strftime("%Y-%m-%d")
         current = {entry.url for entry in entries}
+        gone = (set(dropped) & registry.keys()) - current
         for entry in entries:
             state["known"][entry.url] = dataclasses.asdict(entry)
             state["missing"].pop(entry.url, None)
@@ -60,7 +63,7 @@ class Safeguard:
         repeat = fingerprint == state["last_list"]
         state["last_list"] = fingerprint
         last = state["last_full_count"]
-        shrunk, accepted = bool(last) and len(entries) < (1 - self.max_shrink) * last, False
+        shrunk, accepted = bool(last) and len(entries) + len(gone) < (1 - self.max_shrink) * last, False
         if dry_run:
             logging.info("[PdfSync] frozen inputs: the list safeguard runs dry (nothing counted, removed or saved)")
         elif repeat:
@@ -95,6 +98,13 @@ class Safeguard:
         retained, removed, missing = [], 0, 0
         for link in list(registry):
             if link in current:
+                continue
+            if link in gone:
+                if not dry_run:
+                    local_path(link, pdf_dir).unlink(missing_ok=True)
+                    for table in (registry, state["known"], state["missing"]):
+                        table.pop(link, None)
+                    removed += 1
                 continue
             missing += 1
             record = state["missing"].setdefault(link, {"runs": 0, "since": today})

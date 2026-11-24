@@ -34,11 +34,11 @@ def env(tmp_path, pdf_dir, make_ctx):
 
     ctx = make_ctx({url(i): pdf(url(i)) for i in range(10)}, settings=SETTINGS)
 
-    def run(ids, limit=None, same_list=False, reuse=False):
+    def run(ids, limit=None, same_list=False, reuse=False, dropped=()):
         if not same_list:
             crawl["n"] += 1
         entries = [PdfEntry(url(i), f"Doc {i}", f"h{i}" if i else f"h0.{crawl['n']}", {}) for i in ids]
-        return sync_pdfs(entries, dataclasses.replace(ctx, limit=limit, reuse=reuse), pdf_dir=pdf_dir)
+        return sync_pdfs(entries, dataclasses.replace(ctx, limit=limit, reuse=reuse), pdf_dir=pdf_dir, dropped=dropped)
 
     return {"run": run, "ctx": ctx, "pdf_dir": pdf_dir}
 
@@ -81,6 +81,16 @@ def test_missing_entry_kept_for_grace_runs(env):
     assert not local(env, 9).exists() and url(9) not in registry(env)
     assert cache(env, 9).exists()  # the extraction cache stays: another link may hold the same file
     assert url(9) not in list_state(env)["missing"] and url(9) not in list_state(env)["known"]
+
+
+def test_a_dropped_link_is_removed_at_once_and_does_not_shrink_the_list(env):
+    env["run"](range(10))
+    result = env["run"](
+        range(5), dropped=[url(i) for i in range(5, 10)]
+    )  # half the list, all of it left out on purpose
+    assert result.check["shrunk"] is False and result.removed == 5 and result.retained == []
+    assert not any(local(env, i).exists() for i in range(5, 10)) and set(registry(env)) == {url(i) for i in range(5)}
+    assert not set(list_state(env)["missing"]) | {u for u in list_state(env)["known"] if u not in registry(env)}
 
 
 def test_list_shrinking_over_max_ignored(env):
