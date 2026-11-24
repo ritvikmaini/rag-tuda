@@ -515,6 +515,30 @@ def test_a_no_answer_probe_with_an_empty_final_list_is_a_decline(tmp_path: Path)
     assert rows["set_a/G"][:3] == ["gold", "0", "2"]  # the gold is the second fused section and is not returned
 
 
+def test_returned_counts_the_final_list_also_when_a_returned_section_is_not_in_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class WithoutS3(Sections):
+        META = {k: v for k, v in Sections.META.items() if k != "s3"}
+
+    def service_losing_s3(profile: Profile, reranker=None, build=service) -> RetrievalService:
+        svc = build(profile, reranker)
+        retrieve = svc.retrieve
+
+        async def retrieve_then_lose_s3(*args, **kwargs):
+            svc.sections = Sections()
+            final = await retrieve(*args, **kwargs)
+            svc.sections = WithoutS3()  # the section store the evaluation reads afterwards lacks s3
+            return final
+
+        svc.retrieve = retrieve_then_lose_s3  # type: ignore[method-assign]
+        return svc
+
+    monkeypatch.setitem(globals(), "service", service_losing_s3)
+    rows = run_probes(tmp_path, Reranker())
+    assert rows["set_a/N"][:2] == ["none", "3"]  # s1 and s2 pass the threshold, min_docs adds s3
+
+
 def test_a_no_answer_probe_with_a_non_empty_final_list_shows_its_top_score(tmp_path: Path) -> None:
     rows = run_probes(tmp_path, Reranker())
     assert rows["set_a/N"] == [
