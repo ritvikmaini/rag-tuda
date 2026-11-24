@@ -161,7 +161,7 @@ def test_the_smoke_flag_runs_the_smoke_set_and_no_flag_the_deploy_smoke(repo, mo
     card = S4B["name"]
     smoke_set, deploy = [a[-5:] for a in system.ran]
     assert smoke_set == ("evals", "run", "smoke", "--label", card)  # --smoke: the set, as the runner plays it
-    assert deploy == ("evals", "evals", "smoke", "--label", card)  # no flag: the five fixed probes
+    assert deploy == ("evals", "evals", "smoke", "--label", card)  # no flag: the fixed probes
 
 
 def test_the_command_runs_the_job_on_the_recorded_card(repo, monkeypatch, capsys):

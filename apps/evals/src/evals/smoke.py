@@ -1,4 +1,4 @@
-"""The deploy smoke: the five fixed probes of gate.yaml, structure only, so a correct deploy never
+"""The deploy smoke: the fixed probes of gate.yaml, structure only, so a correct deploy never
 fails on answer variance. 6 requests, about 2 minutes. Exit 0 = every check passed, 10 = at least one failed, 2 = no token;
 any other code = the smoke could not run (the deploy keeps that apart from a failed smoke). Whether every service is ready is
 the deploy's part: the container cannot see Docker."""
@@ -81,7 +81,9 @@ def run_smoke(settings, cfg, index, client, user_label, max_ttft, stamp):
 
 
 def main(argv=None, client_factory=httpx.Client):
-    ap = argparse.ArgumentParser(prog="evals smoke", description="The deploy smoke: five fixed probes, structure only")
+    ap = argparse.ArgumentParser(
+        prog="evals smoke", description="The deploy smoke: the fixed probes of gate.yaml, structure only"
+    )
     ap.add_argument("--label", default="smoke")
     ap.add_argument("--max-ttft", type=float, default=None, help="seconds; default: gate.yaml smoke.max_ttft_s")
     args = ap.parse_args(argv)

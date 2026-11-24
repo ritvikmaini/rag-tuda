@@ -1,4 +1,4 @@
-"""evals smoke: five fixed probes, structure only; exit 0, 10, or 2 when it cannot run."""
+"""evals smoke: the fixed probes, structure only; exit 0, 10, or 2 when it cannot run."""
 
 import json
 
