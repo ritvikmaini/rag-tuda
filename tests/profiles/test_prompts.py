@@ -205,3 +205,10 @@ def test_per_request_variables_come_after_the_static_text(overlay: str) -> None:
             )
         assert len(tail) < 400, (name, len(tail))
         assert len(system) - len(tail) > 1000, name  # the static part is the bulk of the message
+
+
+def test_the_small_about_bot_line_asks_for_the_sie_form() -> None:
+    direct = _system("direct-reply", "small")
+    line = next(row for row in direct.splitlines() if row.startswith("- about_bot:"))
+    assert "in der Sie-Form" in line
+    assert "in der Sie-Form" not in _system("direct-reply", "large")  # the large overlay is unchanged
