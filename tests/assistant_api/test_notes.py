@@ -267,7 +267,8 @@ def test_only_an_urgent_reply_gets_the_contact_line_and_a_profile_without_one_ad
 
 
 def test_an_empty_urgent_reply_is_the_line_alone():
-    assert answered([], "  ", intent="urgent") == GERMAN_LINE
+    assert answered([], "", intent="urgent") == GERMAN_LINE
+    assert answered([], "  ", intent="urgent") == "  \n\n" + GERMAN_LINE  # what was streamed stays the prefix
 
 
 def timeout_error():

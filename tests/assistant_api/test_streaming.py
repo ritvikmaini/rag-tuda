@@ -607,5 +607,6 @@ def test_the_urgent_contact_line_reaches_the_page_after_a_streamed_text_and_afte
     text = "\n Rufen Sie 112 an. \n"
     assert urgent_line(text, line) == line
     assert sent(text, text + "\n\n" + line, [AIMessage(content=text + "\n\n" + line)]) == [text, "\n\n" + line]
+    assert sent(" \n", " \n\n\n" + line, [AIMessage(content=" \n\n\n" + line)]) == [" \n", "\n\n" + line]
     # a failure after part of the text: the fallback text and the line follow it
     assert sent("Ein Teil ", "Dauert zu lange.\n\n" + line, []) == ["Ein Teil ", "\n\nDauert zu lange.\n\n" + line]
