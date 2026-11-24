@@ -312,3 +312,10 @@ def test_the_urgent_line_is_removed_from_the_history_the_model_gets():
     answered([], COMPLETE_DE, intent="urgent", earlier=earlier, seen=seen)
     sent = "\n".join(str(m.content) for m in seen[0])
     assert "Bleiben Sie ruhig." in sent and "Notrufe:" not in sent
+
+
+def test_an_urgent_reply_with_surrounding_whitespace_keeps_the_streamed_text_as_a_prefix():
+    text = "\n Rufen Sie sofort die 112 an. \n"
+    stored = answered([], text, intent="urgent")
+    assert stored == text + "\n\n" + GERMAN_LINE
+    assert stored.startswith(text)

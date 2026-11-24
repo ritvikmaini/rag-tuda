@@ -319,7 +319,8 @@ def make_generate(deps: GraphDeps):
                     answer = str(response.content)
                     line = urgent_line(answer, catalog.answer.urgent_contacts)
                     if line:
-                        response = AIMessage(content="\n\n".join(part for part in (answer.strip(), line) if part))
+                        # the answer stays as streamed (the page sends only the text after it); an empty one gives way to the line
+                        response = AIMessage(content=answer + "\n\n" + line if answer.strip() else line)
                 except Exception as exc:  # the line never costs an answer: the model's is sent
                     logger.warning(f"[Urgent] line_failed={type(exc).__name__}")
             if sources:

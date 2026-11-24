@@ -558,3 +558,54 @@ def test_a_failure_after_part_of_the_answer_follows_the_part_with_the_fallback_t
 
     assert sent("Ein Teil") == ["Ein Teil", "\n\nDauert zu lange."]
     assert sent("") == ["Dauert zu lange."]
+
+
+def test_the_urgent_contact_line_reaches_the_page_after_a_streamed_text_and_after_a_failure():
+    from rag_core.domain.notes import urgent_line
+
+    line = "Notrufe: 112 (Feuerwehr) und 110 (Polizei)."
+
+    def sent(streamed_text, generation, produced):
+        events = [
+            {
+                "event": "on_chat_model_stream",
+                "name": "x",
+                "metadata": {"langgraph_node": "generate"},
+                "data": {"chunk": AIMessageChunk(content=streamed_text)},
+            },
+            {
+                "event": "on_chain_end",
+                "name": "generate",
+                "metadata": {"langgraph_node": "generate"},
+                "data": {"output": {"generation": generation, "messages": produced, "context_sources": []}},
+            },
+        ]
+
+        class Chain:
+            async def astream_events(self, *args, **kwargs):
+                for event in events:
+                    yield event
+
+        async def run():
+            stream = ss.run_stream(
+                Chain(),
+                {},
+                {},
+                formats_on=False,
+                variant=None,
+                sources_mode="none",
+                none_text=lambda language: "",
+                result=ss.StreamResult(),
+                user="u",
+                strip_cjk=True,
+            )
+            return [fr.wire(f)["content"] async for f in stream if isinstance(f, fr.Chunk)]
+
+        return asyncio.run(run())
+
+    # the model's text begins and ends with whitespace: the stored text keeps it, so the line is the chunk after it
+    text = "\n Rufen Sie 112 an. \n"
+    assert urgent_line(text, line) == line
+    assert sent(text, text + "\n\n" + line, [AIMessage(content=text + "\n\n" + line)]) == [text, "\n\n" + line]
+    # a failure after part of the text: the fallback text and the line follow it
+    assert sent("Ein Teil ", "Dauert zu lange.\n\n" + line, []) == ["Ein Teil ", "\n\nDauert zu lange.\n\n" + line]
