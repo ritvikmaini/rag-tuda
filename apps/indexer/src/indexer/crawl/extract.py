@@ -11,8 +11,9 @@ sections the whole main content is one document. The Markdown keeps headings (`h
 lists, tables, emphasis and links (absolute URLs).
 
 PDFs are the anchors in the main content whose `href` path ends in `.pdf` (any case; query, fragment and `;` path parameters ignored), as
-absolute normalised URLs in page order, each once, with its link text, `title` attribute and the id of its section. Which
-hosts may be fetched stays with the fetcher.
+absolute normalised URLs in page order, each once, with its link text, `title` attribute and the id of its section. Those of
+an `aside` outside the main content ("Links & Downloads") follow, marked `aside` and with no section: what they are is
+told by their own text and URL, not by the page's sections. Which hosts may be fetched stays with the fetcher.
 
 A page whose main selector matches nothing, or only elements without text, comes back with `problem` set (for the build
 summary) and no documents. Selectors are a small CSS subset: `tag`, `.class`, `#id` compounds, descendant (space) and child
@@ -93,12 +94,14 @@ class Selectors:
 
 @dataclass(frozen=True)
 class Link:
-    """An anchor: absolute `url`, its text, its `title` attribute ('' if none) and the id of the section it is in."""
+    """An anchor: absolute `url`, its text, its `title` attribute ('' if none), the id of the section it is in and whether
+    it stands in an aside beside the main content."""
 
     url: str
     text: str
     title: str
     section_id: str | None
+    aside: bool = False
 
 
 @dataclass(frozen=True)
@@ -233,15 +236,33 @@ def _document(section_id: str | None, blocks: list[str]) -> PageDocument:
     return PageDocument(section_id, heading, "\n\n".join(blocks))
 
 
+def _is_pdf(url: str) -> bool:
+    return bool(url) and PATH_PARAMETERS.sub("", urlsplit(url).path).lower().endswith(".pdf")
+
+
 def _pdfs(main: html.HtmlElement, base: str, sections: list[html.HtmlElement]) -> tuple[Link, ...]:
     found: dict[str, Link] = {}
     outer = set(sections)
     for anchor in main.iter("a"):
         url = _absolute(base, anchor.get("href", ""))
-        if url and PATH_PARAMETERS.sub("", urlsplit(url).path).lower().endswith(".pdf") and url not in found:
+        if _is_pdf(url) and url not in found:
             title = " ".join(anchor.get("title", "").split())
             section = next((a for a in anchor.iterancestors() if a in outer), None)
             found[url] = Link(url, _text(anchor), title, section.get("id") if section is not None else None)
+    return tuple(found.values())
+
+
+def _aside_pdfs(tree: html.HtmlElement, base: str, known: set[str]) -> tuple[Link, ...]:
+    """The PDF links, not yet `known`, of the visible asides that are no part of the page's navigation, header or footer (the
+    asides of the main content are dropped before: its own links are known)."""
+    found: dict[str, Link] = {}
+    for aside in tree.xpath(
+        f"//aside[not(ancestor-or-self::*{HIDDEN} or ancestor::nav or ancestor::header or ancestor::footer)]"
+    ):
+        for anchor in aside.xpath(f".//a[not(ancestor-or-self::*{HIDDEN})]"):
+            url = _absolute(base, anchor.get("href", ""))
+            if _is_pdf(url) and url not in known and url not in found:
+                found[url] = Link(url, _text(anchor), " ".join(anchor.get("title", "").split()), None, True)
     return tuple(found.values())
 
 
@@ -285,6 +306,7 @@ def extract(body: bytes, url: str, selectors: Selectors = Selectors(), content_t
     matched = main.xpath(_xpath(selectors.section))
     sections = [s for s in matched if not any(a in matched for a in s.iterancestors())]
     pdfs = _pdfs(main, url, sections)
+    pdfs += _aside_pdfs(tree, url, {link.url for link in pdfs})
     documents: list[PageDocument] = []
     for section in sections:
         blocks: list[str] = []

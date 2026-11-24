@@ -286,7 +286,10 @@ def pdf_metadata(link: Link, hub: Extraction, roles: Roles, twins: Mapping[str, 
         or _regulation("", link.section_id, heading, only=HEADING_REGULATIONS)
         or _residence_or_info(link.url)
     )
-    programme = _programme(hub.url, roles) or _programme(link.url, roles)
+    # a link of an aside belongs to the page's menu, not to the page's programme
+    programme = (
+        _programme(link.url, roles) if link.aside else (_programme(hub.url, roles) or _programme(link.url, roles))
+    )
     version = _version(programme, roles, link.section_id, heading, link.text, link.title, DATE_PREFIX.sub("", stem))
     degree, prog, po_version = _scope(regulation, programme, version, roles)
     return Metadata(

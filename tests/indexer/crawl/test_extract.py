@@ -104,6 +104,24 @@ def test_pdf_links_by_href_suffix():
     assert result.pdfs[0].section_id is None
 
 
+def test_pdf_links_of_an_aside_beside_the_main_content_follow_those_of_the_main_content():
+    html = (
+        "<html><body><nav><a href='/menu.pdf'>Menu</a></nav><div class='main-column'><section class='content-section' "
+        "id='a'><a href='/main.pdf'>Main</a></section><aside><a href='/inner.pdf'>Inner</a></aside></div>"
+        "<aside><section id='links___downloads'><h2>Links &amp; Downloads</h2><a href='/main.pdf'>again</a>"
+        "<a href='/check.pdf' title='Antrag'>Checkliste</a><a href='/page.jsp'>Seite</a>"
+        "<div hidden><a href='/hidden.pdf'>x</a></div></section></aside><footer><aside><a href='/foot.pdf'>x</a></aside>"
+        "</footer></body></html>"
+    )
+    result = extract(html.encode(), f"{FACULTY}/p.de.jsp", Selectors())
+    assert [(p.url, p.text, p.section_id, p.aside) for p in result.pdfs] == [
+        (f"{FACULTY}/main.pdf", "Main", "a", False),
+        (f"{FACULTY}/check.pdf", "Checkliste", None, True),
+    ]
+    assert result.pdfs[1].title == "Antrag"
+    assert "Downloads" not in "".join(d.markdown for d in result.documents)  # the aside is no content
+
+
 def test_markdown_keeps_lists_emphasis_links_and_tables():
     result = _inline(
         "<h2>Kopf</h2><p>Ein <strong>wichtiger</strong> und <em>kurzer</em> Text<br>mit Umbruch und "

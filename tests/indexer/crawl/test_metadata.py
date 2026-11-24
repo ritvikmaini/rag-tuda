@@ -1,6 +1,7 @@
 """Metadata rules: the fields come from URL folders, section ids and headings, link titles and file names, the NULL rules
 fail closed for the programme regulations, and a hub's copy of a university-wide regulation yields to its original."""
 
+import dataclasses
 from datetime import date
 from pathlib import Path
 
@@ -427,6 +428,27 @@ def test_archived_and_implementing_documents_neither_yield_nor_stand_for_a_copy(
         copy_url, None, pdf_metadata(_link(copy_url, "APB", "in Kraft seit 13.01.2022"), PO_HUB, ROLES)
     )
     assert select_documents([dated_copy, english], ROLES).copies == ()
+
+
+def test_a_link_of_an_aside_takes_no_scope_from_the_page_or_its_sections():
+    hub = _hub(BSC_HUB, ("pruefungsordnung_2023", "Prüfungsordnung 2023"))
+    promotion = _link(
+        f"{FB20}/media/informatik/fb20_dekanat/dokumente_promotion/2026_Checkliste_Antrag.pdf",
+        "Checkliste Antrag auf Annahme als Doktorand",
+    )
+    aside = dataclasses.replace(promotion, aside=True)
+    meta = pdf_metadata(aside, hub, ROLES)
+    assert (meta.regulation, meta.degree, meta.programme, meta.po_version) == ("promotion", ("promotion",), None, None)
+    # a PO in an aside does not take the hub's programme and has no version from its section: it fails closed
+    po = dataclasses.replace(_link(f"{MEDIA}/ordnungen_msc/po.pdf", "Studiengangsordnung"), aside=True)
+    meta = pdf_metadata(po, hub, ROLES)
+    assert (meta.programme, meta.po_version, meta.missing) == (("msc-informatik",), None, ("po_version",))
+    menu = dataclasses.replace(
+        _link(f"{FB20}/media/anderswo/Studiengangsordnung.pdf", "Studiengangsordnung"), aside=True
+    )
+    meta = pdf_metadata(menu, hub, ROLES)
+    assert (meta.programme, meta.po_version, meta.missing) == (None, None, ("programme", "po_version"))
+    assert pdf_metadata(dataclasses.replace(menu, aside=False), hub, ROLES).programme == ("bsc-informatik",)
 
 
 def test_the_joined_rest_has_no_valid_from_of_its_own():
