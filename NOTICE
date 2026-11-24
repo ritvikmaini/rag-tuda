@@ -3,11 +3,12 @@ them and says what was checked. "Not read" means the licence text was not availa
 read it at the source before redistributing anything.
 
 Models served by the model servers and the indexer (downloaded from Hugging Face; only the embedder and the reranker are
-pinned by revision in the profile, docling's models follow the version of docling in uv.lock)
-  Snowflake/snowflake-arctic-embed-m-v2.0   the embedder          licence stated on its model card: apache-2.0
-  BAAI/bge-reranker-v2-m3                    the reranker          licence stated on its model card: apache-2.0
-  docling-project/docling-layout-heron       PDF layout (docling)  licence stated on its model card: apache-2.0
-  docling-project/docling-models             PDF tables (docling)  licence stated on its model card: cdla-permissive-2.0
+pinned by revision in the profile, docling's models follow the version of docling in uv.lock; the licence is the `license:`
+field of the README.md in the local snapshot under ~/.cache/huggingface/hub/)
+  Snowflake/snowflake-arctic-embed-m-v2.0   the embedder          apache-2.0 (snapshot 95c2741)
+  BAAI/bge-reranker-v2-m3                    the reranker          apache-2.0 (snapshot 953dc6f)
+  docling-project/docling-layout-heron       PDF layout (docling)  apache-2.0 (snapshot 8f39ad3)
+  docling-project/docling-models             PDF tables (docling)  cdla-permissive-2.0 (snapshot fc0f2d4)
 
 Embedder and reranker candidates (downloaded from Hugging Face; the licence is the `license:` field of the README.md
 (README.MD for arctic-embed-l-v2.0) in the local snapshot under ~/.cache/huggingface/hub/)
