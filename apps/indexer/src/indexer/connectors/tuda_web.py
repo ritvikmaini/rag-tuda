@@ -13,8 +13,11 @@ One fetcher serves the whole crawl, on one thread: it spaces the requests to a h
 response under the crawl folder. A URL cached since the crawl began is not asked for again, so a page fetched for its links
 is not fetched a second time; `--resume` continues the interrupted crawl of the same source set instead of beginning anew.
 
-The report's `manifest` lists, per kept document this crawl fetched, its URL, content hash, fetch date and metadata, for the
-snapshot manifest the build writes after it publishes. The report also lists what the build summary names: `empty_pages` (a main content selector that finds nothing: the site may have
+The report's `manifest` lists, per document the build indexes from this source, its URL, content hash, fetch date and
+metadata, for the snapshot manifest the build writes: the kept pages this crawl fetched and every indexed PDF (a file linked
+from several hubs with its merged scope, a PDF kept from an earlier build with the date of its file).
+
+The report also lists what the build summary names: `empty_pages` (a main content selector that finds nothing: the site may have
 changed), `not_indexed` (the fail-closed documents), `copies` (hub copies skipped), `skipped` (a URL that was not fetched,
 and why) and `hosts_down` (a host of the source set whose robots.txt could not be read: nothing was fetched from it, and the
 build refuses to swap). `fetcher_options` are Fetcher's own (a test injects a client and a clock)."""
@@ -60,6 +63,17 @@ EXCLUDED_ON_PURPOSE = (
     "not an http url",
     "redirected out of scope",
 )
+MANIFEST_KEYS = (  # the keys of `derived`
+    "regulation",
+    "degree",
+    "programme",
+    "po_version",
+    "archived",
+    "valid_from",
+    "lang",
+    "twin_key",
+    "official_url",
+)
 DOC_TYPES = {
     "po": "Prüfungsordnung",
     "mhb": "Modulhandbuch",
@@ -88,6 +102,16 @@ def derived(metadata: Metadata) -> dict[str, Any]:
         "official_url": metadata.official_url,
     }
     return {k: v for k, v in values.items() if v is not None}
+
+
+def manifest_metadata(meta: Mapping[str, Any]) -> dict[str, Any]:
+    """The part of a PDF's stored metadata the snapshot manifest keeps: what `derived` gives, not the page and link it came from."""
+    return {k: v for k, v in meta.items() if k in MANIFEST_KEYS}
+
+
+def _file_day(path: Path) -> str:
+    """The day a file was written, as the fetch date of a PDF this crawl did not fetch."""
+    return date.fromtimestamp(path.stat().st_mtime).isoformat()
 
 
 def lacks(meta: Mapping[str, Any]) -> tuple[str, ...]:
@@ -186,11 +210,15 @@ class TudaWeb:
         excluded = {url for url, _ in selection.not_indexed} | set(selection.copies)
         excluded |= {s["url"] for s in crawl.skipped if s["reason"] in EXCLUDED_ON_PURPOSE}
         retained = [e for e in synced.retained if e.url not in excluded]  # absence keeps its grace, exclusion does not
+        pdf_docs: list[ManifestDoc] = []
         for e in [e for e in synced.entries if e not in synced.retained] + retained:
             if missing := lacks(e.meta):
                 not_indexed.append({"url": e.url, "missing": list(missing)})
             elif (path := local_path(e.url, pdf_dir)).is_file():
-                items.append(PdfItem(str(path), e.url, file_hash(path), e.meta))
+                digest = file_hash(path)
+                items.append(PdfItem(str(path), e.url, digest, e.meta))
+                fetched = crawl.pdfs[e.url].reply.fetched if e.url in crawl.pdfs else _file_day(path)
+                pdf_docs.append(ManifestDoc(e.url, digest, fetched, manifest_metadata(e.meta)))
         if not ctx.reuse:
             ctx.state.save(
                 CRAWL_RUN, {"started": began.isoformat(), "sources": ctx.options["sources"], "complete": True}
@@ -204,7 +232,7 @@ class TudaWeb:
             "copies": list(selection.copies),
             "skipped": crawl.skipped,
             "hosts_down": [{"host": h, "reason": why} for h, why in fetcher.hosts_down().items()],
-            "manifest": [asdict(m) for m in self._manifest(crawl, kept)],
+            "manifest": [asdict(m) for m in self._manifest(crawl, kept) + pdf_docs],
         }
         report["pdf_sync"] = {
             "downloaded": synced.downloaded,
@@ -296,15 +324,12 @@ class TudaWeb:
 
     @staticmethod
     def _manifest(crawl: Crawl, kept: set[str]) -> list[ManifestDoc]:
-        """The snapshot manifest's documents: every kept document this crawl fetched, with its content hash and fetch date."""
-        docs = [
-            ManifestDoc(d.url, d.reply.content_hash, d.reply.fetched, derived(d.entry.metadata)) for d in crawl.docs
+        """The kept pages this crawl fetched, with their content hash and fetch date (the PDFs come from what was indexed)."""
+        return [
+            ManifestDoc(d.url, d.reply.content_hash, d.reply.fetched, derived(d.entry.metadata))
+            for d in crawl.docs
+            if d.url in kept
         ]
-        docs += [
-            ManifestDoc(url, p.reply.content_hash, p.reply.fetched, derived(p.metadata))
-            for url, p in crawl.pdfs.items()
-        ]
-        return [d for d in docs if d.url in kept]
 
     @staticmethod
     def _page_item(doc: Doc) -> PageItem:

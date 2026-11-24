@@ -328,6 +328,19 @@ def test_pdfs_that_vanish_from_intact_pages_are_kept_for_a_few_builds_and_named(
     assert registry(ctx).keys() >= {PO_PDF, APB_ORIGINAL}
 
 
+def test_a_pdf_kept_from_an_earlier_build_is_in_the_manifest_with_its_stored_metadata(tu, make_context, served):
+    ctx = make_context()
+    first = connector(site(served)).collect(ctx)
+    pages_without = {url: ("text/html", without_pdf_links(FACULTY.get(urlsplit(url).path).text)) for url in (HUB,)}
+    later = connector(site(served, pages_without), TODAY + timedelta(days=1)).collect(ctx)
+    assert PO_PDF in later.report["pdf_sync"]["retained"]
+    listed = {m["url"]: m for m in later.report["manifest"]}
+    before = {m["url"]: m for m in first.report["manifest"]}
+    assert listed[PO_PDF]["content_hash"] == before[PO_PDF]["content_hash"] == pdfs(later)[PO_PDF].file_hash
+    assert listed[PO_PDF]["metadata"] == before[PO_PDF]["metadata"] and listed[PO_PDF]["fetched"]
+    assert f"{HUB}#pruefungsordnung_2023" in listed  # the pages stay
+
+
 def test_a_kept_pdf_without_its_list_record_is_not_indexed_for_lacking_its_metadata(tu, make_context, served):
     ctx = make_context()
     connector(site(served)).collect(ctx)
@@ -403,6 +416,13 @@ def test_one_file_linked_from_two_programme_hubs_gets_both_programmes(tu, make_c
         [2023],
     )
     assert both["regulation"] == "po"
+    listed = {m["url"]: m for m in result.report["manifest"]}
+    assert (listed[PO_PDF]["metadata"]["programme"], listed[PO_PDF]["metadata"]["degree"]) == (
+        ["bsc-informatik", "msc-informatik"],
+        ["bachelor", "master"],
+    )  # the manifest shows the merged scope of the indexed document, not the first link's
+    assert listed[MSC_PDF]["metadata"]["programme"] == ["msc-informatik"]
+    assert listed[PO_PDF]["content_hash"] == pdfs(result)[PO_PDF].file_hash
 
 
 def test_every_url_is_asked_for_once_per_build(tu, make_context, served):
@@ -614,6 +634,19 @@ def test_a_published_build_writes_its_snapshot_manifest(builder, tmp_path):
     assert documents_[PO_PDF]["fetched"] == TODAY.isoformat() and len(documents_[PO_PDF]["content_hash"]) == 64
     assert documents_[PO_PDF]["metadata"]["po_version"] == [2023]
     assert f"{HUB}#pruefungsordnung_2023" in documents_ and APB_COPY not in documents_ and UNDATED_MHB not in documents_
+
+
+def test_a_retained_pdf_in_the_live_manifest_does_not_stop_the_next_build(builder, tmp_path):
+    assert builder(EXTRA_PAGES)[0] == 0
+    no_links = {url: ("text/html", without_pdf_links(FACULTY.get(urlsplit(url).path).text)) for url in (HUB,)}
+    code, lines = builder({**EXTRA_PAGES, **no_links}, TODAY + timedelta(days=1))
+    assert code == 0 and not any(line.startswith("refused:") for line in lines)
+    kept = json.loads((tmp_path / "snapshots" / "2.json").read_text(encoding="utf-8"))["documents"]
+    assert PO_PDF in {d["url"] for d in kept}  # generation 2 lists the PDF it kept
+    code, lines = builder({**EXTRA_PAGES, **no_links}, TODAY + timedelta(days=2))
+    assert code == 0 and not any(
+        line.startswith("refused:") for line in lines
+    )  # and it is no page: the gate lets it be
 
 
 def test_shrunk_build_keeps_live_generation(builder, tmp_path):

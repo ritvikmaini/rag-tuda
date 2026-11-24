@@ -65,3 +65,6 @@ def test_an_empty_page_of_the_live_manifest_fails_the_pages_gate_and_names_itsel
     )
     assert gates.pages_gate({"web": {"empty_pages": empty}}, [], None)["passed"]
     assert gates.pages_gate({"web": {}}, live, 4)["passed"]
+    # a PDF or a law item of the live manifest is no page: only an empty page's own URL matches
+    files = ["https://a.test/media/po.pdf", "https://gesetze.test/aufenthg/__16b.html"]
+    assert gates.pages_gate({"web": {"empty_pages": empty[1:]}}, [*files, *live], 4)["passed"]

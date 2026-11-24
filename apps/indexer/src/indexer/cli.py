@@ -109,8 +109,8 @@ def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
 
 
 def write_snapshot(crawl_dir: str, generation: int, reports: Mapping[str, Mapping[str, Any]]) -> list[str]:
-    """The snapshot manifest of a published generation: the documents the sources' reports list under "manifest". The swap
-    has happened, so a manifest that cannot be written is a warning."""
+    """The snapshot manifest of a generation just written (live or staging): the documents the sources' reports list under
+    "manifest". The generation exists, so a manifest that cannot be written is a warning."""
     docs = [ManifestDoc(**d) for report in reports.values() for d in report.get("manifest", ())]
     if not docs:
         return []
@@ -131,7 +131,8 @@ def build_index(
     """One build of every source the profile lists: collect, extract, chunk, gate, embed, write, verify, swap the live views
     to the new generation and housekeep, then the stats file (still under the lock) and the counts per source; a held
     lock, a database that cannot be reached, a refusing gate or any failed step leaves the live index as it was and exits 1.
-    Without a swap (`swap` false in `options`) the generation stays staging: no housekeeping, no stats, no snapshot."""
+    Without a swap (`swap` false in `options`) the generation stays staging: no housekeeping and no stats, but its snapshot
+    manifest is written, so `indexer publish <n>` makes live a generation that has one."""
     settings, target, connect = wiring.settings, wiring.target, wiring.connect
     options = dict(options or {})
     swap, reuse_inputs = options.pop("swap", True), options.pop("reuse_inputs", False)  # the rest is the connectors'
@@ -152,9 +153,8 @@ def build_index(
             )
         )
         documents = {name: report["documents"] for name, report in built["sources"].items()}
-        warnings: list[str] = []
+        warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
         if swap:
-            warnings = write_snapshot(settings.overlay.paths.crawl_dir, published["generation"], built["sources"])
             recorded = gates.record_build_stats(
                 settings.overlay.paths.state_dir,
                 {

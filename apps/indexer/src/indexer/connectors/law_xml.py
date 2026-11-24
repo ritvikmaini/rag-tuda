@@ -8,6 +8,7 @@ and an unknown XML tag raises, so a changed layout fails loudly instead of losin
 import io
 import re
 import zipfile
+from dataclasses import asdict
 from datetime import date
 from typing import Any
 
@@ -19,6 +20,7 @@ from rag_core.settings.profile import Law
 
 from indexer.connectors.crawl_setup import load_sources, make_fetcher
 from indexer.crawl.fetch import Response, Skipped
+from indexer.crawl.manifest import ManifestDoc
 
 XML = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, remove_comments=True, remove_pis=True)
 MAX_XML_BYTES = 64 * 1024 * 1024
@@ -268,17 +270,21 @@ class LawXml:
         fetcher = make_fetcher(ctx, sources.hosts, since=today, **self.fetcher_options)
         items: list[PageItem] = []
         skipped: list[dict[str, str]] = []
+        manifest: list[dict[str, Any]] = []
         for law in sources.laws[: ctx.limit]:
             reply = fetcher.get(law.xml_url)
             if isinstance(reply, Skipped):
                 skipped.append({"url": law.xml_url, "reason": reply.reason})
                 continue
             try:
-                items.append(document(law, reply))
+                item = document(law, reply)
+                items.append(item)
+                meta = {k: item.metadata[k] for k in ("regulation", "lang")}
+                manifest.append(asdict(ManifestDoc(item.url, reply.content_hash, reply.fetched, meta)))
             except (ValueError, zipfile.BadZipFile, etree.XMLSyntaxError) as exc:
                 skipped.append({"url": law.xml_url, "reason": f"unreadable: {exc}"})
         return SourceResult(
             items,
-            {"laws": len(items), "skipped": skipped},
+            {"laws": len(items), "skipped": skipped, "manifest": manifest},
             expected_minimum=int(ctx.settings.get("min_documents", 0)),
         )

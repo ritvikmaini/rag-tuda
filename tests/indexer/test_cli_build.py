@@ -210,6 +210,23 @@ def test_the_snapshot_manifest_is_written_after_the_swap_and_a_failure_to_write_
     )
 
 
+def test_a_staged_generation_gets_its_snapshot_manifest_for_the_publish_that_follows(run, db_settings):
+    run.report = {
+        "web": {
+            "documents": 1,
+            "manifest": [{"url": "https://x.example/a", "content_hash": "h", "fetched": "2026-11-20", "metadata": {}}],
+        },
+        "laws": {
+            "documents": 1,
+            "manifest": [{"url": "https://g.example/l", "content_hash": "k", "fetched": "2026-11-21", "metadata": {}}],
+        },
+    }
+    assert run("--no-swap")[0] == 0 and run.published[-1]["swap"] is False
+    crawl = Path(db_settings.overlay.paths.crawl_dir)
+    written = json.loads((crawl.parent / "snapshots" / "5.json").read_text(encoding="utf-8"))
+    assert [d["url"] for d in written["documents"]] == ["https://g.example/l", "https://x.example/a"]  # every source's
+
+
 def test_the_core_set_and_a_fresh_crawl_are_the_defaults(run):
     assert run()[0] == 0
     assert run.options == [{"sources": "core", "resume": False}]

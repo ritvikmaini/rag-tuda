@@ -141,7 +141,11 @@ def test_the_connector_hands_each_law_over_as_one_page_document(make_context, se
         "lang": "de",
     }
     assert second.metadata["doc_type"] == "Verordnung"
-    assert (result.expected_minimum, result.report) == (2, {"laws": 2, "skipped": []})
+    assert (result.expected_minimum, result.report["laws"], result.report["skipped"]) == (2, 2, [])
+    assert [(m["url"], m["metadata"]) for m in result.report["manifest"]] == [
+        (item.url, {"regulation": "residence", "lang": "de"}) for item in result.items
+    ]  # the snapshot manifest lists each law page with the date it was fetched
+    assert all(len(m["content_hash"]) == 64 and m["fetched"] for m in result.report["manifest"])
 
 
 def test_a_law_that_is_down_or_unreadable_is_listed_not_indexed(make_context, served):
