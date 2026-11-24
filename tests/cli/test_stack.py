@@ -4,6 +4,7 @@ import json
 import os
 import stat
 import sys
+import tomllib
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -50,6 +51,13 @@ class FakeSystem(stack.System):
 def test_every_model_server_module_is_the_dockerfiles():
     for name, module in stack.MODULES.items():
         assert f'"{module}"' in (ROOT / "model_servers" / name / "Dockerfile").read_text(encoding="utf-8")
+
+
+def test_the_download_tool_is_the_huggingface_hub_the_model_servers_lock():
+    for name in stack.MODULES:
+        lock = tomllib.loads((ROOT / "model_servers" / name / "uv.lock").read_text(encoding="utf-8"))
+        locked = [p["version"] for p in lock["package"] if p["name"] == "huggingface-hub"]
+        assert locked == [stack.HF_HUB_VERSION], name
 
 
 def test_a_child_does_not_inherit_rag_variables_the_settings_loader_would_refuse():

@@ -198,12 +198,12 @@ def test_a_download_names_its_host_its_size_and_its_pinned_revision(tmp_path, cu
     by_name = {s.name: s for s in steps}
     embedding = by_name["download-embedding"]
     assert embedding.host == "huggingface.co" and embedding.gb == pytest.approx(1.2)
-    assert embedding.argv[-4:] == (
-        "download",
-        "Snowflake/snowflake-arctic-embed-m-v2.0",
-        "--revision",
-        stack.PINNED["embedding"].revision,
+    assert embedding.argv == (
+        *("uvx", "--python", "3.12", "--from", f"huggingface_hub=={stack.HF_HUB_VERSION}"),
+        *("huggingface-cli", "download", "Snowflake/snowflake-arctic-embed-m-v2.0"),
+        *("--revision", stack.PINNED["embedding"].revision),
     )
+    assert embedding.env["HF_HUB_DISABLE_XET"] == "1"
     pull = by_name[f"pull-{TAG}"]
     assert pull.host == "registry.ollama.ai" and pull.gb == 2.5 and pull.argv == ("ollama", "pull", TAG)
     assert "huggingface.co" in embedding.text and "registry.ollama.ai" in pull.text

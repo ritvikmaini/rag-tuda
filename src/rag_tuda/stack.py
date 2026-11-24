@@ -38,6 +38,9 @@ SERVICES = {"embedding": runtime.PORTS["embedding"], "reranker": runtime.PORTS["
 # the profiles whose folder sources read a folder of the profile (source name -> folder in the profile); the TU profile
 # crawls the web and has none, so its index build needs no overlay file
 FOLDER_SOURCES = {"example": {"gesetze": "documents"}, "tu-informatik": {}}
+# the huggingface_hub the model servers lock (tests/cli/test_stack.py compares it with their uv.lock files); a download runs
+# this release from uvx, so no model server project environment (torch) is installed on the host
+HF_HUB_VERSION = "0.36.2"
 HF_ENV = {"HF_HUB_DISABLE_XET": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1"}
 
 
@@ -167,12 +170,14 @@ def _compose(root: str, rag: str, *files: str) -> tuple[str, ...]:
 
 def _download(name: str, pin: Pinned, root: str) -> Step:
     gb = next((m.gb for m in classes.FIXED_MODELS if m.name == pin.repo), 0.0)
-    directory = f"{root}/model_servers/{name}"
     return Step(
         "run",
         name=f"download-{name}",
         text=f"downloading {pin.repo} ({gb:g} GB) from {HF_HOST}",
-        argv=uv_argv("--project", directory, "huggingface-cli", "download", pin.repo, "--revision", pin.revision),
+        argv=(  # the model servers' Python (requires-python ==3.12.*), whatever newer one uv finds first
+            *("uvx", "--python", "3.12", "--from", f"huggingface_hub=={HF_HUB_VERSION}"),
+            *("huggingface-cli", "download", pin.repo, "--revision", pin.revision),
+        ),
         cwd=root,
         env=HF_ENV,
         gb=gb,
