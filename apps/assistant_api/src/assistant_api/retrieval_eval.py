@@ -19,7 +19,7 @@ query or a document. Logs go to stderr. A conversation with a gold that names no
 without a gold is a no-answer probe: it is counted and left out of the table, and retrieved like the others.
 
 After the table, per row, one block of probes: a line per conversation (set/id), fixed columns, `-` for no value:
-`probe  kind  returned  fused  rank  gold_score  top_score  status`. `kind` is `gold` or `none`; `returned` the sections of the final
+`probe  kind  returned  fused  rank  gold_score  top_score  status`. `kind` is `gold` or `none`; `returned` the length of the final
 list (0: the retrieval declines); `fused` and `rank` the gold's rank after fusion and after reranking; `gold_score` the gold's
 `cross_encoder_score` (the best section that is the gold; of several sources the best, or the worst for rule all); `top_score` the
 best score among all the candidates the reranker scored, before threshold, floor and cut. `status` is `ok`, `rerank_failed` (the
@@ -197,6 +197,7 @@ class Traced:
         self.service = service
         # scored in place by the reranker: cross_encoder_score, and rerank_failed after a failure
         self.children: list[Any] = []
+        self.returned = 0  # the length of the final list of the last retrieval
         rerank = service._rerank  # the one point where the fused list is complete and not yet scored
 
         async def spy(queries: list[str], documents: list[Any], parents: dict[str, str]) -> list[Any]:
@@ -210,6 +211,7 @@ class Traced:
         section store by id, so the two stages judge the same unit."""
         self.children = []
         final = await self.service.retrieve(queries, filter, **kwargs)
+        self.returned = len(final)
         fused_ids = self._ids(self.children)
         final_ids = self._ids(final)
         found = await self.service.sections.get_many(list(dict.fromkeys([*fused_ids, *final_ids])), None)
@@ -293,7 +295,7 @@ def probe_of(
     return Probe(
         name,
         gold is not None,
-        len(final),
+        traced.returned,
         rank_of(gold, fused) if gold else None,
         rank_of(gold, final) if gold else None,
         gold_score(gold, fused, scores) if gold else None,

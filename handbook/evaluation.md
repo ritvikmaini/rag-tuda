@@ -44,10 +44,12 @@ assistant. `--sets` (comma-separated set names) and `--limit` (the first N conve
 
 After the table, one block per row lists the probes, a line per conversation (set/id) with fixed columns: `probe kind returned fused
 rank gold_score top_score status`, `-` for no value. `kind` is `gold` or `none`: a conversation without a gold is a no-answer
-probe, retrieved like the others and left out of the table. `returned` counts the sections of the final list, and 0 is a decline.
+probe, retrieved like the others and left out of the table. `returned` is the length of the final list the retrieval hands to the answer, and 0 is a decline.
 `fused` and `rank` are the gold's rank after fusion and after reranking. `gold_score` is the gold's `cross_encoder_score` (the best
 section that is the gold) and `top_score` the best score among all candidates the reranker scored, before the threshold, the
-relevance floor and the cut: the numbers to read `threshold`, `relevance_floor` and `min_docs` off. `status` is `ok`,
+relevance floor and the cut: the numbers to read `threshold`, `relevance_floor` and `min_docs` off. The abstain of the
+ranking compares `relevance_floor` with the best score after the recency and date bonuses, so it can differ from `top_score` when a
+profile sets a bonus. `status` is `ok`,
 `rerank_failed` (the reranker did not answer; its 0.0 scores are no evidence, so both score columns show `-`) or `error` (the
 retrieval failed).
 
