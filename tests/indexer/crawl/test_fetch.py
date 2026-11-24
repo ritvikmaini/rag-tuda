@@ -641,6 +641,37 @@ def test_a_zip_has_its_own_limit_above_the_page_limit(tmp_path):
     assert isinstance(page, Skipped) and page.reason == "too large"  # the larger limit is for a zip only
 
 
+def test_a_zip_is_known_by_its_media_type_or_its_path_only(tmp_path):
+    body = b"PK" + b"z" * 6_000
+    for n, (path, content_type) in enumerate(
+        (("laws/xml.zip", "application/octet-stream"), ("laws/archive", "application/x-zip-compressed; q=1"))
+    ):
+        url = f"http://{FACULTY}/{path}"
+        net = Net({url: served(content_type, httpx.ByteStream(body))})
+        got = caching(net, tmp_path / str(n), page_limit=1000, zip_limit=10_000).get(url)
+        assert isinstance(got, Response) and got.body == body, path  # by the path alone, by the media type alone
+    for other in ("application/gzip", "application/x-bzip2", "application/x-gzip"):
+        url = f"http://{FACULTY}/laws/data"
+        net = Net({url: served(other, httpx.ByteStream(body))})
+        got = caching(net, tmp_path / other.rsplit("/", 1)[1], page_limit=1000, zip_limit=10_000).get(url)
+        assert isinstance(got, Skipped) and got.reason == "too large", other  # the page limit stays
+
+
+def test_a_zip_is_refused_before_its_body_when_content_length_is_over_the_limit(tmp_path):
+    url = f"http://{FACULTY}/laws/xml.zip"
+    drip = Drip(Clock(), 0.0, b"z" * 400)
+    net = Net({url: served("application/zip", drip, **{"content-length": "20000"})})
+    got = caching(net, tmp_path, page_limit=1000, zip_limit=10_000).get(url)
+    assert isinstance(got, Skipped) and got.reason == "too large" and drip.sent == 0
+
+
+def test_a_robots_txt_never_gets_the_zip_limit(tmp_path):
+    padding = "User-agent: *\n" + "# padding\n" * 500
+    net = Net(robots_served(200, padding, "application/zip"))
+    result = caching(net, tmp_path, page_limit=1000, zip_limit=100_000).get(HUB)
+    assert isinstance(result, Skipped) and result.reason == "robots.txt unreadable (too large)"
+
+
 def test_a_robots_txt_over_the_limit_disallows_the_host(tmp_path):
     net = Net(robots_served(200, "User-agent: *\n" + "# padding\n" * 500))
     result = caching(net, tmp_path, page_limit=1000).get(HUB)

@@ -136,8 +136,13 @@ def _is_pdf(url: str, content_type: str) -> bool:
     return "pdf" in content_type.lower() or (_parts(url) or urlsplit("")).path.lower().endswith(".pdf")
 
 
+ZIP_TYPES = ("application/zip", "application/x-zip-compressed")
+
+
 def _is_zip(url: str, content_type: str) -> bool:
-    return "zip" in content_type.lower() or (_parts(url) or urlsplit("")).path.lower().endswith(".zip")
+    """A zip by its media type (not gzip or bzip2) or its path; never the robots.txt file, which keeps the page limit."""
+    path = (_parts(url) or urlsplit("")).path.lower()
+    return path != "/robots.txt" and (content_type.split(";")[0].strip().lower() in ZIP_TYPES or path.endswith(".zip"))
 
 
 def blocking_meta(body: bytes) -> str | None:
