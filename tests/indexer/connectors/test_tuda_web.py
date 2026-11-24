@@ -177,7 +177,11 @@ def test_the_full_set_swaps_in_a_core_hosts_full_block_and_adds_the_full_hosts()
     assert set(core) < set(full)
     host = "www.tu-darmstadt.de"
     assert core[host].source.prefixes == () and core[host].source.depth == 0 and core[host].source.sitemaps == ()
-    assert full[host].source.prefixes == ("/studieren/studierende_tu/", "/studieren/studieren_von_a_bis_z/")
+    assert full[host].source.prefixes == (
+        "/studieren/studierende_tu/",
+        "/studieren/studieren_von_a_bis_z/",
+        "/media/daa_responsives_design/02_studium_medien/",
+    )
     assert full[host].source.sitemaps == ("https://www.tu-darmstadt.de/sitemap.de.xml",)
     assert full[host].source.seeds == core[host].source.seeds  # the listed pages stay
     assert core["www.informatik.tu-darmstadt.de"] == full["www.informatik.tu-darmstadt.de"]

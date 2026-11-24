@@ -75,10 +75,14 @@ hosts:
     depth: 0
     twins: true
     selectors: {main: "main, .main-column, #content", section: "section.content-section", drop: null}
-    # full: the TU-wide study rules, found through the sitemap
+    # full: the TU-wide study rules, found through the sitemap, and the PDFs those pages link (forms, leaflets and
+    # checklists of the study and exchange pages; one media folder, no other)
     full:
       sitemap: [https://www.tu-darmstadt.de/sitemap.de.xml]
-      prefixes: [/studieren/studierende_tu/, /studieren/studieren_von_a_bis_z/]
+      prefixes:
+        - /studieren/studierende_tu/
+        - /studieren/studieren_von_a_bis_z/
+        - /media/daa_responsives_design/02_studium_medien/
       exclude: []
       depth: 0
   digitales-rathaus.darmstadt.de:
@@ -98,10 +102,10 @@ hosts:
     selectors: {main: ".page-container", section: "section.content-section", drop: null}
   www.ladadi.de:
     set: full
-    # the Ausländerwesen pages for students who live in the Landkreis
+    # the Ausländerwesen pages for students who live in the Landkreis, and the forms and leaflets they link
     seeds: [https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/]
     sitemap: [https://www.ladadi.de/sitemap.xml]
-    prefixes: [/umwelt-soziales/migration/auslaenderwesen/]
+    prefixes: [/umwelt-soziales/migration/auslaenderwesen/, /medien/pdfs/fb-510-auslaenderwesen-visum/]
     exclude: []
     depth: 0
     twins: false

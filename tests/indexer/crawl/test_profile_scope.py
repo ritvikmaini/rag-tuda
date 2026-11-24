@@ -1,15 +1,20 @@
 """The faculty host's scope in the TU profile: the study area of the three configured programmes is in, the other
-programmes' hubs and pages and the rest of the faculty's site are out. Nothing is fetched."""
+programmes' hubs and pages and the rest of the faculty's site are out. The full set also takes the PDFs of the TU-wide
+study pages and of the Landkreis's Ausländerwesen pages from one media folder each. Nothing is fetched."""
 
+import dataclasses
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import pytest
 from rag_core.settings import load_profile
-from rag_core.settings.profile import Sources
+from rag_core.settings.profile import Roles, Sources
 
+from indexer.connectors.crawl_setup import active_hosts
 from indexer.crawl.discover import Source, in_scope
-from indexer.crawl.metadata import twin_keys
+from indexer.crawl.extract import Extraction, Link
+from indexer.crawl.metadata import Candidate, pdf_metadata, select_documents, twin_keys
+from indexer.crawl.robots import Robots
 
 TU = Path(__file__).resolve().parents[3] / "profiles" / "tu-informatik"
 HOST = "www.informatik.tu-darmstadt.de"
@@ -80,3 +85,91 @@ def test_pdf_twins_pair_the_english_pdfs_with_their_german_ones():
     for pair in sources.pdf_twins:
         assert pair.de != pair.en and keys[pair.en] == keys[pair.de] == pair.de
         assert urlsplit(pair.de).hostname in sources.hosts and urlsplit(pair.en).hostname in sources.hosts
+
+
+TU_HOST = "www.tu-darmstadt.de"
+LADADI = "www.ladadi.de"
+TU_PDFS = "/media/daa_responsives_design/02_studium_medien/"
+LADADI_PDFS = "/medien/pdfs/fb-510-auslaenderwesen-visum/"
+FULL_PDFS = [
+    (
+        TU_HOST,
+        f"{TU_PDFS}04_auslandsaufenthalte_medien/01_austauschprogramme_outgoing/checkliste_erasmus_outgoings.pdf",
+    ),
+    (TU_HOST, f"{TU_PDFS}06_internationale_studierende_medien/01_ihr_aufenthalt/vor_der_ankunft_checkliste.pdf"),
+    (TU_HOST, f"{TU_PDFS}Wahl_FB__alle_StG.pdf"),
+    (LADADI, f"{LADADI_PDFS}2025-wohnbescheinigung.pdf?cid=7q4"),
+    (LADADI, f"{LADADI_PDFS}zusatzblatt-a-16d-aufenthg.pdf"),
+]
+NOT_FULL_PDFS = [
+    (TU_HOST, "/media/dezernat_ii/studierendensekretariat/rueckmeldung.pdf"),
+    (TU_HOST, "/media/daa_responsives_design/01_studieninteressierte_medien/x.pdf"),
+    (TU_HOST, "/media/dezernat_ii/ordnungen/apb.pdf"),
+    (LADADI, "/medien/pdfs/fb-300-bauen/antrag.pdf"),
+    (LADADI, f"{TU_PDFS}a.pdf"),  # a folder of the other host
+    (TU_HOST, f"{LADADI_PDFS}a.pdf"),
+]
+
+
+def _source(host: str, full: bool) -> Source | None:
+    found = active_hosts(load_profile(Sources, TU / "sources.yaml"), full)
+    return found[host].source if host in found else None
+
+
+@pytest.mark.parametrize(("host", "path"), FULL_PDFS)
+def test_the_full_set_takes_the_pdfs_of_the_two_media_folders(host: str, path: str):
+    source = _source(host, full=True)
+    assert source and in_scope(source, f"https://{host}{path}")
+    assert not (core := _source(host, full=False)) or not in_scope(core, f"https://{host}{path}")
+
+
+@pytest.mark.parametrize(("host", "path"), NOT_FULL_PDFS)
+def test_no_other_media_folder_is_in_the_full_set(host: str, path: str):
+    source = _source(host, full=True)
+    assert source and not in_scope(source, f"https://{host}{path}")
+
+
+def test_the_core_set_has_no_media_prefix_of_the_tu_wide_host_and_not_the_landkreis():
+    assert _source(TU_HOST, full=False).prefixes == () and _source(LADADI, full=False) is None
+    assert _source(HOST, full=False) == _source(HOST, full=True)
+
+
+def test_exclusions_and_dot_segments_still_apply_in_the_media_folders():
+    source = _source(TU_HOST, full=True)
+    narrowed = dataclasses.replace(source, exclude=(f"{TU_PDFS}stipendien_und_preise/",))
+    assert not in_scope(narrowed, f"https://{TU_HOST}{TU_PDFS}stipendien_und_preise/freudenberg/Karte.pdf")
+    assert in_scope(narrowed, f"https://{TU_HOST}{TU_PDFS}Wahl_FB__alle_StG.pdf")
+    assert not in_scope(source, f"https://{TU_HOST}{TU_PDFS}../../dezernat_ii/x.pdf")
+    assert not in_scope(source, f"http://{TU_HOST}:8080{TU_PDFS}x.pdf")
+
+
+def test_robots_rules_of_the_hosts_still_apply_to_the_media_folders():
+    robots = Robots.parse("User-agent: *\nDisallow: /*view=\nDisallow: /*.form\n")
+    agent = "rag-tuda/1.0"
+    assert not robots.allowed(agent, f"https://{TU_HOST}{TU_PDFS}Wahl_FB__alle_StG.pdf?view=print")
+    assert robots.allowed(agent, f"https://{TU_HOST}{TU_PDFS}Wahl_FB__alle_StG.pdf")
+
+
+def _typed(text: str, name: str = "x.pdf"):
+    """The metadata of a PDF of the TU media folder, linked from a page that no programme owns."""
+    page = Extraction(f"https://{TU_HOST}/studieren/studierende_tu/a.de.jsp", "A", (), ())
+    roles = load_profile(Roles, TU / "roles.yaml")
+    url = f"https://{TU_HOST}{TU_PDFS}{name}"
+    return roles, Candidate(url, "h", pdf_metadata(Link(url, text, "", None), page, roles))
+
+
+@pytest.mark.parametrize(
+    ("text", "name", "regulation"),
+    [
+        ("Prüfungsordnung des Fachbereichs 3", "x.pdf", "po"),
+        ("Studienordnung", "x.pdf", "po"),
+        ("Modulhandbuch", "x.pdf", "mhb"),
+        ("Studien- und Prüfungsplan", "x.pdf", "spp"),
+    ],
+)
+def test_a_typed_regulation_in_the_media_folder_fails_closed(text: str, name: str, regulation: str):
+    roles, candidate = _typed(text, name)
+    assert candidate.metadata.regulation == regulation
+    selection = select_documents([candidate], roles)
+    assert not selection.kept
+    assert [url for url, _ in selection.not_indexed] == [candidate.url]  # lacking programme and PO version
