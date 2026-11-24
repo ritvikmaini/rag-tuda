@@ -177,7 +177,7 @@ def test_the_default_overlay_names_the_example_profiles_law_texts():
 
 def test_the_job_reads_runs_through_a_read_only_mount_and_writes_inside_its_container():
     # the job's non-root user cannot write a bind mount owned by the host user; every command writes into the
-    # container's own out_dir, and the result is copied out with docker cp
+    # container's own out_dir (rag eval mounts a host folder over it to keep the results)
     from evals.settings import EvalsSection
 
     (volume,) = services("deploy/compose.yaml")["evals"]["volumes"]

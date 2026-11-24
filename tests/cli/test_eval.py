@@ -77,8 +77,8 @@ def test_compose_runs_the_smoke_in_the_evals_container_and_refuses_the_retrieval
     folder, step = rag_eval.plan(recorded(tmp_path, a), facts(tmp_path), a, retrieval_only=False, ablation=False)
     assert folder.argv == ("mkdir", "-p", out)  # made by this user: Docker would create it as root
     user = f"{os.getuid()}:{os.getgid()}"
-    assert step.argv[step.argv.index("run") :] == (
-        "run", "--rm", "--user", user, "-v", f"{out}:{out}", "-e", f"RAG__EVALS__OUT_DIR={out}",
+    assert step.argv[step.argv.index("--profile") :] == (
+        "--profile", "evals", "run", "--rm", "--user", user, "-v", f"{out}:{out}", "-e", f"RAG__EVALS__OUT_DIR={out}",
         "evals", "smoke", "--label", S4B["name"],
     )  # fmt: skip
     with pytest.raises(stack.StackError, match="native"):
