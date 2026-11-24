@@ -134,15 +134,15 @@ remote card is active. Only the generation call leaves the machine, to the card'
 
 ## Evaluation
 
-`uv run rag eval` runs the deploy smoke against the running stack: the five fixed probes of the profile's `gate.yaml`, about six
-requests, about two minutes. It checks the structure of the stream only, so a correct deploy does not fail on answer variance: no
+`uv run rag eval` runs the deploy smoke against the running stack: the fixed probes of the profile's `gate.yaml` (five in the example
+profile: about six requests, about two minutes). It checks the structure of the stream only, so a correct deploy does not fail on answer variance: no
 error frames, the time to first token, the sequence of status steps, and the `docs`, `chunk` and `citations` frames. The checks
 on the answers themselves (each `[n]` maps to a source, the language equals the question's, the PO-version line, "Sie" in
 German answers, the residence disclaimer) belong to the gate and probe runs of `apps/evals`, not to the smoke.
 
 `uv run rag eval --smoke` plays the profile's whole smoke set (`smoke/smoke_v1.json` of `profiles/tu-informatik`: hand-written
 questions, some asked with the page's degree, programme or PO chips) and applies the answer checks above to each answer. A
-question whose answer is a fee or a date (`retrieval.volatile` in `gate.yaml`) prints `stale` instead of `FAIL` when it fails. The
+question whose answer is a fee or a date (`retrieval.volatile` in `gate.yaml`) prints `stale` instead of `FAIL` when only its content checks fail. The
 quote of each question's gold source was copied from the crawl; `--retrieval-only` reports a gold whose quote is in no section of
 its url as stale and leaves it out of the scores. The smoke set has not been run on the TU stack yet, so there are no results here.
 

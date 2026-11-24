@@ -1,7 +1,7 @@
 # Evaluation
 
 Three things are measured against the running stack: that a deploy works (the smoke), whether answers hold up (the probe
-runs), and where the right source ranks (the retrieval eval). `rag eval` reads `<profile>/gate.yaml`: `rag eval` runs its five fixed
+runs), and where the right source ranks (the retrieval eval). `rag eval` reads `<profile>/gate.yaml`: `rag eval` runs its fixed
 probes (the deploy smoke), `rag eval --smoke` plays its smoke set (the set `smoke`) with the answer checks.
 
 ## The TU question set
@@ -19,7 +19,7 @@ Landkreis pages) are added after the full build. The example profile has its own
 
 ## The deploy smoke
 
-`rag eval` runs the five fixed probes of `gate.yaml` (about six requests, about two minutes) and checks structure only, so a
+`rag eval` runs the fixed probes of `gate.yaml` (five in the example profile: about six requests, about two minutes) and checks structure only, so a
 correct deploy never fails on answer variance: no error frames, the time to first token, the sequence of status steps, and the
 `docs`, `chunk` and `citations` frames.
 
@@ -28,6 +28,10 @@ correct deploy never fails on answer variance: no error frames, the time to firs
 The answer checks run in the gate and probe runs of `apps/evals`, as `expect` keys of a probe: every `[n]` maps to a source; the
 answer's language equals the question's; the PO-version line is present when a version-bound source is cited; "Sie" in German
 answers; the residence disclaimer when a residence source is cited.
+
+`evals run` (and so `rag eval --smoke`) exits 0 whatever the verdicts, so a person reads its `RESULT` line: `n ok, n FAIL, n stale of n
+turns`. A volatile turn is `stale` only when content checks (`contains_any`, `digits_any`, `source_url_any`) failed; an error frame,
+an empty answer, a wrong language, a missing "Sie" or a broken citation is `FAIL` for every turn.
 
 ## Retrieval eval
 
