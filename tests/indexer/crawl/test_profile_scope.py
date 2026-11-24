@@ -146,6 +146,19 @@ def test_exclusions_and_dot_segments_still_apply_in_the_media_folders():
     assert not in_scope(source, f"http://{TU_HOST}:8080{TU_PDFS}x.pdf")
 
 
+def test_outdated_and_expired_pdfs_are_out_of_the_full_set_and_their_neighbours_stay():
+    internships = f"{TU_PDFS}02_studierende_medien/04_auslandsaufenthalte_medien/03_praktikum_erasmus_outbound_medien/"
+    tu, landkreis = _source(TU_HOST, full=True), _source(LADADI, full=True)
+    assert not in_scope(
+        tu, f"https://{TU_HOST}{internships}stellenausschreibungen_2/sdu_university_of_southern_denmark_2026.pdf"
+    )
+    assert not in_scope(
+        landkreis, f"https://{LADADI}{LADADI_PDFS}antrag-verlaengerung-visum-stand-januar-2006.pdf?cid=38p"
+    )
+    assert in_scope(tu, f"https://{TU_HOST}{internships}Infoblatt_Zusatzfoerderung.pdf")
+    assert in_scope(landkreis, f"https://{LADADI}{LADADI_PDFS}2025-wohnbescheinigung.pdf")
+
+
 def test_robots_rules_of_the_host_still_apply_to_a_pdf_of_the_media_folder():
     def robots_txt(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/robots.txt":

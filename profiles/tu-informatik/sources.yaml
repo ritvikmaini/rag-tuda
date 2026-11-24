@@ -83,7 +83,17 @@ hosts:
         - /studieren/studierende_tu/
         - /studieren/studieren_von_a_bis_z/
         - /media/daa_responsives_design/02_studium_medien/
-      exclude: []
+      # out of the media folder: calls and offers of a past date, and decks and guides of 2018 to 2022 that state rates or
+      # steps the current pages and decks state differently (a path prefix: a folder, or a file name's start)
+      exclude:
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/04_auslandsaufenthalte_medien/01_austauschprogramme_outbound_medien/01_europa_erasmus_outbound_medien/20221114_
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/04_auslandsaufenthalte_medien/01_austauschprogramme_outbound_medien/02_austausch_in_die_welt_outbound_medien/DAAD_Hinweise_Sicherheitsvorsorge_Projekte.pdf
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/04_auslandsaufenthalte_medien/02_auslandsaufenthalte_dokuemente/Leitfaden_Online_Bewerbung_Out.pdf
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/04_auslandsaufenthalte_medien/03_praktikum_erasmus_outbound_medien/Go_Out_Praesentation_Erasmus-Praktika.pdf
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/04_auslandsaufenthalte_medien/03_praktikum_erasmus_outbound_medien/stellenausschreibung
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/04_auslandsaufenthalte_medien/04_sommer_und_winterschulen_outbound_medien/
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/06_internationale_studierende_medien/06_foerderung_und_stipendien_international_medien/Nebenjob_Checkliste_ISS.pdf
+        - /media/daa_responsives_design/02_studium_medien/02_studierende_medien/stipendien_und_preise/freudenberg/
       depth: 0
   digitales-rathaus.darmstadt.de:
     set: core
@@ -106,7 +116,7 @@ hosts:
     seeds: [https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/]
     sitemap: [https://www.ladadi.de/sitemap.xml]
     prefixes: [/umwelt-soziales/migration/auslaenderwesen/, /medien/pdfs/fb-510-auslaenderwesen-visum/]
-    exclude: []
+    exclude: [/medien/pdfs/fb-510-auslaenderwesen-visum/antrag-verlaengerung-visum-stand-januar-2006.pdf]  # a form of 2006
     depth: 0
     twins: false
     selectors: {main: "main, #content, .main-column", section: "section.content-section", drop: null}
