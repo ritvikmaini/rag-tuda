@@ -146,6 +146,23 @@ def test_exclusions_and_dot_segments_still_apply_in_the_media_folders():
     assert not in_scope(source, f"http://{TU_HOST}:8080{TU_PDFS}x.pdf")
 
 
+def _excludes() -> list[tuple[str, str]]:
+    return [
+        (h.source.host, e)
+        for h in active_hosts(load_profile(Sources, TU / "sources.yaml"), True).values()
+        for e in h.source.exclude
+    ]
+
+
+@pytest.mark.parametrize(("host", "entry"), _excludes())
+def test_every_exclude_entry_of_the_profile_puts_out_the_urls_under_it_and_only_it(host: str, entry: str):
+    source = _source(host, full=True)
+    under = f"https://{host}{entry}{'' if entry.endswith('.pdf') else 'x.pdf'}"
+    assert not in_scope(source, under)
+    others = dataclasses.replace(source, exclude=tuple(e for e in source.exclude if e != entry))
+    assert in_scope(others, under)  # the entry alone puts it out: a prefix matches and no other entry does
+
+
 def test_outdated_and_expired_pdfs_are_out_of_the_full_set_and_their_neighbours_stay():
     internships = f"{TU_PDFS}02_studierende_medien/04_auslandsaufenthalte_medien/03_praktikum_erasmus_outbound_medien/"
     tu, landkreis = _source(TU_HOST, full=True), _source(LADADI, full=True)
