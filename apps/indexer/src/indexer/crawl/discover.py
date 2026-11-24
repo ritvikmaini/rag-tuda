@@ -14,7 +14,8 @@ followed. Which hosts may be fetched and what robots.txt allows stays
 with the `Fetcher`, which is for one thread: discovery calls it from one.
 
 With `twins`, each `.de.jsp` URL is also asked for as `.en.jsp` (as is any `.en.jsp` URL found); the twin is listed when it
-is an English page, not when it only carries the notice that the content is available in German or when its text is German.
+is an English page: not when it carries the notice that the content is available in German (read from the whole page: the
+faculty's pages keep it outside the main content), not when its main content (link targets left out) is empty or German.
 
 XML is parsed without entity resolution, network access or DTD loading."""
 
@@ -22,6 +23,7 @@ import logging
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from urllib.parse import SplitResult, urldefrag, urljoin, urlsplit, urlunsplit
 
 import lxml.etree as etree
@@ -30,9 +32,13 @@ from rag_core.domain.language import detect
 
 from indexer.crawl.fetch import Fetcher, Response, Skipped
 
+if TYPE_CHECKING:
+    from indexer.crawl.extract import Selectors
+
 __all__ = ["Source", "discover", "in_scope", "normalise", "stays_in_scope"]
 
 GERMAN_ONLY_NOTICE = "The content of this page is only available in German"
+LINK_TARGET = re.compile(r"\]\([^)\s]*\)")  # the URL of a Markdown link: its words belong to no language
 MAX_SITEMAP_NESTING = 3
 XML = etree.XMLParser(resolve_entities=False, no_network=True, load_dtd=False, dtd_validation=False)
 log = logging.getLogger(__name__)
@@ -182,7 +188,9 @@ def _follow(source: Source, fetcher: Fetcher, found: dict[str, None]) -> None:
         level = following
 
 
-def _english_page(source: Source, fetcher: Fetcher, url: str) -> bool:
+def _english_page(source: Source, fetcher: Fetcher, url: str, selectors: "Selectors | None") -> bool:
+    from indexer.crawl.extract import Selectors, extract  # extract imports `normalise` from this module
+
     reply = fetcher.get(url)
     if isinstance(reply, Skipped) or not stays_in_scope(source, reply, url) or "html" not in reply.content_type.lower():
         return False
@@ -191,8 +199,11 @@ def _english_page(source: Source, fetcher: Fetcher, url: str) -> bool:
     except (ValueError, etree.ParserError):
         return False
     etree.strip_elements(tree, "script", "style", with_tail=False)
-    text = " ".join(tree.text_content().split())
-    return GERMAN_ONLY_NOTICE not in text and detect(text) == "en"
+    if GERMAN_ONLY_NOTICE in " ".join(tree.text_content().split()):
+        return False
+    page = extract(reply.body, reply.final_url, selectors or Selectors(), reply.content_type)
+    main = LINK_TARGET.sub("]", "\n".join(d.markdown for d in page.documents))
+    return bool(main) and detect(main) == "en"
 
 
 def _twin(url: str) -> str:
@@ -200,8 +211,9 @@ def _twin(url: str) -> str:
     return urlunsplit(parts._replace(path=parts.path.removesuffix(".de.jsp") + ".en.jsp"))
 
 
-def discover(source: Source, fetcher: Fetcher) -> list[str]:
-    """The URLs of the source, in discovery order and without repeats: seeds, then sitemap entries, then followed links."""
+def discover(source: Source, fetcher: Fetcher, selectors: "Selectors | None" = None) -> list[str]:
+    """The URLs of the source, in discovery order and without repeats: seeds, then sitemap entries, then followed links.
+    `selectors` (the host's, the extractor's defaults without) say where a twin's main content is."""
     found: dict[str, None] = {}
     for seed in map(normalise, source.seeds):
         if seed and _origin(source, urlsplit(seed)):
@@ -216,4 +228,6 @@ def discover(source: Source, fetcher: Fetcher) -> list[str]:
         return list(found)
     english = [u for u in found if _path(u).endswith(".en.jsp")]
     candidates = dict.fromkeys([_twin(u) for u in found if _path(u).endswith(".de.jsp")] + english)
-    return [u for u in found if u not in english] + [u for u in candidates if _english_page(source, fetcher, u)]
+    return [u for u in found if u not in english] + [
+        u for u in candidates if _english_page(source, fetcher, u, selectors)
+    ]

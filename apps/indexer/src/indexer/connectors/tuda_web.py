@@ -269,7 +269,7 @@ class TudaWeb:
         crawl: Crawl,
     ) -> None:
         """Fetch and extract the pages discovery lists for `host` and the PDFs they link."""
-        for url in discover(host.source, fetcher):
+        for url in discover(host.source, fetcher, host.selectors):
             if limit is not None and crawl.pages >= limit:
                 return
             if url.lower().endswith(".pdf"):

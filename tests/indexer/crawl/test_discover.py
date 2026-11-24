@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from rag_testing import serve
 from rag_testing.minisite import pages
 
-from indexer.crawl.discover import Source, discover, in_scope, normalise
+from indexer.crawl.discover import GERMAN_ONLY_NOTICE, Source, discover, in_scope, normalise
 from indexer.crawl.fetch import Fetcher
 
 FACULTY = "faculty.test"
@@ -173,6 +173,48 @@ def test_en_twin_dropped_on_german_body():
     # the hub twin carries the notice, the Pruefungen twin has a German body without it, the noai page has no twin at all
     assert found == [*seeds[:1], STUDIENBUERO_DE, PRUEFUNGEN_DE, NOAI, STUDIENBUERO_EN]
     assert STUDIENBUERO_EN in net.log and HUB.replace(".de.", ".en.") in net.log
+
+
+ENGLISH_CHROME = '<nav class="main-nav">Contact us. Please read the notes about the use of this page and the data that we keep.</nav>'
+LINKS_ONLY = (
+    '<ul><li><a href="/media/ordnungen_cs/studien-_und_pruefungsplan_der_ordnung_fuer_das_studium.en.pdf">Study and '
+    'examination plan</a></li><li><a href="/media/ordnungen_cs/modulhandbuch_und_ordnung_der_studiengaenge.en.pdf">'
+    "Module handbook for the programme</a></li></ul>"
+)
+
+
+def twin_page(main: str, outside: str = "") -> tuple[str, str]:
+    """An English twin of the study office page: English page chrome around `.main-column` (and `outside` beside it)."""
+    html = f'<html><body>{ENGLISH_CHROME}{outside}<div class="main-column">{main}</div></body></html>'
+    return "text/html", html
+
+
+def twins_found(twin: tuple[str, str]) -> list[str]:
+    found, _ = run(
+        src(FACULTY, prefixes=(STUDIUM,), seeds=(STUDIENBUERO_DE,), twins=True), Net(extra={STUDIENBUERO_EN: twin})
+    )
+    return found
+
+
+def test_twin_language_is_read_from_the_main_content():
+    german = (
+        "<p>Das Studienbüro berät zu Prüfungen, Anmeldungen und Abschlussarbeiten. Die Sprechstunde ist dienstags.</p>"
+    )
+    assert twins_found(twin_page(german)) == [STUDIENBUERO_DE]  # German text between English page chrome
+    assert twins_found(twin_page("")) == [STUDIENBUERO_DE]  # nothing to index
+    english = "<p>The study office advises on examinations, registrations and theses. Office hours are on Tuesdays.</p>"
+    assert twins_found(twin_page(english)) == [STUDIENBUERO_DE, STUDIENBUERO_EN]
+
+
+def test_twin_that_is_a_list_of_links_is_judged_by_the_link_texts():
+    # the words of the German file names in the link targets do not make the page German
+    assert twins_found(twin_page(LINKS_ONLY)) == [STUDIENBUERO_DE, STUDIENBUERO_EN]
+
+
+def test_german_only_notice_outside_the_main_content_drops_the_twin():
+    notice = f'<p class="notice">{GERMAN_ONLY_NOTICE}.</p>'
+    english = "<p>The study office advises on examinations, registrations and theses. Office hours are on Tuesdays.</p>"
+    assert twins_found(twin_page(english, outside=notice)) == [STUDIENBUERO_DE]
 
 
 def test_linked_en_pages_go_through_the_twin_check():
