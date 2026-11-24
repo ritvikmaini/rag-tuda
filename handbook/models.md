@@ -42,7 +42,8 @@ The S cards' timeouts (`deadline_s` 150, `idle_s` 60, `llm_read_s` 60, `analysis
 also bounds the silence of one `get_docs` call, whose stage timeouts add up to about 57 s (retrieval 10 + 2 s, parent lookup 5 s,
 reranker 15 s, then the reference hop's 5 + 5 + 15 s), so the limits leave room for the stack's own waits. `window_tokens` is the
 largest budget whose first token stays under half of `idle_s`: the full 8000-token window's first token is at most 21 s, a 16K
-prompt takes 29 to 61 s. Ollama 0.40.17 answers HTTP 501 ("structured
+prompt takes 29 to 61 s. `s-gemma4-e4b` stays at 8000 for memory too: the model takes 9.5 GB of the 10.4 GB usable, and its 16K prompt's
+first token (29 s) is just under half of `idle_s`. Ollama 0.40.17 answers HTTP 501 ("structured
 output is unavailable") to a `response_format` for `qwen3.5:4b` and `gemma4:e4b`, whose cards use `structured_output = "prompt"`
 (10 of 10 analysis replies were valid JSON of the schema). An earlier measurement of the default card on an M1 Max with 64 GB
 (Ollama 0.40.12): a 6K-token prompt reached its first token after 16.4 s and decoding ran at 25 to 33 tokens/s. The M, L and XL

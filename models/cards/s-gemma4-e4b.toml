@@ -25,7 +25,8 @@ analysis = "off"
 # measured on an M2 Pro with 16 GB, Ollama 0.40.17 (the model takes 9.5 GB of the 10.4 GB usable): a full 8000-token window
 # (7.3K prompt tokens) prefills at about 570 tokens/s and decodes at about 41 tokens/s: the first token comes after 18 s and a
 # 700-token answer ends after 35 s (a cold model load adds 5 s); an analysis that is not answered from the prompt cache takes
-# 12 s including the load.
+# 7.4 s, plus 5 s when it also loads the model (two runs). The window stays 8000 for memory too: a 16K prompt's first token comes after
+# 29 s, just under half of idle_s.
 # The limits are not tied to the slowest model case: idle_s also bounds the silence of one get_docs call, whose stage
 # timeouts add up to about 57 s (retrieval 10 + 2 s, parent lookup 5 s, reranker 15 s, then the reference hop's 5 + 5 + 15 s), so
 # they leave room for the stack's own waits; the full window's first token (at most 21 s) stays under half of idle_s.
