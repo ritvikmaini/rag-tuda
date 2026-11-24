@@ -40,6 +40,17 @@ def test_ocr_that_returns_only_the_stamp_leaves_the_document_without_text():
     assert repaired == {} and quality["empty_pages"] == [1, 2, 3, 4, 5] and quality["ocr_pages"] == []
 
 
+def test_ocr_that_joins_or_rewraps_the_stamp_is_still_only_the_stamp():
+    pages = {n: stamped(n) for n in range(1, 6)}
+    joined = {1: "Satzungsbeilage 2023-IV, Seite 31 von 225", 2: "Satzungsbeilage 2023-IV,\nSeite\n32 von 225"}
+    repaired, quality = q.repair_pages(
+        pages, page_count=5, ocr_fn=lambda numbers: {n: joined.get(n, "") for n in numbers}
+    )
+    assert repaired == {} and quality["ocr_pages"] == []
+    stamps = q.stamp_lines(pages, 5)
+    assert q.classify_page("Satzungsbeilage 2023-IV, Seite 33 von 225 § 1 Geltungsbereich der Ordnung", stamps) == "ok"
+
+
 def test_a_short_pdf_has_no_page_stamps():
     page = "Gebührenordnung der Hochschule, Fassung vom Januar"
     two = {1: page, 2: page}

@@ -65,6 +65,14 @@ def _blank_digits(line):
     return " ".join(_DIGITS.sub("0", line).split())
 
 
+def _only_stamps(squeezed, stamps):
+    """True when the page text without any space or line break is its stamps (OCR may join or re-wrap them) and stray marks."""
+    rest = _DIGITS.sub("0", squeezed)
+    for stamp in sorted(stamps, key=len, reverse=True):
+        rest = rest.replace("".join(stamp.split()), "")
+    return len(rest) < MARK_LINE
+
+
 def classify_page(text, stamps=()):
     """'ok', 'encoded' (mostly substituted glyph codes) or 'empty' (no usable text: also a page that holds nothing but the
     lines in `stamps`, give or take stray marks)."""
@@ -73,7 +81,7 @@ def classify_page(text, stamps=()):
         return "empty"
     if stamps:
         beside = (line for line in (text or "").splitlines() if _blank_digits(line) not in stamps)
-        if all(len(_visible(line)) < MARK_LINE for line in beside):
+        if all(len(_visible(line)) < MARK_LINE for line in beside) or _only_stamps("".join(chars), stamps):
             return "empty"
     encoded = sum(1 for c in chars if _PUA_LO <= ord(c) <= _PUA_HI)
     return "encoded" if encoded >= ENCODED_SHARE * len(chars) else "ok"
