@@ -427,6 +427,11 @@
         "url": "https://www.informatik.tu-darmstadt.de/forschung_fb20/wissenschaftliche_karriere/promotion/index.de.jsp",
         "heading": "Verlängerung der Annahme als Doktorand:in",
         "quote": "Zwischen Annahme und Einleitung des Promotionsverfahrens sollten nicht mehr als fünf Jahre liegen."
+       },
+       {
+        "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/promotionsordnung.pdf",
+        "page": 8,
+        "quote": "Zwischen der Annahme als Doktorand:in und der Einleitung des Promotionsverfahrens sollen in der Regel nicht mehr als fünf Jahre liegen."
        }
       ],
       "rule": "any"
@@ -458,6 +463,16 @@
         "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studiengaenge_liste/msc_computer_science.en.jsp",
         "heading": "Overview",
         "quote": "Applicants must provide proof of their English skills: UNIcert level III, TOEFL test (Paper 550, CBT 213, iBT 95), IELTS 7.0, CEFR C1 or equivalent."
+       },
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studiengaenge_liste/computer_science_msc.de.jsp",
+        "heading": "Überblick",
+        "quote": "Englischkenntnisse auf dem Niveau: UNIcert Stufe III, TOEFL-Test (Paper 550, CBT 213, iBT 95), IELTS 7.0, CEFR C1 oder gleichwertig"
+       },
+       {
+        "url": "https://www.informatik.tu-darmstadt.de/studium_fb20/im_studium/studiengaenge_liste/msc_computer_science.de.jsp",
+        "heading": "Überblick",
+        "quote": "Englischkenntnisse auf dem Niveau: UNIcert Stufe III, TOEFL-Test (Paper 550, CBT 213, iBT 95), IELTS 7.0, CEFR C1 oder gleichwertig"
        }
       ],
       "rule": "any"
