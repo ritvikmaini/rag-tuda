@@ -199,7 +199,7 @@ def test_a_download_names_its_host_its_size_and_its_pinned_revision(tmp_path, cu
     embedding = by_name["download-embedding"]
     assert embedding.host == "huggingface.co" and embedding.gb == pytest.approx(1.2)
     assert embedding.argv == (
-        *("uvx", "--python", "3.12", "--from", f"huggingface_hub=={stack.HF_HUB_VERSION}"),
+        *("uv", "tool", "run", "--from", f"huggingface_hub=={stack.HF_HUB_VERSION}"),
         *("huggingface-cli", "download", "Snowflake/snowflake-arctic-embed-m-v2.0"),
         *("--revision", stack.PINNED["embedding"].revision),
     )
@@ -211,6 +211,14 @@ def test_a_download_names_its_host_its_size_and_its_pinned_revision(tmp_path, cu
     assert "total about 6 GB" in listing and TAG in listing
     assert stack.confirm_text([s for s in steps if not s.is_download]) is None
     assert "docling" not in listing  # the example profile reads no PDF
+
+
+def test_a_download_is_the_same_tool_run_in_compose_mode_and_the_python_note_is_native_only(tmp_path, current):
+    steps = stack.plan_up(current, facts(tmp_path, ollama_up=True), args(mode="compose"))
+    argv = next(s for s in steps if s.name == "download-embedding").argv
+    assert argv[:4] == ("uv", "tool", "run", "--from") and "--project" not in argv
+    assert "Python environments" not in (stack.confirm_text(steps, mode="compose") or "")
+    assert "Python environments" in (stack.confirm_text(steps) or "")
 
 
 def test_a_profile_that_reads_pdfs_names_the_models_its_indexer_fetches(tmp_path, current):

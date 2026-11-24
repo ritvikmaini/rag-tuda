@@ -39,7 +39,7 @@ SERVICES = {"embedding": runtime.PORTS["embedding"], "reranker": runtime.PORTS["
 # crawls the web and has none, so its index build needs no overlay file
 FOLDER_SOURCES = {"example": {"gesetze": "documents"}, "tu-informatik": {}}
 # the huggingface_hub the model servers lock (tests/cli/test_stack.py compares it with their uv.lock files); a download runs
-# this release from uvx, so no model server project environment (torch) is installed on the host
+# this release through `uv tool run`, so no model server project environment (torch) is installed on the host
 HF_HUB_VERSION = "0.36.2"
 HF_ENV = {"HF_HUB_DISABLE_XET": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1"}
 
@@ -174,8 +174,8 @@ def _download(name: str, pin: Pinned, root: str) -> Step:
         "run",
         name=f"download-{name}",
         text=f"downloading {pin.repo} ({gb:g} GB) from {HF_HOST}",
-        argv=(  # the model servers' Python (requires-python ==3.12.*), whatever newer one uv finds first
-            *("uvx", "--python", "3.12", "--from", f"huggingface_hub=={HF_HUB_VERSION}"),
+        argv=(
+            *("uv", "tool", "run", "--from", f"huggingface_hub=={HF_HUB_VERSION}"),
             *("huggingface-cli", "download", pin.repo, "--revision", pin.revision),
         ),
         cwd=root,
@@ -1082,9 +1082,9 @@ def gather_down(root: Path, rag: Path, hardware) -> DownFacts:
     return DownFacts(str(root), bool(hardware.docker.ok), pid_files)
 
 
-def confirm_text(steps: list[Step], profile: str = "example") -> str | None:
+def confirm_text(steps: list[Step], profile: str = "example", mode: str = "native") -> str | None:
     """The downloads of a plan, one per line, with the total; None when there are none. A profile that reads PDFs adds
-    the models its indexer fetches by itself."""
+    the models its indexer fetches by itself; in native mode the total also warns about the servers' Python environments."""
     downloads = [s for s in steps if s.is_download]
     if not downloads:
         return None
@@ -1099,7 +1099,10 @@ def confirm_text(steps: list[Step], profile: str = "example") -> str | None:
         [
             "This will download:",
             *lines,
-            f"  total about {total:g} GB (sizes the cards state; the model servers' first start also installs their Python environments)",
+            f"  total about {total:g} GB (sizes the cards state"
+            + (
+                "; the model servers' first start also installs their Python environments)" if mode == "native" else ")"
+            ),
             *more,
         ]
     )
