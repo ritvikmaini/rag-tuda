@@ -14,7 +14,7 @@ import yaml
 from evals.settings import load_settings
 from rag_core.domain.language import QUOTED, detect
 from rag_core.domain.notes import appended_lines, po_line
-from rag_core.domain.source_meta import cited_numbers as _cited_numbers
+from rag_core.domain.source_meta import CITATION_GROUP, cited_numbers as _cited_numbers
 
 LEAK_PATTERN = re.compile(r"PdfPipelineOptions|Image not available|\[Page \d+\]|Dokumentenauszüge")
 EMOJI_PATTERN = re.compile("[\U0001f300-\U0001faff\U0001f1e6-\U0001f1ff☀-➿⭐⭕]")
@@ -36,7 +36,7 @@ FMT_TASK = re.compile(r"^[ \t]*[-*][ \t]+\[[ xX]\][ \t]+\S")
 FMT_STEP = re.compile(r"^[ \t]*\d{1,2}[.)][ \t]+\S")
 FMT_ITEM = re.compile(r"^[ \t]*[-*][ \t]+\S")
 FMT_MINDMAP = re.compile(r"```mindmap[ \t]*\n(.*?)(?:\n[ \t]*```|\Z)", re.S)
-FMT_CITE = re.compile(r"\[\d{1,2}(?:\s*,\s*\d{1,2})*\]")
+FMT_CITE = CITATION_GROUP
 SHAPES = ("text", "table", "checklist", "steps", "mindmap")
 
 

@@ -17,6 +17,7 @@ import pytest
 import yaml
 from assistant_api.sse import frames as fr
 from evals import checks
+from rag_core.domain.source_meta import CITATION_GROUP
 from evals.sse import parse_sse
 from pydantic import TypeAdapter
 from rag_testing import harness, redact
@@ -78,7 +79,8 @@ def test_no_recording_holds_a_token() -> None:
 
 
 def test_the_redaction_keeps_the_patterns_the_evals_checks_read() -> None:
-    assert redact.FMT_CITE.pattern == checks.FMT_CITE.pattern and redact.FMT_STEP.pattern == checks.FMT_STEP.pattern
+    assert redact.FMT_CITE.pattern == checks.FMT_CITE.pattern == CITATION_GROUP.pattern
+    assert redact.FMT_STEP.pattern == checks.FMT_STEP.pattern
 
 
 def test_the_expected_frames_are_what_the_evals_reader_finds_in_every_native_stream() -> None:
