@@ -37,6 +37,11 @@ PAGE_DIR = os.environ.get("PAGE_DIR", str(PAGE))
 _CONTRACT = json.loads((FIXTURES / "contract_constants.json").read_text(encoding="utf-8"))
 PROFILE = (FIXTURES / "profile.json").read_bytes()  # GET /api/profile: the chips and the footer read it
 ERROR_CODES, OUTCOMES, VARIANT_CODES = _CONTRACT["ERROR_CODES"], _CONTRACT["OUTCOMES"], _CONTRACT["VARIANT_CODES"]
+# the backend's Content-Security-Policy (tests/repo/test_page_policy.py keeps the two texts equal): every flow runs under it
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+    "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+)
 TYPES = {
     ".html": "text/html; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -224,6 +229,7 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/profile":
             self.send_response(200)
             self.send_header("content-type", "application/json")
+            self.send_header("content-security-policy", CONTENT_SECURITY_POLICY)
             self.send_header("content-length", str(len(PROFILE)))
             self.end_headers()
             self.wfile.write(PROFILE)
@@ -238,6 +244,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("content-type", TYPES.get(file.suffix, "application/octet-stream"))
             self.send_header("content-length", str(len(body)))
             self.send_header("cache-control", "no-store")
+            self.send_header("content-security-policy", CONTENT_SECURITY_POLICY)
             self.end_headers()
             self.wfile.write(body)
             return
@@ -259,6 +266,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("content-type", "text/event-stream; charset=utf-8")
         self.send_header("cache-control", "no-cache")
+        self.send_header("content-security-policy", CONTENT_SECURITY_POLICY)
         self.end_headers()
         for d in data:
             self.wfile.write(d)
@@ -315,6 +323,7 @@ INIT = """(() => {
         else click.call(this);
     };
     window.print = () => { window.__captured.print += 1; };
+    document.addEventListener("securitypolicyviolation", e => window.__policy_violation(e.violatedDirective + " " + e.blockedURI));
 })();"""
 
 SNAPSHOT = """() => {
@@ -341,6 +350,9 @@ SNAPSHOT = """() => {
 }"""
 
 
+SESSIONS: list["Session"] = []
+
+
 class Session:
     """One browser context on one page folder; the clock stands at a fixed time, 10:00 Berlin, from the first question on."""
 
@@ -360,6 +372,14 @@ class Session:
         self.read_before = 0  # what earlier documents of this session read (a reload starts the page's count anew)
         self.urls: list[str] = []
         self.page_errors: list[str] = []
+        self.violations: list[
+            str
+        ] = []  # Content-Security-Policy violations (events and console errors) of this session
+        SESSIONS.append(self)
+        self.page.expose_function("__policy_violation", lambda report: self.violations.append(report))
+        self.page.on(
+            "console", lambda m: self.violations.append(m.text) if "Content Security Policy" in m.text else None
+        )
         self.page.on("request", self._sent)
         self.page.on("requestfinished", lambda request: self.pending.discard(request))
         self.page.on("requestfailed", lambda request: self.pending.discard(request))
@@ -679,6 +699,14 @@ def browser() -> Iterator[Browser]:
         chromium = playwright.chromium.launch()
         yield chromium
         chromium.close()
+
+
+@pytest.fixture(autouse=True)
+def no_policy_violation() -> Iterator[None]:
+    """Every flow of every test runs under the backend's policy: a session that saw a violation fails its test."""
+    SESSIONS.clear()
+    yield
+    assert [s.violations for s in SESSIONS if s.violations] == []
 
 
 @pytest.fixture

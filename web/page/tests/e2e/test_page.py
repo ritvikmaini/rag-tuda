@@ -3,7 +3,8 @@
 - golden: every scenario reproduces its stored snapshots (regenerate: UPDATE_GOLDEN=1 npm run test:page).
 - terminated frames: the terminated form renders exactly what the unterminated form renders (the page tolerates, acts on nothing).
 - the surface: the AI disclosure; one module entry, no page function on window; no request leaves the page's
-  own server; conversation ids are p-<uuid>.
+  own server; conversation ids are p-<uuid>; the mind map's exports (blob: links) run under the backend's policy.
+- every test runs under the backend's Content-Security-Policy and fails on a violation (conftest.no_policy_violation).
 - axe: no violation outside the baseline (UPDATE_AXE=1 records it).
 A golden file or the baseline changes only with an intended change of the page's behaviour.
 """
@@ -92,6 +93,19 @@ def test_every_request_stays_on_the_page_server_and_ids_are_p_uuid(browser: Brow
             assert s.server.base + lib in s.urls
         ids = [urllib.parse.parse_qs(urllib.parse.urlsplit(u).query)["conversation_id"][0] for u in s.server.requests]
         assert ids and all(e2e.ID_RE.match(i) for i in ids), ids
+    finally:
+        s.close()
+
+
+def test_the_mind_map_exports_download_under_the_policy(browser: Browser, e2e: ModuleType) -> None:
+    s = e2e.Session(browser, str(e2e.PAGE))
+    try:
+        s.settle()
+        s.act({"ask": e2e.MINDMAP_Q, "reply": e2e.lookup(e2e.MINDMAP_Q, "mindmap", e2e.MINDMAP_ANSWER)})
+        for position, name in enumerate(("mindmap.svg", "mindmap.mm"), start=1):
+            with s.page.expect_download() as download:
+                s.page.locator(".mindmap-tools .act").nth(position).click()
+            assert download.value.suggested_filename == name
     finally:
         s.close()
 

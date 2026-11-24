@@ -6,7 +6,7 @@ from fastapi import Request
 # because the mind map library writes a <style> element into its SVG; script-src allows no inline script.
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
-    "frame-ancestors 'none'"
+    "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
 )
 
 
