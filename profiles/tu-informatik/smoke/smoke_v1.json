@@ -1235,6 +1235,152 @@
      }
     }
    ]
+  },
+  {
+   "id": "S31",
+   "set": "smoke",
+   "kind": "deadline",
+   "turns": [
+    {
+     "q": "Wie lange nach meiner Exmatrikulation kann ich noch auf meine Studienbescheinigungen im TUCaN zugreifen?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studieren_von_a_bis_z/artikel_details_de_en_41920.de.jsp",
+      "heading": "Beachten Sie die Folgen einer Exmatrikulation:",
+      "quote": "Nach 90 Tage haben Sie keinen Zugriff mehr auf Ihre Studienbescheinigungen und Nachweise im TUCaN, da Ihr TUCaN-Account gesperrt wird."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "90 Tage"
+      ],
+      "source_url_any": [
+       "artikel_details_de_en_41920"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S32",
+   "set": "smoke",
+   "kind": "english",
+   "turns": [
+    {
+     "q": "I come from Turkey. Can I use my Turkish statutory health insurance for my studies in Germany, and which form do I need?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/internationale_studierende_1/aufenthalt_international/artikel_details_de_en_77952.en.jsp",
+      "heading": "2. Students from countries with social-security agreements",
+      "quote": "If you come from a country that has a social security agreement with Germany (Bosnia-Herzegovina, Macedonia, Montenegro, Serbia, Tunisia, Turkey, United Kingdom), you can use your statutory insurance from your home country."
+     },
+     "expect": {
+      "answer_language_matches": "en",
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "A/T 11"
+      ],
+      "visa_disclaimer_present": true,
+      "source_url_any": [
+       "artikel_details_de_en_77952"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S33",
+   "set": "smoke",
+   "kind": "apb",
+   "turns": [
+    {
+     "q": "Um wie viele Wochen kann die Prüfungskommission die Bearbeitungszeit meiner Abschlussarbeit bei einem Vollzeitstudium höchstens verlängern?",
+     "gold": {
+      "url": "https://www.tu-darmstadt.de/studieren/studierende_tu/studienorganisation_und_tucan/hilfe_und_faq/artikel_details_de_en_319360.de.jsp",
+      "heading": "Verlängerung der Bearbeitungszeit von Abschlussarbeiten",
+      "quote": "In „begründeten Fällen“ kann die Prüfungskommission einer Verlängerung der Bearbeitungszeit einer Abschlussarbeit bis maximal zur Hälfte der regulären Bearbeitungszeit (max. 13 Wochen bei einem Vollzeitstudium) zustimmen.",
+      "also": [
+       {
+        "url": "https://www.intern.tu-darmstadt.de/media/dezernat_ii/ordnungen/apb.pdf",
+        "page": 21,
+        "quote": "Die Frist kann von der Prüfungskommission in begründeten Fällen um die Hälfte der Bearbeitungszeit, höchstens aber um 13 Wochen, verlängert werden."
+       }
+      ],
+      "rule": "any"
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "13 Wochen"
+      ],
+      "source_url_any": [
+       "artikel_details_de_en_319360",
+       "dezernat_ii/ordnungen/apb.pdf"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S34",
+   "set": "smoke",
+   "kind": "visa",
+   "turns": [
+    {
+     "q": "Ich wohne im Landkreis Darmstadt-Dieburg. Wann kontaktiert mich die Ausländerbehörde des Landkreises von sich aus, wenn mein Aufenthaltstitel bald abläuft?",
+     "gold": {
+      "url": "https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/allgemeine-informationen-der-auslaenderbehoerde/",
+      "heading": "Häufige Fragen & Antworten",
+      "quote": "Die Ausländerbehörde kontaktiert die betroffenen Personen in der Regel 2-3 Monate vor Ablauf des Aufenthaltstitels."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "2-3 Monate",
+       "2 bis 3 Monate",
+       "zwei bis drei Monate",
+       "2–3 Monate",
+       "2 – 3 Monate"
+      ],
+      "visa_disclaimer_present": true,
+      "source_url_any": [
+       "ladadi.de/umwelt-soziales/migration/auslaenderwesen/allgemeine-informationen"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "S35",
+   "set": "smoke",
+   "kind": "visa",
+   "turns": [
+    {
+     "q": "Meine Eltern wohnen im Landkreis Darmstadt-Dieburg und wollen eine Verpflichtungserklärung für mein Studium abgeben. Welchen Nettobetrag im Monat muss mindestens eines ihrer Einkommen übersteigen, wenn sie sich als Ehegatten zusammen verpflichten?",
+     "gold": {
+      "url": "https://www.ladadi.de/umwelt-soziales/migration/auslaenderwesen/verpflichtungserklaerung-landkreis-darmstadt-dieburg/",
+      "heading": "Wichtige allgemeine Informationen zur Abgabe einer Verpflichtungserklärung",
+      "quote": "Mindestens eines Ihrer Einkommen muss jedoch einen netto Betrag von 2041,00 Euro monatlich übersteigen."
+     },
+     "expect": {
+      "answer_language_matches": "de",
+      "sie_form": true,
+      "citations_map_to_sources": true,
+      "contains_any": [
+       "2041",
+       "2.041"
+      ],
+      "visa_disclaimer_present": true,
+      "source_url_any": [
+       "verpflichtungserklaerung-landkreis-darmstadt-dieburg"
+      ]
+     }
+    }
+   ]
   }
  ]
 }

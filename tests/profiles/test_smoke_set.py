@@ -74,7 +74,7 @@ def test_smoke_set_schema() -> None:
     roles = load_profile(Roles, TU / "roles.yaml")
     hosts = set(load_profile(Sources, TU / "sources.yaml").hosts)
     ids = [c["id"] for c in convs]
-    assert len(set(ids)) == len(ids) >= 25  # the questions on the full set's sources come after the full build
+    assert len(set(ids)) == len(ids) >= 35  # S01 to S30 on the core set, S31 to S35 on the full set's sources
     assert gate.sets["smoke"].file == "smoke/smoke_v1.json" and gate.core == ["smoke"]
     assert set(gate.retrieval.volatile) <= set(ids)
     assert all(p.id in ids and p.set == "smoke" and p.kind == "lookup" for p in gate.smoke.probes)

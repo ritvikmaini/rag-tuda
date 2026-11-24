@@ -10,7 +10,7 @@ retrieval:
   sets: [smoke]
   top_k: 14
   floor: 0.97
-  volatile: [S07, S08, S14, S23]
+  volatile: [S07, S08, S14, S23, S35]
 latency: {sets: [smoke]}
 answers: {rerun_runs: 3, regression_at: 2, hang_s: 125}
 core: [smoke]
