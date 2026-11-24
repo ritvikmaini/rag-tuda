@@ -3,6 +3,7 @@ import json
 import pathlib
 
 import httpx
+import pytest
 import yaml
 
 from evals import checks, sse
@@ -312,7 +313,7 @@ def test_a_turn_sends_its_chips_beside_the_question_and_the_row_keeps_them(env, 
 
 
 def test_a_failed_volatile_turn_is_stale_not_failed(env, fake_backend, capsys):
-    """C1 is volatile in the test gate.yaml: the answer of the fake backend lacks the fact the probe expects."""
+    """C1 is volatile: the answer of the fake backend lacks the fact the probe expects."""
     plan = {
         "conversations": [
             {"id": cid, "turns": [{"q": "Frage?", "expect": {"contains_any": ["Zehn Tage"]}}]} for cid in ("C1", "G01")
@@ -325,6 +326,25 @@ def test_a_failed_volatile_turn_is_stale_not_failed(env, fake_backend, capsys):
     out = capsys.readouterr().out
     assert "C1     t1 stale" in out and "G01    t1 FAIL" in out
     assert "RESULT v: 0 ok, 1 FAIL, 1 stale of 2 turns" in out
+
+
+@pytest.mark.parametrize(
+    ("failed", "expected"),
+    [
+        ([], "ok"),
+        (["contains_any"], "stale"),
+        (["digits_any", "source_url_any"], "stale"),
+        (["contains_any", "error_event"], "FAIL"),
+        (["empty_answer"], "FAIL"),
+        (["contains_any", "answer_language_matches"], "FAIL"),
+        (["sie_form"], "FAIL"),
+        (["citations_map_to_sources"], "FAIL"),
+    ],
+)
+def test_only_content_checks_make_a_volatile_turn_stale(failed, expected):
+    row = {"id": "C1", "checks": {"auto_pass": not failed, "failed": failed}}
+    assert rp.verdict(row, frozenset({"C1"})) == expected
+    assert rp.verdict(row, frozenset()) == ("ok" if not failed else "FAIL")
 
 
 def test_the_runner_reads_the_volatile_ids_from_the_profiles_gate(env, fake_backend, monkeypatch, tmp_path, capsys):

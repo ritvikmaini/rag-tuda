@@ -395,11 +395,16 @@ def write_summary(path, label, rows):
         fh.write("\n".join(lines) + "\n")
 
 
+CONTENT_CHECKS = frozenset({"contains_any", "digits_any", "source_url_any"})
+
+
 def verdict(row, volatile):
-    """ok, FAIL, or stale: a volatile conversation's failed turn is not counted as a failure."""
+    """ok, FAIL, or stale. A volatile conversation (a fee, a date) is stale when only content checks failed: the page may
+    have changed. An error frame, an empty answer, a wrong language, a missing "Sie" or a broken citation stays FAIL."""
+    failed = row["checks"]["failed"]
     if row["checks"]["auto_pass"]:
         return "ok"
-    return "stale" if row["id"] in volatile else "FAIL"
+    return "stale" if row["id"] in volatile and set(failed) <= CONTENT_CHECKS else "FAIL"
 
 
 def play(
