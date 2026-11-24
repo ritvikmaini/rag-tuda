@@ -79,8 +79,8 @@ hosts:
     exclude: []
     depth: 0
     twins: false
-    # unverified
-    selectors: {main: "main, #content, .main-column", section: "section.content-section", drop: null}
+    # the page's content sits in .page-container, between the header and the footer; the page has no <main>
+    selectors: {main: ".page-container", section: "section.content-section", drop: null}
   www.ladadi.de:
     set: full
     # the Ausländerwesen pages for students who live in the Landkreis
