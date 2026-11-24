@@ -52,7 +52,7 @@ The commands:
 | `uv run rag ask "<question>"` | asks one question and streams the cited answer; `--degree`, `--programme`, `--po`, `--lang` |
 | `uv run rag reindex` | builds a new index generation from a re-crawl, swaps it in and restarts the backend; `--full`, `--resume` |
 | `uv run rag rollback` | makes the previous index generation live again and restarts the backend; refused when the index was built for another profile than the stack runs (to go back to a profile, use `rag up --profile <name>`) |
-| `uv run rag eval` | the deploy smoke (stream structure) against the running stack, on the example profile for now; `--retrieval-only [--ablation]` scores retrieval alone, native mode only |
+| `uv run rag eval` | the deploy smoke (stream structure) against the running stack; `--smoke` plays the profile's smoke set with the answer checks; `--retrieval-only [--ablation]` scores retrieval alone, native mode only |
 | `uv run rag add <folder>` | registers a folder of your own documents (Markdown, text, PDF) as a source; then `rag reindex` |
 | `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots`, and fails naming the path and the remedy when files stay behind (written as root by a container) |
 
@@ -140,8 +140,11 @@ error frames, the time to first token, the sequence of status steps, and the `do
 on the answers themselves (each `[n]` maps to a source, the language equals the question's, the PO-version line, "Sie" in
 German answers, the residence disclaimer) belong to the gate and probe runs of `apps/evals`, not to the smoke.
 
-`rag eval` reads `<profile>/gate.yaml`, and `profiles/tu-informatik` has none yet, so it runs on the example profile for now;
-the TU smoke set and gate come later.
+`uv run rag eval --smoke` plays the profile's whole smoke set (`smoke/smoke_v1.json` of `profiles/tu-informatik`: hand-written
+questions, some asked with the page's degree, programme or PO chips) and applies the answer checks above to each answer. A
+question whose answer is a fee or a date (`retrieval.volatile` in `gate.yaml`) prints `stale` instead of `FAIL` when it fails. The
+quote of each question's gold source was copied from the crawl; `--retrieval-only` reports a gold whose quote is in no section of
+its url as stale and leaves it out of the scores. The smoke set has not been run on the TU stack yet, so there are no results here.
 
 `uv run rag eval --retrieval-only` scores retrieval alone: for each question of the gate's probe sets, the rank of its gold
 source after fusion and after reranking (hit@k and MRR). It runs against the native stack only. With `--ablation` it adds one

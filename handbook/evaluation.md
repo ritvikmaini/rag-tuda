@@ -1,16 +1,21 @@
 # Evaluation
 
 Three things are measured against the running stack: that a deploy works (the smoke), whether answers hold up (the probe
-runs), and where the right source ranks (the retrieval eval). `rag eval` reads `<profile>/gate.yaml`; only `profiles/example`
-has one so far, so `rag eval` runs on the example profile for now and the TU smoke set and gate come later.
+runs), and where the right source ranks (the retrieval eval). `rag eval` reads `<profile>/gate.yaml`: `rag eval` runs its five fixed
+probes (the deploy smoke), `rag eval --smoke` plays its smoke set (the set `smoke`) with the answer checks.
 
 ## The TU question set
 
-The TU question set will live in `profiles/tu-informatik/smoke/*.json`: hand-written questions in the evals runner's probe format. Each carries the
-expected facts, the gold source as a URL with a heading or page and a short quote, the PO version, and `volatile: true` for
-fees and dates. A probe whose gold quote is no longer found in the gold source's current text is reported **stale**, not
-failed. It is not written yet: it needs the first TU index. The example profile has its own probes in
-`profiles/example/probes/`.
+The TU question set is `profiles/tu-informatik/smoke/smoke_v1.json`: hand-written questions in the evals runner's probe format
+(`{"version", "conversations": [{"id", "set", "kind", "turns": [{"q", "chips", "gold", "expect"}]}]}`). `expect` holds the checks
+of the expected facts. `gold` is the source: `{url, heading | page, quote, po_version}`, the quote one sentence of one section,
+whitespace-normalised, copied from the extracted text for a PDF; a gold of several sources adds `also` (more sources of the same
+shape) and `rule`, `any` (twins of one page) or `all` (several documents). `chips` are the page's `degree`, `programme` and `po`,
+sent with the question. A question with no answer in the corpus has no gold. The fees and dates are listed as `retrieval.volatile` in
+`gate.yaml`. A gold whose quote is no longer found in any section of its url is reported **stale**, not failed, by
+`rag eval --retrieval-only` (and a failed volatile answer is `stale` in `rag eval --smoke`). The test `test_gold_present_in_latest_snapshot`
+(marker `local_crawl`) checks the quotes against a local crawl. The questions on the full source set (TU-wide study pages, the
+Landkreis pages) are added after the full build. The example profile has its own probes in `profiles/example/probes/`.
 
 ## The deploy smoke
 
