@@ -418,6 +418,25 @@ def test_a_core_build_does_not_keep_the_pdfs_only_the_full_set_owns(tu, make_con
     assert LADADI_PDF in pdfs(again) and again.report["pdf_sync"]["downloaded"] == 0
 
 
+def test_a_core_build_does_not_keep_a_pdf_only_the_full_block_of_a_core_host_admits(tu, make_context, served):
+    sources = yaml.safe_load((tu / "sources.yaml").read_text(encoding="utf-8"))
+    # a core host with no prefixes of its own and a full block, like www.tu-darmstadt.de
+    full_block = {"sitemap": [], "prefixes": ["/umwelt/"], "exclude": [], "depth": 0}
+    sources["hosts"][LADADI].update({"set": "core", "prefixes": [], "full": full_block})
+    (tu / "sources.yaml").write_text(yaml.safe_dump(sources), encoding="utf-8")
+    ctx = make_context(options={"sources": "full", "resume": False})
+    extra = {LADADI_PAGE: ("text/html", LADADI_WITH_PDF), LADADI_PDF: ("application/pdf", pages.PO_2023)}
+    full = connector(site(served, extra)).collect(ctx)
+    assert LADADI_PDF in pdfs(full) and LADADI_PDF in registry(ctx)
+    core_ctx = make_context()
+    core = connector(site(served, extra), TODAY + timedelta(days=1)).collect(core_ctx)
+    assert LADADI_PDF not in pdfs(core) and LADADI_PDF not in core.report["pdf_sync"]["retained"]
+    assert not [m for m in core.report["manifest"] if m["url"] == LADADI_PDF]
+    assert PO_PDF in pdfs(core) and LADADI_PDF in registry(core_ctx)
+    again = connector(site(served, extra), TODAY + timedelta(days=2)).collect(make_context(options={"sources": "full"}))
+    assert LADADI_PDF in pdfs(again) and again.report["pdf_sync"]["downloaded"] == 0
+
+
 def test_a_pdf_the_page_no_longer_links_stays_indexed_only_while_the_active_set_owns_it(tu, make_context, served):
     ctx = make_context()
     connector(site(served)).collect(ctx)
