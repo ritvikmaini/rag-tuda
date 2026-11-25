@@ -93,6 +93,14 @@ def test_a_dropped_link_is_removed_at_once_and_does_not_shrink_the_list(env):
     assert not set(list_state(env)["missing"]) | {u for u in list_state(env)["known"] if u not in registry(env)}
 
 
+def test_links_dropped_in_a_run_that_counts_nothing_lower_the_last_full_count(env):
+    env["run"](range(10))
+    partial = env["run"](range(4), dropped=[url(i) for i in range(7, 10)])  # shorter than 80% of the last list
+    assert partial.check["shrunk"] is True and partial.removed == 3
+    assert list_state(env)["last_full_count"] == 7
+    assert env["run"](range(7)).check["shrunk"] is False  # the intact list of what is left
+
+
 def test_list_shrinking_over_max_ignored(env):
     env["run"](range(10))
     for n in (1, 2):

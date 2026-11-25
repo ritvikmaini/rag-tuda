@@ -94,6 +94,10 @@ class Safeguard:
         if counting:
             state["shrunk_runs"] = 0
             state["last_full_count"] = len(entries)
+        elif not dry_run:
+            state["last_full_count"] = max(
+                0, last - len(gone)
+            )  # the links removed on purpose are no part of the last list
 
         retained, removed, missing = [], 0, 0
         for link in list(registry):
