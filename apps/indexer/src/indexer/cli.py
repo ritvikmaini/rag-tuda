@@ -114,11 +114,19 @@ def summary_lines(name: str, report: Mapping[str, Any]) -> list[str]:
             [f"copy skipped, its original is indexed: {url}" for url in report.get("copies", ())],
             "copies skipped",
         ),
-        *_capped(
-            "note",
-            name,
-            [f"not fetched ({s['reason']}): {s['url']}" for s in report.get("skipped", ())],
-            "not fetched",
+        *(  # the exclusions are their own group: dozens of them must not hide the failures
+            line
+            for left_out in (False, True)
+            for line in _capped(
+                "note",
+                name,
+                [
+                    f"not fetched ({s['reason']}): {s['url']}"
+                    for s in report.get("skipped", ())
+                    if (s["reason"] == "excluded") is left_out
+                ],
+                "excluded" if left_out else "not fetched",
+            )
         ),
     ]
 

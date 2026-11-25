@@ -189,6 +189,16 @@ def test_the_summary_lists_at_most_twenty_pages_of_a_kind(run):
     ]
 
 
+def test_exclusions_do_not_hide_a_real_failure_in_the_summary(run):
+    left_out = [{"url": f"https://x.example/out{i}", "reason": "excluded"} for i in range(30)]
+    failed = {"url": "https://x.example/down", "reason": "http 503"}
+    run.report = {"web": {"documents": 1, "skipped": [*left_out, failed]}}
+    lines = run()[1]
+    assert "note: web: not fetched (http 503): https://x.example/down" in lines
+    assert lines.count("note: web: not fetched (excluded): https://x.example/out0") == 1
+    assert "note: web: 10 more excluded" in lines
+
+
 def test_the_snapshot_manifest_is_written_after_the_swap_and_a_failure_to_write_it_is_a_warning(run, db_settings):
     run.report = {
         "web": {
