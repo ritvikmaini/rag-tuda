@@ -45,15 +45,54 @@ largest budget whose first token stays under half of `idle_s`: the full 8000-tok
 prompt takes 29 to 61 s. `s-gemma4-e4b` stays at 8000 for memory too: the model takes 9.5 GB of the 10.4 GB usable, and its 16K prompt's
 first token (29 s) is just under half of `idle_s`. Ollama 0.40.17 answers HTTP 501 ("structured
 output is unavailable") to a `response_format` for `qwen3.5:4b` and `gemma4:e4b`, whose cards use `structured_output = "prompt"`
-(10 of 10 analysis replies were valid JSON of the schema). An earlier measurement of the default card on an M1 Max with 64 GB
-(Ollama 0.40.12): a 6K-token prompt reached its first token after 16.4 s and decoding ran at 25 to 33 tokens/s. The M, L and XL
-cards have no measurements yet.
+(10 of 10 analysis replies were valid JSON of the schema). On an M1 Max with 64 GB
+(Ollama 0.40.12) the default card reached the first token of a 6K-token prompt after 16.4 s and decoded at 25 to 33 tokens/s.
+The M, L and XL cards have no measurements.
+
+## What the S cards scored
+
+On the M2 Pro with 16 GB (Ollama 0.40.17, `LLAMA_ARG_CACHE_RAM=1024`, AC power unless stated), `rag eval --smoke` on the 35 questions of
+`profiles/tu-informatik` against the full index (generation 6), one run per card:
+
+| Card | ok | fail | stale | Median answer time |
+|---|---|---|---|---|
+| `s-qwen3-4b-instruct-2507` (default), commit e25a656 | 32 | 2 | 1 | 26.3 s |
+| `s-qwen3.5-4b`, on battery | 26 | 7 | 2 | 28.9 s |
+| `s-gemma4-e4b`: not measured validly | (24) | (10) | (1) | (34.6 s, 35.8 s) |
+
+The default card fails S26 and S30 and refuses S35 (printed `stale`, it stays in the denominator). Three runs of it scored 27 of
+30 (a 30-question version of the set), 31 of 35 and 32 of 35: the model's noise is one or two questions (S17 passes or
+fails with the same sources). `s-qwen3.5-4b` is six questions behind (an invalid citation in S16, a wrong date in S14, S27 wrongly "not listed"); the
+default card is also the smallest download and not slower, so it is the class's default. `s-gemma4-e4b` has no valid run: in both
+runs the reranker timed out on one to two retrievals (swap 7 to 10 GB; the model takes 9.5 GB of the 10.4 GB usable), and the
+brackets only say it does not beat 32 of 35. A whole answer takes about 25 to 27 s at the median on this Mac, mostly the prompt's
+prefill (a median answer of 86 tokens decodes in 2 to 3 s). One machine, one run per cell; one question is 0.03.
 
 ## Embedder and reranker
 
 Fixed across classes and pinned by revision in the profile: embedder `Snowflake/snowflake-arctic-embed-m-v2.0`, reranker
 `BAAI/bge-reranker-v2-m3`. They are served by `model_servers/`, each its own uv project, on the device that exists (CUDA,
-else MPS, else CPU). The bake-off that may replace them has not run.
+else MPS, else CPU). Both won their bake-off on the M2 Pro with 16 GB (AC power unless stated; default card, 27 or 32 golds, one run
+per cell; a difference under 0.05 is noise and goes to the smaller or faster model):
+
+| Embedder (core index, 27 golds) | Stage | hit@1 | hit@3 | hit@5 | hit@10 | MRR |
+|---|---|---|---|---|---|---|
+| arctic-embed-m-v2.0 (768, the pinned one) | fusion | 0.63 | 0.78 | 0.81 | 0.93 | 0.715 |
+| | reranked | 0.59 | 0.81 | 0.81 | 0.81 | 0.679 |
+| arctic-embed-l-v2.0 (1024) | fusion | 0.67 | 0.78 | 0.85 | 0.89 | 0.747 |
+| | reranked | 0.56 | 0.85 | 0.85 | 0.85 | 0.679 |
+
+| Reranker (full index, 32 golds, on battery) | hit@1 | hit@3 | hit@5 | hit@10 | MRR | Median retrieval |
+|---|---|---|---|---|---|---|
+| none (the fused list) | 0.53 | 0.75 | 0.78 | 0.91 | 0.657 | |
+| bge-reranker-v2-m3 (the pinned one) | 0.56 | 0.75 | 0.84 | 0.84 | 0.662 | 3.16 s |
+| Qwen3-Reranker-0.6B | 0.56 | 0.66 | 0.81 | 0.88 | 0.646 | 8.92 s |
+
+After reranking `l` is 0.04 ahead in hit@5 and equal in MRR, so the smaller `m` stays (median retrieval 3.25 s against 3.50 s; its
+build took 3 min 14 s against 5 min 46 s, on corpora of different size). The Qwen reranker is 2.8 times slower (the call alone 8.0 s
+against 2.5 s), peaks at 7.2 to 7.9 GB against 5.9 to 6.5 GB, and its scores sit near 1.0 on questions without an answer, so no cut can use them. `threshold` 0.50 and `min_docs` 3 stay. `Qwen3-Embedding-4B` (the load alone grew swap by
+more than 4 GB) and `Qwen3-Reranker-4B` (aborted by the same guard) did not fit this Mac and are not measured. Reranking lowers
+hit@10 against the fused list (0.91 to 0.84), and the embedder was decided on the core index only.
 
 ## A 16 GB Mac
 
@@ -86,8 +125,11 @@ shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, A
 - **Result.** With these settings `rag eval --retrieval-only` ran 27 golds in 4 minutes with no `RerankError` and no
   "semantic search failed", swap at most 4.8 GB (20.6 GB with the default Ollama and batch 32). The three model processes together
   were at 9.8 GB, under the 10.4 GB, without the VM's 1.5 GB (with it about 11.2 GB); the sum of their peaks, 3.1 + 5.1 + 2.7, is
-  10.9 GB. On the healthy stack the smoke set's 30 questions with answers ran with no degraded retrieval and no timeout, swap was
-  about 5.3 GB at the end of the run (3 of the 30 failed their content checks only).
+  10.9 GB. That reading is from a retrieval-only run with Ollama nearly idle, not from answers. A stack that has run several builds
+  is larger until it is restarted (the reranker keeps 5.2 GB after use against 3.0 GB fresh). The reranker's batch sizes 2 and 1
+  were not measured. On the healthy stack a 30-question version of the smoke set, with answers, ran with no degraded retrieval and no
+  timeout, and swap was about 5.3 GB at the end of the run (3 of the 30 failed their content checks only); the 35-question run
+  of the default card, also with no degraded retrieval, stood at 6.8 to 8.3 GB.
   Watch it with `sysctl vm.swapusage`; `rerank_failed: True` in `.rag/logs/backend.log` means the answers came from unranked documents.
 
 ## Reasoning and streaming

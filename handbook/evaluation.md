@@ -14,8 +14,8 @@ shape) and `rule`, `any` (twins of one page) or `all` (several documents). `chip
 sent with the question. A question with no answer in the corpus has no gold. The fees and dates are listed as `retrieval.volatile` in
 `gate.yaml`. A gold whose quote is no longer found in any section of its url is reported **stale**, not failed, by
 `rag eval --retrieval-only` (and a failed volatile answer is `stale` in `rag eval --smoke` when only content checks failed). The test `test_gold_present_in_latest_snapshot`
-(marker `local_crawl`) checks the quotes against a local crawl. The questions on the full source set (TU-wide study pages, the
-Landkreis pages) are added after the full build. The example profile has its own probes in `profiles/example/probes/`.
+(marker `local_crawl`) checks the quotes against a local crawl. The set holds 35 questions: S01 to S30 on the core set and S31 to S35 on the full
+set's sources (the TU-wide study pages, the Landkreis pages); 32 have a gold source and S18 to S20 have none. The example profile has its own probes in `profiles/example/probes/`.
 
 ## The deploy smoke
 
@@ -55,9 +55,30 @@ it can differ from `top_score` when a profile sets a bonus. `status` is `ok`, `r
 `--ablation` runs one row per stage turned on, cumulatively: no filters, + filters, + acronyms, + fusion cut, + whole parents,
 + reference hop. It shows what each part of the design buys.
 
-The run on the example profile has four questions with a gold source: after fusion hit@1 0.25 and MRR
-0.625, after reranking hit@1 1.00 and MRR 1.000. It shows the eval runs end to end and says nothing about TU's documents. The
-TU ablation table is pending the TU smoke set and index.
+The ablation of the TU profile, on the M2 Pro with 16 GB (macOS 26, AC power, Ollama 0.40.17 with `LLAMA_ARG_CACHE_RAM=1024`),
+full index (generation 6), arctic-embed-m-v2.0 and bge-reranker-v2-m3, default card, 32 golds, 210 retrievals without a failed rerank:
+
+| Stage | hit@1 | hit@3 | hit@5 | hit@10 | MRR | Median latency |
+|---|---|---|---|---|---|---|
+| no filters | 0.50 | 0.66 | 0.72 | 0.81 | 0.608 | 17.28 s* |
+| + filters | 0.56 | 0.75 | 0.81 | 0.81 | 0.661 | 14.36 s* |
+| + acronyms | 0.56 | 0.72 | 0.81 | 0.81 | 0.659 | 13.78 s* |
+| + fusion cut | 0.59 | 0.81 | 0.88 | 0.88 | 0.702 | 2.04 s |
+| + whole parents | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
+| + reference hop | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
+
+\* These rows rerank about 117 sections, which takes 13.8 to 17.3 s, above the product's 15 s reranker limit; the run used a 60 s limit.
+Their latencies describe the ablation, not the product, whose retrieval is the last row. The run used a relevance floor of 0.1, the product's
+is 0.0; the floor changed no gold's rank, only the final list of two questions.
+
+The filters and the fusion cut each add 0.07 to 0.09 in hit@5. Whole parents, acronyms and the reference hop show no measurable gain on
+this set, and the hop never added a section. Nothing reaches 1.00 (four golds, S05, S22, S26 and S30, are missing from the final list
+from the fusion cut on), so the set is not too easy; the example profile's four-question run does reach 1.00 after reranking and only
+shows that the eval runs. Reading the numbers: one machine, one run per cell; 35 questions with 32 golds, so one question is 0.03 to
+0.04, a difference under 0.05 is noise, 0.10 is wide, and no two rows differ by 0.10 except the first against the last; the questions
+were tuned after a first run on the same set; reranking lowers hit@10 against the fused list (0.91 to 0.84); the reranker table in
+`handbook/models.md` (hit@5 0.84, MRR 0.662) comes from a set in which two golds name no German twin, unlike the ablation's, and must not be
+put in one column with the last row (0.88, 0.694).
 
 ## Bake-offs
 
@@ -67,8 +88,10 @@ models per class on the smoke set: check pass rate, citation validity, version c
 token, tokens per second, tokens per answer, with reasoning on and off where a model has both. The candidates are the embedders
 `snowflake-arctic-embed-m-v2.0` (the pinned one), `snowflake-arctic-embed-l-v2.0` and `Qwen3-Embedding-4B`, and the rerankers
 `bge-reranker-v2-m3` (the pinned one), `Qwen3-Reranker-0.6B` and `Qwen3-Reranker-4B`. The winners go into the cards and the
-profile. A small smoke set detects only large differences: ties go to the smaller or faster option. What has been measured, on
-which machine, is in `handbook/models.md` and the README.
+profile. A small smoke set detects only large differences: ties go to the smaller or faster option. The results (embedder
+`snowflake-arctic-embed-m-v2.0`, reranker `bge-reranker-v2-m3`, default S card `s-qwen3-4b-instruct-2507`) and what is not measured (M, L and XL
+cards, `Qwen3-Embedding-4B`, `Qwen3-Reranker-4B`, Groq, `s-gemma4-e4b` validly, a larger question set) are in `handbook/models.md` and the README,
+each with its machine.
 
 ## Hosted-model runs
 
