@@ -1,8 +1,9 @@
 """The TU Informatik smoke set: its shape, and that its gold quotes are still in the latest local crawl.
 
-The schema test runs everywhere. The crawl test reads `.rag/snapshots` and `.rag/crawl` of a local build and is skipped
-without them; a gold quote that is in no text of its url is stale (the page changed): the test names the stale questions, and
-a stale volatile one (a fee or a date) is only a warning."""
+The schema test runs everywhere. The crawl test is not run by default: `pytest -m local_crawl` runs it. It reads the live
+generation's manifest, named by the build stats under `.rag/state`, and the crawl under `.rag/crawl`, and is skipped
+without a local build. A gold quote that is in no text of its url is stale (the page changed): the test names the stale
+questions, and a stale volatile one (a fee or a date) is only a warning."""
 
 import json
 import re
@@ -186,10 +187,21 @@ def test_the_live_generation_decides_which_manifest_is_read(tmp_path: Path, monk
     }
 
 
-def test_an_empty_snapshots_folder_skips_the_crawl_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_without_build_stats_the_crawl_check_is_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "snapshots").mkdir()
     monkeypatch.setattr(sys.modules[__name__], "RAG", tmp_path)
-    with pytest.raises(pytest.skip.Exception):
+    with pytest.raises(pytest.skip.Exception, match="no live generation"):
+        latest_texts({"https://example.org/"})
+
+
+def test_a_live_generation_without_its_manifest_skips_the_crawl_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / STATS_NAME).write_text('{"generation": 1}', encoding="utf-8")
+    (tmp_path / "snapshots").mkdir()
+    monkeypatch.setattr(sys.modules[__name__], "RAG", tmp_path)
+    with pytest.raises(pytest.skip.Exception, match="no snapshot manifest"):
         latest_texts({"https://example.org/"})
 
 
