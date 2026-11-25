@@ -209,7 +209,9 @@ class TudaWeb:
         not_indexed = [{"url": url, "missing": list(missing)} for url, missing in selection.not_indexed]
         excluded = {url for url, _ in selection.not_indexed} | set(selection.copies)
         excluded |= {s["url"] for s in crawl.skipped if s["reason"] in EXCLUDED_ON_PURPOSE}
-        retained = [e for e in synced.retained if e.url not in excluded]  # absence keeps its grace, exclusion does not
+        # absence keeps its grace; exclusion, and a PDF the active set does not own (another set's, one an exclude entry
+        # puts out), does not
+        retained = [e for e in synced.retained if e.url not in excluded and self._owned(hosts, e.url)]
         pdf_docs: list[ManifestDoc] = []
         for e in [e for e in synced.entries if e not in synced.retained] + retained:
             if missing := lacks(e.meta):
@@ -244,6 +246,12 @@ class TudaWeb:
             "list_check": synced.check,
         }
         return SourceResult(items, report, expected_minimum=int(ctx.settings.get("min_documents", 0)))
+
+    @staticmethod
+    def _owned(hosts: Mapping[str, Host], url: str) -> bool:
+        """Whether the active set lists `url`: its host is in the set and the host's prefixes and exclusions admit it."""
+        owner = hosts.get(urlsplit(url).hostname or "")
+        return owner is not None and in_scope(owner.source, url)
 
     @staticmethod
     def _began(ctx: SourceContext, today: date) -> date:

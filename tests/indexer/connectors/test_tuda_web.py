@@ -400,6 +400,34 @@ def test_a_pdf_this_crawl_excluded_on_purpose_is_not_kept_while_a_vanished_one_i
     assert sorted(gone.report["pdf_sync"]["retained"]) == sorted([PO_PDF, APB_ORIGINAL])
 
 
+LADADI_PDF = f"https://{LADADI}/umwelt/merkblatt.pdf"
+LADADI_WITH_PDF = LADADI_HTML.replace("</section>", f'<a href="{LADADI_PDF}">Merkblatt</a></section>')
+
+
+def test_a_core_build_does_not_keep_the_pdfs_only_the_full_set_owns(tu, make_context, served):
+    ctx = make_context(options={"sources": "full", "resume": False})
+    extra = {LADADI_PAGE: ("text/html", LADADI_WITH_PDF), LADADI_PDF: ("application/pdf", pages.PO_2023)}
+    full = connector(site(served, extra)).collect(ctx)
+    assert LADADI_PDF in pdfs(full) and LADADI_PDF in registry(ctx)
+    core_ctx = make_context()
+    core = connector(site(served, extra), TODAY + timedelta(days=1)).collect(core_ctx)
+    assert LADADI_PDF not in pdfs(core) and LADADI_PDF not in core.report["pdf_sync"]["retained"]
+    assert not [m for m in core.report["manifest"] if m["url"] == LADADI_PDF]
+    assert PO_PDF in pdfs(core) and LADADI_PDF in registry(core_ctx)  # the registry still holds it for the full set
+    again = connector(site(served, extra), TODAY + timedelta(days=2)).collect(make_context(options={"sources": "full"}))
+    assert LADADI_PDF in pdfs(again) and again.report["pdf_sync"]["downloaded"] == 0
+
+
+def test_a_pdf_the_page_no_longer_links_stays_indexed_only_while_the_active_set_owns_it(tu, make_context, served):
+    ctx = make_context()
+    connector(site(served)).collect(ctx)
+    exclude_in_profile(tu, urlsplit(PO_PDF).path)
+    unread = {HUB: None}  # the page that links the PDF is not read this crawl
+    later = connector(site(served, unread), TODAY + timedelta(days=1)).collect(ctx)
+    assert PO_PDF not in pdfs(later) and PO_PDF not in later.report["pdf_sync"]["retained"]
+    assert APB_ORIGINAL in pdfs(later)
+
+
 def exclude_in_profile(profile_dir: Path, *prefixes: str) -> None:
     sources = yaml.safe_load((profile_dir / "sources.yaml").read_text(encoding="utf-8"))
     sources["hosts"][FB20]["exclude"] = list(prefixes)
