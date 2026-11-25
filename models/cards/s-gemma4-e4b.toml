@@ -29,7 +29,7 @@ analysis = "off"
 # 29 s, just under half of idle_s.
 # The limits are not tied to the slowest model case: idle_s also bounds the silence of one get_docs call, whose stage
 # timeouts add up to about 57 s (retrieval 10 + 2 s, parent lookup 5 s, reranker 15 s, then the reference hop's 5 + 5 + 15 s), so
-# they leave room for the stack's own waits; the full window's first token (at most 21 s) stays under half of idle_s.
+# they leave room for the stack's own waits; the full window's first token (at most 18 s) stays under half of idle_s.
 [timeouts]
 deadline_s = 150
 idle_s = 60
