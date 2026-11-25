@@ -1,5 +1,5 @@
 """The deploy smoke: the fixed probes of gate.yaml, structure only, so a correct deploy never
-fails on answer variance. 6 requests, about 2 minutes. Exit 0 = every check passed, 10 = at least one failed, 2 = no token;
+fails on answer variance. One request per probe turn of gate.yaml (the example profile: 6 requests, about 2 minutes). Exit 0 = every check passed, 10 = at least one failed, 2 = no token;
 any other code = the smoke could not run (the deploy keeps that apart from a failed smoke). Whether every service is ready is
 the deploy's part: the container cannot see Docker."""
 
