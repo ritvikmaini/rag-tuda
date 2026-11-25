@@ -4,15 +4,16 @@ The TU profile's crawl configuration is `profiles/tu-informatik/sources.yaml`. A
 
 | Set | Host | What |
 |---|---|---|
-| core | `www.informatik.tu-darmstadt.de` | the Ordnungen hubs of B.Sc. Informatik, M.Sc. Informatik and M.Sc. Computer Science, the Studienbüro pages, the promotion page, and the PDFs they link (PO, Modulhandbuch, Studien- und Prüfungsplan) |
+| core | `www.informatik.tu-darmstadt.de` | the whole study area (`/studium_fb20/`: programme pages, FAQ, knowledge base, found through the sitemap, less the other programmes' hubs and pages), including the Ordnungen hubs of B.Sc. Informatik, M.Sc. Informatik and M.Sc. Computer Science and the Studienbüro pages; the promotion page; and the PDFs they link (PO, Modulhandbuch, Studien- und Prüfungsplan: one media folder per programme, and the promotion documents) |
 | core | `www.intern.tu-darmstadt.de` | the university-wide regulations (APB, Einschreibeordnung, Promotionsordnung) with their English information versions; login-gated paragraphs are skipped |
 | core | `www.tu-darmstadt.de` | listed pages: semester dates, re-registration and fee, the residence pages for international students |
 | core | `digitales-rathaus.darmstadt.de` | listed pages: the residence permit for studying, the foreigners' office, registration |
 | core | `www.gesetze-im-internet.de` | the norms the residence pages refer to, from the official XML, through the `law_xml` connector |
-| full | `www.tu-darmstadt.de` | the TU-wide study rules, found through the sitemap |
-| full | `www.ladadi.de` | the foreigners' pages for students living in the Landkreis |
+| full | `www.tu-darmstadt.de` | the TU-wide study rules, found through the sitemap, and the PDFs those pages link (forms, leaflets and checklists of the study and exchange pages: the one media folder `/media/daa_responsives_design/02_studium_medien/`, less the outdated or expired files the `exclude` list names) |
+| full | `www.ladadi.de` | the foreigners' pages for students living in the Landkreis, and the forms and leaflets they link (`/medien/pdfs/fb-510-auslaenderwesen-visum/`) |
 
-`rag up` and `rag reindex` build the core set; `rag reindex --full` adds the full set. `www.darmstadt.de` and `h-da.de` are
+`rag up` and `rag reindex` build the core set; `rag reindex --full` adds the full set. A PDF that only the full set owns is not
+indexed by a core build; it returns with the next full build without a new download. `www.darmstadt.de` and `h-da.de` are
 never fetched.
 
 ## Crawler
@@ -24,7 +25,11 @@ never fetched.
   through. `<meta name="robots">` is honoured too: `noindex` and `noai` skip the page.
 - Discovery: XML sitemaps filtered by the configured prefixes, plus link-following inside the allowed prefixes to a configured
   depth (0 for hosts with listed seeds only). A `.de.jsp` page gets its `.en.jsp` twin; a twin that is really German is dropped.
-- PDFs: links ending in `.pdf` on allowed hosts are downloaded, hashed with SHA-256 and registered.
+- PDFs: links ending in `.pdf` on allowed hosts are downloaded, hashed with SHA-256 and registered. A PDF link in an `aside`
+  beside the main column ("Links & Downloads") is followed too when the PDF lies inside the host's prefixes; it carries its
+  programme from its own URL and no section scope, and a typed regulation without a scope still fails closed.
+  A PDF whose text per page is far below that of a text page (page stamps only) is read by OCR (docling) before it is indexed;
+  one that still has no usable text is listed in the build summary, not indexed.
   A PDF that vanishes from the crawl's list is kept for a few builds; one that a profile `exclude` entry now puts out of scope
   is removed with the next build, named in the summary as `not fetched (excluded)`, and returns when the entry is deleted.
 - Page text keeps its headings; page chrome is dropped by selector, and text hidden in the markup (`hidden`, `aria-hidden="true"`, inline `display:none` or `visibility:hidden`) is dropped; text hidden by a CSS class and PDF text are not covered. A page whose content selector
