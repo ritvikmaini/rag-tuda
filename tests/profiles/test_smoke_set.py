@@ -7,17 +7,20 @@ a stale volatile one (a fee or a date) is only a warning."""
 import json
 import re
 import sys
+import tomllib
 import warnings
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
+from assistant_api.retrieval_eval import without_stale
 from evals.gate import conversations, load_config
 from indexer.crawl.cache import Cache
 from indexer.crawl.extract import Selectors, extract
 from indexer.connectors.law_xml import law_markdown, xml_of_zip
-from indexer.crawl.manifest import manifest_urls, snapshots_dir
+from indexer.crawl.manifest import ManifestDoc, manifest_urls, snapshots_dir, write_manifest
+from indexer.gates import STATS_NAME
 from rag_core.settings import load_profile
 from rag_core.settings.profile import Roles, Sources
 
@@ -131,9 +134,13 @@ def test_smoke_set_schema() -> None:
 def latest_texts(urls: set[str]) -> dict[str, list[str]]:
     """url -> the whitespace-squeezed texts of the latest crawl: a PDF's extracted text, a page's documents."""
     snapshots = snapshots_dir(RAG / "crawl")
-    if not (generations := [int(p.stem) for p in snapshots.glob("*.json")]):
-        pytest.skip("no snapshot manifest in .rag/snapshots")
-    generation = max(generations)
+    stats = RAG / "state" / STATS_NAME  # names the live generation: a staged build writes a manifest too
+    try:
+        generation = json.loads(stats.read_text(encoding="utf-8"))["generation"]
+    except (OSError, ValueError, KeyError):
+        pytest.skip("no live generation in .rag/state")
+    if not (snapshots / f"{generation}.json").is_file():
+        pytest.skip(f"no snapshot manifest for the live generation {generation}")
     listed = {
         u.partition("#")[0] for u in manifest_urls(str(generation), directory=snapshots)
     }  # a split page lists its parts
@@ -160,6 +167,25 @@ def latest_texts(urls: set[str]) -> dict[str, list[str]]:
     return texts
 
 
+def test_the_local_crawl_check_is_not_run_by_default() -> None:
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["pytest"]["ini_options"]
+    assert "-m 'not local_crawl'" in config["addopts"]
+
+
+def test_the_live_generation_decides_which_manifest_is_read(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / STATS_NAME).write_text('{"generation": 1}', encoding="utf-8")
+    for generation, url in ((1, "https://example.org/live"), (2, "https://example.org/staged")):
+        write_manifest(str(generation), [ManifestDoc(url, "h", "2026-01-01")], directory=tmp_path / "snapshots")
+        (tmp_path / "crawl" / "extracted").mkdir(parents=True, exist_ok=True)
+        entry = {"download_url": url, "text": "a quote"}
+        (tmp_path / "crawl" / "extracted" / f"{generation}.json").write_text(json.dumps(entry), encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "RAG", tmp_path)
+    assert latest_texts({"https://example.org/live", "https://example.org/staged"}) == {
+        "https://example.org/live": ["a quote"]
+    }
+
+
 def test_an_empty_snapshots_folder_skips_the_crawl_check(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "snapshots").mkdir()
     monkeypatch.setattr(sys.modules[__name__], "RAG", tmp_path)
@@ -175,10 +201,7 @@ def test_gold_present_in_latest_snapshot() -> None:
     convs = [c for c in load() if "gold" in c["turns"][0]]
     texts = latest_texts({s["url"].partition("#")[0] for c in convs for s in sources_of(c["turns"][0]["gold"])})
     stale = {
-        c["id"]: s["url"]
-        for c in convs
-        for s in sources_of(c["turns"][0]["gold"])
-        if not any(squeeze(s["quote"]) in t for t in texts.get(s["url"].partition("#")[0], ()))
+        c["id"]: c["turns"][0]["gold"]["url"] for c in convs if without_stale(c["turns"][0]["gold"], texts) is None
     }
     if drifted := sorted(set(stale) & volatile):
         warnings.warn(f"stale volatile golds (a fee or a date changed): {', '.join(drifted)}", stacklevel=1)

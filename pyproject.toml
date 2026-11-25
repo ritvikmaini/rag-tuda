@@ -224,9 +224,9 @@ dev = ["pytest", "pytest-asyncio", "pytest-cov", "hypothesis==6.168.5", "ruff", 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not local_crawl'"
 pythonpath = ["src"]
-markers = ["local_crawl: reads the crawl and snapshots of a local build under .rag (skipped without them)"]
+markers = ["local_crawl: reads the crawl and snapshots of a local build under .rag (not run by default: `pytest -m local_crawl`)"]
 
 [tool.coverage.run]
 branch = true
