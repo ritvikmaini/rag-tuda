@@ -27,12 +27,14 @@ their 0700 folder, since a 0600 file of the host user is unreadable to the conta
 
 ```sh
 uv run rag reindex            # re-crawl the core source set, build a new generation, swap, restart the backend
-uv run rag reindex --full     # also the full source set (takes hours)
+uv run rag reindex --full     # also the full source set (about 42 minutes in two builds, see below)
 uv run rag reindex --resume   # continue an interrupted crawl
 uv run rag rollback           # the previous generation is live again
 ```
 
-Both need Docker and the stack's Postgres to be up, which a first `rag up` does. The crawl is polite (about one request per second per host), so schedule `rag reindex` rarely; the README has one
+Both need Docker and the stack's Postgres to be up, which a first `rag up` does. The full set took about 42 minutes on an M2 Pro
+in two builds (30 + 12) on top of a core index whose chunks were cached; a full build from nothing was not timed, and the
+"takes hours" that `rag reindex --help` and `rag up` print is a design estimate. The crawl is polite (about one request per second per host), so schedule `rag reindex` rarely; the README has one
 cron line and one launchd example. `RAG__CRAWL__CONTACT` in the environment adds a contact to the crawler's user agent.
 
 The indexer refuses a build that shrank against the last build, and compares only with a build of the same profile and source

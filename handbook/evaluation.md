@@ -14,7 +14,7 @@ shape) and `rule`, `any` (twins of one page) or `all` (several documents). `chip
 sent with the question. A question with no answer in the corpus has no gold. The fees and dates are listed as `retrieval.volatile` in
 `gate.yaml`. A gold whose quote is no longer found in any section of its url is reported **stale**, not failed, by
 `rag eval --retrieval-only` (and a failed volatile answer is `stale` in `rag eval --smoke` when only content checks failed). The test `test_gold_present_in_latest_snapshot`
-(marker `local_crawl`, not run by default: `uv run --frozen --all-packages pytest -m local_crawl tests/profiles`) checks the quotes against the crawl of the live generation of a local build; S31 to S35 need a build of the full set. The set holds 35 questions: S01 to S30 on the core set and S31 to S35 on the full
+(marker `local_crawl`, run on request and not by default: `uv run --frozen --all-packages pytest -m local_crawl tests/profiles`) checks the quotes against the crawl of the live generation of a local build; it needs a full-set build for S31 to S35. The set holds 35 questions: S01 to S30 on the core set and S31 to S35 on the full
 set's sources (the TU-wide study pages, the Landkreis pages); 32 have a gold source and S18 to S20 have none. The example profile has its own probes in `profiles/example/probes/`.
 
 ## The deploy smoke
@@ -67,16 +67,16 @@ full index (generation 6), arctic-embed-m-v2.0 and bge-reranker-v2-m3, default c
 | + whole parents | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
 | + reference hop | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
 
-\* These rows rerank about 117 sections, which takes 13.8 to 17.3 s, above the product's 15 s reranker limit; the run used a 60 s limit.
-Their latencies describe the ablation, not the product, whose retrieval is the last row. The run used a relevance floor of 0.1, the product's
+\* These rows rerank about 117 sections: their retrieval takes a median 13.8 to 17.3 s (max 28.9 s); the first attempt, at the product's
+15 s reranker limit, lost 53 reranks, so the run used a 60 s limit. Their latencies describe the ablation, not the product, whose retrieval is the last row. The run used a relevance floor of 0.1, the product's
 is 0.0; the floor changed no gold's rank, only the final list of two questions.
 
-The filters and the fusion cut each add 0.07 to 0.09 in hit@5. Whole parents, acronyms and the reference hop show no measurable gain on
+The filters and the fusion cut each raise hit@5 by 0.07 to 0.09 and hit@1 by only 0.06 and 0.03, below the 0.10 called wide below. Whole parents, acronyms and the reference hop show no measurable gain on
 this set, and the hop never added a section. Nothing reaches 1.00 (four golds, S05, S22, S26 and S30, are missing from the final list
-from the fusion cut on), so the set is not too easy; the example profile's four-question run does reach 1.00 after reranking and only
+from the fusion cut on), so the set is not too easy; the example profile's four-question run (measured on an M1 Max with 64 GB) does reach 1.00 after reranking and only
 shows that the eval runs. Reading the numbers: one machine, one run per cell; 35 questions with 32 golds, so one question is 0.03 to
-0.04, a difference under 0.05 is noise, 0.10 is wide, and no two rows differ by 0.10 except the first against the last; the questions
-were tuned after a first run on the same set; reranking lowers hit@10 against the fused list (0.91 to 0.84); the reranker table in
+0.04, a difference under 0.05 is noise, 0.10 is wide, and no two rows differ by 0.10 except the first against the last three; the questions
+were revised after a first run on the same set, so it is not a blind test; reranking lowers hit@10 against the fused list (0.91 to 0.84); the reranker table in
 `handbook/models.md` (hit@5 0.84, MRR 0.662) comes from a set in which two golds name no German twin, unlike the ablation's, and must not be
 put in one column with the last row (0.88, 0.694).
 

@@ -45,11 +45,15 @@ is older than the stats; otherwise `up` builds it, so switching profiles builds 
 volume is rebuilt. A second `up` changes nothing.
 
 The default profile's core set (the department's study pages and regulations, the university-wide regulations, the residence
-pages and two laws) came to about 270 pages, about 50 PDFs, 3637 sections and 15373 chunks. On an M2 Pro with 16 GB the crawl and
-the PDF downloads took about 8 minutes and the embedding and build 3 minutes 14 seconds. The full set (`rag reindex --full`)
-adds the TU-wide study rules and the Landkreis pages: 6799 sections and 29794 chunks from 1487 pages (1213 on
-`www.tu-darmstadt.de`, 265 on the faculty host, 5 on `www.ladadi.de`, 3 on `digitales-rathaus.darmstadt.de`, 1 on
-`www.intern.tu-darmstadt.de`), about 180 PDFs and 2 laws. Its first build took about 30 minutes (1750 requests).
+pages and two laws) came to about 270 pages, about 50 PDFs, 3666 sections and 15472 chunks. On an M2 Pro with 16 GB the crawl and
+the PDF downloads took about 8 minutes and the embedding and build 3 minutes 14 seconds. (A re-crawl of the same set gave 3637
+sections and 15373 chunks, the index of the embedder table below.) The full set (`rag reindex --full`) adds the TU-wide study
+rules and the Landkreis pages: 6799 sections and 29794 chunks in the published index (the build's own `children` count is 29810)
+from 1487 pages (1213 on `www.tu-darmstadt.de`, 265 on the faculty host, 5 on `www.ladadi.de`, 3 on
+`digitales-rathaus.darmstadt.de`, 1 on `www.intern.tu-darmstadt.de`), about 177 PDFs and 2 laws. It took about 42 minutes in two
+builds (30 + 12; the first sent 1750 requests) on top of a core index whose chunks were cached; a full build from nothing was
+not timed. The crawl sizes and the "takes hours" that `rag up`, `rag doctor` and `rag reindex --help` print are design estimates, not
+these measurements.
 
 The commands:
 
@@ -116,9 +120,10 @@ A model card (`models/cards/*.toml`) names the answer model, its endpoint, its w
 | L | `l-groq-gpt-oss-120b`, `l-groq-gpt-oss-20b`, `l-groq-qwen3.8-27b` | Groq's hosted endpoint; analysis, embedding and reranking stay local |
 | XL | `xl-vllm-example` | a vLLM server on NVIDIA GPUs; shipped as an example to copy, not tested |
 
-**What is measured.** Every number in this README comes from one machine, an Apple M2 Pro with 16 GB (10.4 GB usable),
-macOS 26, Ollama 0.40.17 started with `LLAMA_ARG_CACHE_RAM=1024`, on AC power unless a line says "on battery"; the one
-exception, named as such, is an M1 Max line. Each cell is one run.
+**What is measured.** Every measurement of the TU profile in this README comes from one machine, an Apple M2 Pro with 16 GB
+(10.4 GB usable), macOS 26, Ollama 0.40.17 started with `LLAMA_ARG_CACHE_RAM=1024`, on AC power unless a line says "on
+battery"; the exceptions, named as such, are an M1 Max line and the example profile's four-question run. Figures called
+estimates (the time of `just ci`, the crawl sizes the commands print) are not measurements. Each cell is one run.
 
 *Speed of the S cards* (M2 Pro, 16 GB): at the full 8K-token window the first token comes after 21 s
 (`s-qwen3-4b-instruct-2507`), 20 s (`s-qwen3.5-4b`) or 18 s (`s-gemma4-e4b`), and a 700-token answer ends after 41, 37 or 35 s;
@@ -135,12 +140,14 @@ generation 6):
 
 | Card | ok | fail | stale | Median answer time |
 |---|---|---|---|---|
-| `s-qwen3-4b-instruct-2507` (default), commit e25a656 | 32 | 2 | 1 | 26.3 s |
-| `s-qwen3.5-4b`, on battery | 26 | 7 | 2 | 28.9 s |
+| `s-qwen3-4b-instruct-2507` (default) | 32 | 2 | 1 | 26.3 s |
+| `s-qwen3.5-4b`, on battery, earlier code state | 26 | 7 | 2 | 28.9 s |
 | `s-gemma4-e4b`: not measured validly | (24) | (10) | (1) | (34.6 s, 35.8 s) |
 
-`stale` is a fee or date answer whose content checks failed (here S35, which the model refused as out of scope); it stays in the denominator of 35. The
-default card is the winner of its class: it is six questions (0.17) ahead of `s-qwen3.5-4b`, the smallest download (2.5 GB)
+`stale` is a fee or date answer whose content checks failed (here S35, which the model refused as out of scope); it stays in the denominator of 35.
+The `s-qwen3.5-4b` row was taken on battery and on an earlier code state, before the fix that reads grouped citations such as
+"[1, 2]"; the relevance floor was 0.0, as it is now, and qwen3 models write no grouped citations, so the fix changes nothing
+for that card. The default card is the winner of its class: it is six questions (0.17) ahead of `s-qwen3.5-4b`, the smallest download (2.5 GB)
 and not slower. `s-gemma4-e4b` has no valid run: two runs were void because the reranker timed out on one to two retrievals
 (swap 7 to 10 GB, the model takes 9.5 GB of the 10.4 GB usable). Their results, in brackets, only indicate that it does not
 beat 32 of 35.
@@ -203,8 +210,7 @@ the corpus by design; the embedder table has 27 golds (a 30-question version of 
 | | reranked | 0.56 | 0.85 | 0.85 | 0.85 | 0.679 |
 
 After reranking `l` is ahead by 0.04 in hit@5 (one question) and equal in MRR: noise. The tie goes to the smaller and faster
-`m`: its retrieval takes a median 3.25 s (max 4.85 s) against 3.50 s (7.56 s), and the stack with `l` was deeper in swap
-(6.8 GB of 7.2 GB at the end of its run, against at most 4.8 GB with `m`). **Winner: `snowflake-arctic-embed-m-v2.0`.**
+`m`: its retrieval takes a median 3.25 s (max 4.85 s) against 3.50 s (7.56 s). **Winner: `snowflake-arctic-embed-m-v2.0`.**
 `Qwen3-Embedding-4B` did not load on this Mac and is not measured.
 
 **Reranker** (full index, 32 golds, on battery 79 % to 56 %; the whole retrieval including the reranker, median and max):
@@ -215,8 +221,8 @@ After reranking `l` is ahead by 0.04 in hit@5 (one question) and equal in MRR: n
 | bge-reranker-v2-m3 | 0.56 | 0.75 | 0.84 | 0.84 | 0.662 | 3.16 s / 4.47 s |
 | Qwen3-Reranker-0.6B | 0.56 | 0.66 | 0.81 | 0.88 | 0.646 | 8.92 s / 12.54 s |
 
-The Qwen reranker is 0.03 lower in hit@5 and 0.016 in MRR (noise), 2.8 times slower (the reranker call alone: 8.0 s against
-2.5 s), and heavier (peak 7.2 to 7.9 GB against 5.9 to 6.5 GB); its yes/no scores sit near 1.0 even on questions without an answer.
+The Qwen reranker is 0.03 lower in hit@5 and 0.016 in MRR (noise), 2.8 times slower per retrieval (8.92 s against 3.16 s) and
+3.2 times slower for the reranker call alone (8.0 s against 2.5 s), and heavier (peak 7.2 to 7.9 GB against 5.9 to 6.5 GB); its yes/no scores sit near 1.0 even on questions without an answer.
 **Winner: `bge-reranker-v2-m3`.** `Qwen3-Reranker-4B` did not fit this Mac and is not measured.
 
 **Retrieval ablation** (`rag eval --retrieval-only --ablation`, full index, 32 golds, 210 retrievals, none with a failed
@@ -231,25 +237,27 @@ rerank; each row adds one stage to the one above; the last row is the product):
 | + whole parents | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
 | + reference hop | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
 
-\* The first three rows send about 117 sections to the reranker. That takes 13.8 to 17.3 s, above the product's 15 s limit for the
-reranker, so this run used a limit of 60 s; the product's retrieval is the last row, with the fusion cut, and takes about 2 s. The
-latencies of the first three rows describe the ablation, not the product. The ablation ran with a relevance floor of 0.1; the
+\* The first three rows send about 117 sections to the reranker. Their retrieval takes a median 13.8 to 17.3 s (max 28.9 s); the
+first attempt, at the product's 15 s limit for the reranker, lost 53 reranks, so this run used a limit of 60 s. The product's
+retrieval is the last row, with the fusion cut, and takes about 2 s. The latencies of the first three rows describe the ablation, not the product. The ablation ran with a relevance floor of 0.1; the
 product's is 0.0. The floor changed no gold's rank, only the final list of two questions.
 
-Reading it: the filters and the fusion cut each add 0.07 to 0.09 in hit@5 (two to three questions), and the fusion cut also
-brings the latency under the limit. Whole parents, acronyms and the reference hop show no measurable gain on this set (the
+Reading it: the filters and the fusion cut each raise hit@5 by 0.07 to 0.09 (two to three questions) but hit@1 by only 0.06 and
+0.03, below the 0.10 that counts as wide here; together they take hit@5 from 0.72 to 0.88, and the fusion cut also brings the
+latency under the limit. Whole parents, acronyms and the reference hop show no measurable gain on this set (the
 hop never added a section): the set cannot tell whether they help. Nothing reaches 1.00: from the fusion cut on, four golds
-(S05, S22, S26 and S30) are not in the final list, so the set is not too easy. (The example profile's four-question set does
+(S05, S22, S26 and S30) are not in the final list, so the set is not too easy. (The example profile's four-question set, measured on an M1 Max with 64 GB, does
 reach 1.00 after reranking; it only shows that the eval runs.)
 
 **How far these numbers carry.**
 
 - One machine and one run per cell.
 - 35 questions, 32 with a gold source (27 in the embedder table). One question is 0.03 to 0.04; a difference under 0.05 is noise
-  and 0.10 is already wide. No two ablation rows differ by 0.10 except the first (no filters) against the last.
-- The questions were tuned after a first run on the same set.
-- Three runs of the default card scored 27 of 30 (a 30-question version of the set), 31 of 35 and 32 of 35: model noise of one or two
-  questions (S17 passes or fails with the same two sources).
+  and 0.10 is already wide. No two ablation rows differ by 0.10 except the first (no filters) against the last three.
+- The questions were revised after a first run on the same set, so the set is not a blind test.
+- The default card's runs: 27 of 30 (core index, the 30-question version of the set) and 31 of 35 (full index) failed S17, S26
+  and S30; 32 of 35 (full index, the run in the table) passed S17 with the same two sources. S17 flips between runs: model noise
+  of one question. A further 31 of 35 at a relevance floor of 0.1, no longer the setting, is left out.
 - Not answered by the default card: S26 and S30 fail, S35 is refused as out of scope and printed `stale`; it stays in the
   denominator.
 - Whole parents, acronyms and the reference hop show no gain here. Reranking lowers hit@10 against the fused list (0.91
@@ -289,7 +297,8 @@ reach 1.00 after reranking; it only shows that the eval runs.)
 
 Keep the index current with `rag reindex`, on a schedule. It needs Docker and the stack's Postgres running (a first `rag up`
 done), and it crawls again, so schedule it rarely. `rag reindex --resume` continues an interrupted crawl; `rag reindex --full`
-adds the full source set: the first build took about 30 minutes on the M2 Pro (1750 requests at one per second per host). The indexer's size check compares a build only with the last build of the same
+adds the full source set: about 42 minutes on the M2 Pro in two builds (30 + 12) on top of a core index whose chunks were cached
+(the first sent 1750 requests at one per second per host); a full build from nothing was not timed. The indexer's size check compares a build only with the last build of the same
 profile and source set (core or full, plus your folders). `rag rollback` makes the previous generation live again, and it
 stops when the index was built for another profile than the stack runs: after switching profiles, go back with
 `rag up --profile <name>`, not with `rag rollback`.

@@ -56,13 +56,15 @@ On the M2 Pro with 16 GB (Ollama 0.40.17, `LLAMA_ARG_CACHE_RAM=1024`, AC power u
 
 | Card | ok | fail | stale | Median answer time |
 |---|---|---|---|---|
-| `s-qwen3-4b-instruct-2507` (default), commit e25a656 | 32 | 2 | 1 | 26.3 s |
-| `s-qwen3.5-4b`, on battery | 26 | 7 | 2 | 28.9 s |
+| `s-qwen3-4b-instruct-2507` (default) | 32 | 2 | 1 | 26.3 s |
+| `s-qwen3.5-4b`, on battery, earlier code state | 26 | 7 | 2 | 28.9 s |
 | `s-gemma4-e4b`: not measured validly | (24) | (10) | (1) | (34.6 s, 35.8 s) |
 
-The default card fails S26 and S30 and refuses S35 (printed `stale`, it stays in the denominator). Three runs of it scored 27 of
-30 (a 30-question version of the set), 31 of 35 and 32 of 35: the model's noise is one or two questions (S17 passes or
-fails with the same sources). `s-qwen3.5-4b` is six questions behind (an invalid citation in S16, a wrong date in S14, S27 wrongly "not listed"); the
+The default card fails S26 and S30 and refuses S35 (printed `stale`, it stays in the denominator). Its runs: 27 of 30 (core index,
+the 30-question version of the set) and 31 of 35 (full index) failed S17, S26 and S30; 32 of 35 (full index, the run in the table)
+passed S17 with the same sources, so S17 flips between runs: the model's noise is one question. The `s-qwen3.5-4b` row was taken
+on battery and on an earlier code state, before the fix that reads grouped citations such as "[1, 2]" (the relevance floor was 0.0,
+as it is now; qwen3 models write no grouped citations, so the fix changes nothing for that card). `s-qwen3.5-4b` is six questions behind (an invalid citation in S16, a wrong date in S14, S27 wrongly "not listed"); the
 default card is also the smallest download and not slower, so it is the class's default. `s-gemma4-e4b` has no valid run: in both
 runs the reranker timed out on one to two retrievals (swap 7 to 10 GB; the model takes 9.5 GB of the 10.4 GB usable), and the
 brackets only say it does not beat 32 of 35. A whole answer takes about 25 to 27 s at the median on this Mac, mostly the prompt's
@@ -89,8 +91,9 @@ per cell; a difference under 0.05 is noise and goes to the smaller or faster mod
 | Qwen3-Reranker-0.6B | 0.56 | 0.66 | 0.81 | 0.88 | 0.646 | 8.92 s |
 
 After reranking `l` is 0.04 ahead in hit@5 and equal in MRR, so the smaller `m` stays (median retrieval 3.25 s against 3.50 s; its
-build took 3 min 14 s against 5 min 46 s, on corpora of different size). The Qwen reranker is 2.8 times slower (the call alone 8.0 s
-against 2.5 s), peaks at 7.2 to 7.9 GB against 5.9 to 6.5 GB, and its scores sit near 1.0 on questions without an answer, so no cut can use them. `threshold` 0.50 and `min_docs` 3 stay. `Qwen3-Embedding-4B` (the load alone grew swap by
+build took 3 min 14 s for 3666 sections and 15472 chunks (14481 embedded) against 5 min 46 s for 3637 sections and 15373 chunks
+(14382 embedded): corpora of different size). The Qwen reranker is 2.8 times slower per retrieval (8.92 s against 3.16 s) and 3.2 times
+slower for the reranker call alone (8.0 s against 2.5 s), peaks at 7.2 to 7.9 GB against 5.9 to 6.5 GB, and its scores sit near 1.0 on questions without an answer, so no cut can use them. `threshold` 0.50 and `min_docs` 3 stay. `Qwen3-Embedding-4B` (the load alone grew swap by
 more than 4 GB) and `Qwen3-Reranker-4B` (aborted by the same guard) did not fit this Mac and are not measured. Reranking lowers
 hit@10 against the fused list (0.91 to 0.84), and the embedder was decided on the core index only.
 
@@ -108,7 +111,7 @@ shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, A
 | `llama-server`, `LLAMA_ARG_CACHE_RAM=1024` | 2.4 to 3.1 GB | 2.4 GB (peak 3.1), as Ollama answers nothing in this run |
 | Colima VM (the default 4 CPUs, 6 GiB) | 1.1 GB fresh, 1.5 GB with Postgres in use | 1.5 GB |
 
-- **Reranker.** On MPS the server scores 4 pairs per batch (`RERANKER_PREDICT_BATCH_SIZE` overrides it; CUDA and the CPU keep 32).
+- **Reranker.** On MPS the server scores 4 pairs per batch (`RERANKER_PREDICT_BATCH_SIZE` overrides it in native mode, the compose files pass none; CUDA and the CPU keep 32).
   Scores differ from batch 32 by at most 0.001 and the order of the best eight is the same (measured with bge-reranker-v2-m3 in
   cross-encoder mode only). Emptying the MPS cache after a
   request does not lower the peak.
@@ -128,7 +131,7 @@ shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, A
   10.9 GB. That reading is from a retrieval-only run with Ollama nearly idle, not from answers. A stack that has run several builds
   is larger until it is restarted (the reranker keeps 5.2 GB after use against 3.0 GB fresh). The reranker's batch sizes 2 and 1
   were not measured. On the healthy stack a 30-question version of the smoke set, with answers, ran with no degraded retrieval and no
-  timeout, and swap was about 5.3 GB at the end of the run (3 of the 30 failed their content checks only); the 35-question run
+  timeout (3 of the 30 failed their content checks only); the 35-question run
   of the default card, also with no degraded retrieval, stood at 6.8 to 8.3 GB.
   Watch it with `sysctl vm.swapusage`; `rerank_failed: True` in `.rag/logs/backend.log` means the answers came from unranked documents.
 
