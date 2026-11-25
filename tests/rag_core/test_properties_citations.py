@@ -4,7 +4,7 @@ keeps what the answer cites, else all."""
 
 import re
 
-from hypothesis import given, settings
+from hypothesis import example, given, settings
 from hypothesis import strategies as st
 from rag_core.domain import citations as ct
 from rag_core.domain import source_meta as sm
@@ -41,6 +41,7 @@ def test_every_valid_number_gets_one_entry(sources):
 
 
 @settings(max_examples=200, deadline=None)
+@example(sources=[{"n": 1}, {"n": 3}], answer="[1,2]", mode="cited")  # a grouped citation cites each of its numbers
 @given(
     sources=dict_sources,
     answer=st.text("ab [],0123456789", max_size=40),
@@ -48,6 +49,7 @@ def test_every_valid_number_gets_one_entry(sources):
 )
 def test_cited_display_keeps_the_cited_sources_or_all(sources, answer, mode):
     shown = sm.select_sources_for_display(sources, answer, mode)
-    cited = {int(n) for n in re.findall(r"\[(\d{1,2})\]", answer)}
+    groups = re.findall(r"\[(\d{1,2}(?:\s*,\s*\d{1,2})*)\]", answer)
+    cited = {int(n) for group in groups for n in group.split(",")}
     only_cited = [s for s in sources if s.get("n") in cited]
     assert shown == (only_cited or sources if mode == "cited" else sources)
