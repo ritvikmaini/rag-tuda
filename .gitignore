@@ -27,3 +27,5 @@ deploy/ci/.generated/
 secrets/*
 /.env.*
 CLAUDE.local.md
+# a private reference, not for the repository
+/BRIEF.md

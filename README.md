@@ -1,84 +1,92 @@
 # rag-tuda
 
-Cited answers on open-weight models, customised for TU Darmstadt's Fachbereich Informatik. A private proof-of-concept
-showcase: a student project that answers questions about Bachelor, Master and PhD study rules, the examination regulations
-(PO) and their versions, TU-wide rules and the residence permit for studying. It is **not an official service of TU
-Darmstadt**, **not legal advice**, and every answer is AI-generated and without guarantee: check the cited source.
+**A study-rules assistant for TU Darmstadt's Fachbereich Informatik that answers with numbered citations, runs on
+open-weight models, and fits on a 16 GB laptop.**
 
-The assistant answers from its indexed documents only, each statement with a numbered link to its source and the PO version
-it rests on; the language model's own knowledge serves only for conversation. It answers in German ("Sie"), or in the
-question's language, and shapes an answer as a table, a checklist, a chart or a mind map when the question calls for one.
-Everything runs on your own hardware. A question stays on the machine unless you choose a hosted model card (a `l-groq-...`
-card); the page then shows which model and provider answer.
+Ask "How many weeks do I have for the bachelor thesis?" and get an answer that rests on the right version of the examination
+regulations (PO), links every statement to the page or PDF it came from, and says so when the documents hold no answer.
+It covers the Bachelor, Master and doctoral rules of the department, the university-wide regulations, semester dates and
+fees, and the residence permit for studying. One command crawls the sources, builds the index and opens the chat page.
 
-## What this showcases
+> An independent student project. **Not an official service of TU Darmstadt and not legal advice.** Every answer is
+> AI-generated and without guarantee: check the cited source.
 
-- a configuration-driven crawler for a real university site (polite, robots.txt-aware, host allow-list);
-- version-aware retrieval: hard filters for degree, programme, PO version and document type, with the filter named when
-  nothing matches (never a silent unfiltered retry);
-- hybrid search (vectors and German full text, with acronym expansion), fusion, whole-section reranking, a deterministic
-  reference hop that resolves "§ n APB"-style references, and an LLM-driven extra round on the larger model classes;
-- one architecture across model classes, from a 4B model on a laptop to a large open model on a GPU server.
+## Highlights
+
+- **A 4B model on a laptop gets 32 of 35.** The default model is Qwen3 4B (a 2.5 GB download). On an M2 Pro with 16 GB it
+  passed 32 of the 35 hand-written questions of the project's own test set, with a median answer time of 26 s. No GPU server,
+  no API key, no proprietary model. ([the fine print](#results))
+- **Version-aware, and it fails closed.** Degree, programme, PO version and document type are typed columns that the
+  crawler fills by fixed rules, never by a model. Once a question, or a chip on the page, names a version, they are hard
+  filters in SQL, so a source of another version cannot be cited. A regulation without a programme and a version is not
+  indexed at all, and a filtered search that finds nothing says which filter applied instead of quietly searching
+  without it.
+- **The safety-relevant parts are code, not prompt.** The citation list, the "Based on: PO 2023 of the B.Sc. Informatik"
+  line, the residence-law disclaimer and the note that an English translation is not binding are built by code from the
+  sources an answer cites.
+- **A retrieval pipeline you can take apart.** Hybrid search (vectors and German full text with acronym expansion), score
+  fusion, a cross-encoder that reranks whole sections, and a deterministic hop that follows references such as
+  "§ 22 APB" with no model call. `rag eval --retrieval-only --ablation` measures what each stage buys.
+- **One architecture, four model classes.** A model card (one TOML file) holds a model's window, budget, timeouts and
+  quirks, so the same code serves a 4B model on a laptop, a 27B to 35B model on a larger Mac, a hosted open model on Groq
+  or a vLLM server. Only the small class is measured so far.
+- **Private by default.** Everything binds `127.0.0.1`, the API needs a token, there is no telemetry and no access log.
+  A question leaves the machine only if you choose a hosted model card, and the page then names the provider.
+- **A polite, configuration-driven crawler.** A host allow-list, one request per second per host, its own RFC 9309
+  robots.txt matcher, `noindex` and `noai` honoured, conditional re-fetches, OCR for PDFs without a text layer.
+- **Index generations with rollback.** Every build is a new generation that goes live in one atomic swap; `rag rollback`
+  brings the previous one back, and a build that shrank or lost its page content is refused.
+- **Answers in more than prose.** The page renders tables, checklists you can tick, numbered steps, charts and mind maps,
+  and turns the last answer into a shorter, longer, plain-language or English version, with the citations kept.
+- **Engineered like a product.** 2,370 Python tests, import contracts that keep the domain code free of frameworks, pinned
+  and hash-checked dependencies, and a CI run that drives the real container images against fake model servers and a
+  fixture copy of the university site.
+
+## What you can ask
+
+These are questions from the test set (`profiles/tu-informatik/smoke/smoke_v1.json`), in German or English:
+
+- *Wie viele Wochen habe ich Zeit für die Bachelorarbeit?*
+- *Was hat sich bei der Bachelorarbeit im B.Sc. Informatik zwischen der PO 2015 und der PO 2023 geändert?*
+- *Kann ich mich rückwirkend für ein Semester beurlauben lassen, das schon vorbei ist?*
+- *Which English level do I need for the Master's programme Computer Science?*
+- *How soon after I arrive in Germany do I have to register my address?*
+- *Wie viele Arbeitstage im Jahr darf ich mit einer Aufenthaltserlaubnis zum Studium höchstens arbeiten?*
+
+Chips on the page set your degree, programme and PO version once, so "How long is the thesis?" is answered for *your*
+regulations; explicit text in a question ("nach der PO 2015") outranks the chip. German answers use "Sie", an English
+question gets an English answer, and where a German and an English version of a regulation both exist the binding German
+text wins. Ask about the canteen menu or another department's degree and the assistant says it found nothing, because it
+answers from its indexed documents only.
 
 ## Quick start
 
-Native mode needs an Apple-silicon Mac (16 GB or more), Docker (Colima, OrbStack or Docker Desktop), Ollama running
-(`ollama serve`; on a 16 GB Mac start it as `LLAMA_ARG_CACHE_RAM=1024 ollama serve`, see
-[`handbook/models.md`](handbook/models.md)), and [`uv`](https://docs.astral.sh/uv/).
+On an Apple-silicon Mac with 16 GB or more you need Docker (Colima, OrbStack or Docker Desktop),
+[`uv`](https://docs.astral.sh/uv/) and Ollama running (`ollama serve`; on a 16 GB Mac start it as
+`LLAMA_ARG_CACHE_RAM=1024 ollama serve`, see [`handbook/models.md`](handbook/models.md)).
 
 ```sh
+git clone https://github.com/ritvikmaini/rag-tuda.git && cd rag-tuda
 uv run rag doctor     # checks the machine and lists the model cards it can run
-uv run rag up         # the default profile is tu-informatik: it crawls the listed TU hosts, then indexes
-uv run rag up --profile example --yes   # the bundled labour-law example: no crawl at all
+uv run rag up         # crawls the listed TU hosts (about 8 minutes), builds the index, prints the link to the chat page
+uv run rag ask "Wie viele Wochen habe ich Zeit für die Bachelorarbeit?" --degree bachelor
 ```
 
-`rag up` starts Postgres in Docker on `127.0.0.1:55432`, migrates, starts the embedding (8701) and reranker (8702) servers and
-the backend (8700) as processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`), builds the index when there is none,
-creates the Ollama model `rag-<card>` with the card's window, sends a first request to load it and prints the link. The
-crawl of the default profile is polite: about one request per second per host. `--profile` defaults to the profile this
-folder was last started with, else `tu-informatik`; naming another profile switches, and a name without a
-`profiles/<name>/profile.yaml` is refused before any step, with the profiles that exist. A model that is already on the
-machine is not downloaded again, and nothing is downloaded without your yes (`--yes` or the prompt); for every profile but
-`example` the prompt also names the docling layout and table models and the EasyOCR weights that the indexer fetches itself
-at the first PDF. The index counts as built for a profile when the indexer's stats name that profile and the database volume
-is older than the stats; otherwise `up` builds it, so switching profiles builds the other profile's index and a removed
-volume is rebuilt. A second `up` changes nothing.
+No crawl, just a look? The bundled example profile indexes ten German labour laws from files in the repository:
 
-The default profile's core set (the department's study pages and regulations, the university-wide regulations, the residence
-pages and two laws) came to about 270 pages, about 50 PDFs, 3666 sections and 15472 chunks. On an M2 Pro with 16 GB the crawl and
-the PDF downloads took about 8 minutes and the embedding and build 3 minutes 14 seconds. (A re-crawl of the same set gave 3637
-sections and 15373 chunks, the index of the embedder table below.) The full set (`rag reindex --full`) adds the TU-wide study
-rules and the Landkreis pages: 6799 sections and 29794 chunks in the published index (the build's own `children` count is 29810)
-from 1487 pages (1213 on `www.tu-darmstadt.de`, 265 on the faculty host, 5 on `www.ladadi.de`, 3 on
-`digitales-rathaus.darmstadt.de`, 1 on `www.intern.tu-darmstadt.de`), about 177 PDFs and 2 laws, as they stand after
-a further build that applies the `exclude` list (about two minutes, everything from the cache). The two builds before it, which
-brought the index to 6972 sections, took about 42 minutes (30 + 12; the first sent 1750 requests) on top of a core index whose
-chunks were cached; a full build from nothing was not timed. The crawl sizes that `rag up`, `rag reindex` and `rag doctor` print and
-the "takes hours" of `rag reindex --help` are design estimates, not these measurements.
+```sh
+uv run rag up --profile example --yes
+```
 
-The commands:
+On x86_64 Linux or WSL2 the whole stack runs in Docker: `uv run rag up --mode compose`
+(see [Compose mode](#compose-mode-x86_64-linux-or-wsl2)).
 
-| Command | What it does |
-|---|---|
-| `uv run rag doctor` | checks the machine and picks a class; `--card` shows one card's download size and whether it fits |
-| `uv run rag up` | brings the stack up; `--card`, `--profile` (only a profile that exists), `--mode native\|compose`, `--model`, `--llm-url`, `--yes` |
-| `uv run rag ask "<question>"` | asks one question and streams the cited answer; `--degree`, `--programme`, `--po`, `--lang` |
-| `uv run rag reindex` | builds a new index generation from a re-crawl, swaps it in and restarts the backend; `--full`, `--resume` |
-| `uv run rag rollback` | makes the previous index generation live again and restarts the backend; refused when the index was built for another profile than the stack runs (to go back to a profile, use `rag up --profile <name>`) |
-| `uv run rag eval` | the deploy smoke (stream structure) against the running stack; `--smoke` plays the profile's smoke set with the answer checks; `--retrieval-only [--ablation]` scores retrieval alone, native mode only |
-| `uv run rag add <folder>` | registers a folder of your own documents (Markdown, text, PDF) as a source; then `rag reindex` |
-| `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots`, and fails naming the path and the remedy when files stay behind (written as root by a container) |
+`rag up` starts Postgres in Docker, migrates, starts the embedding server, the reranker server and the backend, builds the
+index when there is none, creates the Ollama model for the chosen card and prints a link that carries the access token.
+Nothing is downloaded without your yes, a model already on the machine is not downloaded again, and a second `rag up`
+changes nothing.
 
-## Profiles
-
-A profile holds everything specific to one document collection. Two exist:
-
-- `profiles/tu-informatik` (the default): the department's and the university's pages, crawled from the hosts in its
-  `sources.yaml` (see [Sources and rights](#sources-and-rights)).
-- `profiles/example`: ten German federal labour laws, read by the `folder` connector. It is the profile CI uses and a demo
-  that needs no crawl.
-
-## Architecture at a glance
+## How it works
 
 ```mermaid
 flowchart LR
@@ -93,180 +101,187 @@ flowchart LR
   hop --> ans[answer<br/>numbered citations<br/>appended lines]
 ```
 
+1. **Analysis.** One call to the model returns JSON: the language, a standalone question, search queries, the intent, and
+   the degree, programme, PO version and document type. Deterministic readers of the question text and the page chips
+   outrank the model's values, and if the JSON is invalid the plain question is searched and the readers still run.
+2. **Hybrid retrieval.** The question's vector against the embeddings, and Postgres full text in German (plus English for
+   English rows), both under the hard filters. Acronyms expand into OR groups ("PO" or "Prüfungsordnung").
+3. **Fusion cut.** Scores are normalised per leg and combined; only the best candidates go on, which is what keeps
+   retrieval at about 2 s.
+4. **Rerank.** A cross-encoder scores whole parent sections against the question. Below the threshold a source is dropped;
+   with none left the assistant declines and names the filter.
+5. **Reference hop.** "§ 22 APB" in a kept section is resolved by pattern to the section it names. No model call.
+6. **Iterative round** (larger model classes only): one extra search for questions that need more than one document.
+7. **Answer.** The prompt is fitted to the card's context window and the answer streams with `[n]` markers. Code builds the
+   citations and appends the PO-version line and the disclaimers.
+
 ```text
-page (web/page) --GET /api/chat, server-sent events--> backend (FastAPI, one pipeline slot)
+page (web/page) --GET /api/chat, server-sent events--> backend (FastAPI + LangGraph, one pipeline slot)
   backend: 1 query analysis ............. the card's OpenAI-compatible endpoint (Ollama natively)
-           2 search: the question's vector ... embedding_service (snowflake-arctic-embed-m-v2.0)
-                     sections and full text .. pgvector (views rag_chunks, rag_sections)
-           3 rerank ..................... reranker_service (bge-reranker-v2-m3)
+           2 search: the question's vector ... embedding server (snowflake-arctic-embed-m-v2.0)
+                     sections and full text .. Postgres + pgvector (views rag_chunks, rag_sections)
+           3 rerank ..................... reranker server (bge-reranker-v2-m3)
            4 answer, streamed with citations . the card's OpenAI-compatible endpoint
-indexer (a one-off container or process, `indexer build`) -> a new index generation -> views repointed -> the backend reloads it on its next start
-evals (a job container, never running on its own): probe runs, the gate and the smoke, over HTTP to the backend
+indexer (a one-off job, `indexer build`) -> a new index generation -> views repointed -> the backend reloads it
+evals (a job, never running on its own): probe runs, the gate and the smoke, over HTTP to the backend
 ```
 
-The answer endpoint is the one the model card names: Ollama on the machine for the S and M cards, Groq's hosted endpoint for
-the L cards, and a vLLM server for the XL card, which is documented but untested (see below). The stream (format 1) sends
-`meta` first, then `status` (five steps), `docs`, `chunk`, `citations` and `error` frames, and `done` last; each frame is
-`data: <json>` followed by a blank line. The compose file publishes one host port, the backend's `127.0.0.1:8700`;
-everything else is reached on the compose network or with `docker exec`. More in [`handbook/architecture.md`](handbook/architecture.md).
+The stream (format 1) sends `meta` first, then `status` (five steps the page shows while it works), `docs`, `chunk`,
+`citations` and `error` frames, and `done` last. There is no approximate vector index: an exact scan over a few thousand
+sections is fast and always returns `k` rows under a filter. More in [`handbook/architecture.md`](handbook/architecture.md)
+and [`handbook/decisions.md`](handbook/decisions.md).
 
-## Models and classes
+**The stack:** Python 3.12, FastAPI, LangGraph, Postgres 16 with pgvector, sentence-transformer model servers on PyTorch
+(CUDA, MPS or CPU), Ollama, vLLM or Groq behind one OpenAI-compatible adapter, docling and EasyOCR for PDFs, a static
+page with no build step (vanilla JavaScript; Showdown, DOMPurify, Chart.js and Markmap vendored and integrity-checked),
+Docker Compose, `uv` workspaces and `just`.
 
-A model card (`models/cards/*.toml`) names the answer model, its endpoint, its window and its timeouts. The classes:
+## Model classes
 
 | Class | Cards | Where it runs |
 |---|---|---|
-| S | `s-qwen3-4b-instruct-2507` (default, about 2.5 GB), `s-qwen3.5-4b` (4.0 GB), `s-gemma4-e4b` (9.5 GB) | Ollama on the machine |
-| M | `m-qwen3.6-35b-a3b` (22.6 GB), `m-qwen3.8-27b` (17.7 GB), `m-gemma4-31b` (20.4 GB) | Ollama on the machine |
-| L | `l-groq-gpt-oss-120b`, `l-groq-gpt-oss-20b`, `l-groq-qwen3.8-27b` | Groq's hosted endpoint; analysis, embedding and reranking stay local |
-| XL | `xl-vllm-example` | a vLLM server on NVIDIA GPUs; shipped as an example to copy, not tested |
+| S | `s-qwen3-4b-instruct-2507` (default, 2.5 GB), `s-qwen3.5-4b` (4.0 GB), `s-gemma4-e4b` (9.5 GB) | Ollama on the machine; an 8K window |
+| M | `m-qwen3.6-35b-a3b` (22.6 GB), `m-qwen3.8-27b` (17.7 GB), `m-gemma4-31b` (20.4 GB) | Ollama on a machine with 24 GB or more usable; a 16K window, the iterative round |
+| L | `l-groq-gpt-oss-120b`, `l-groq-gpt-oss-20b`, `l-groq-qwen3.8-27b` | Groq's hosted endpoint for the answer; analysis, embedding and reranking stay local |
+| XL | `xl-vllm-example` | a vLLM server on NVIDIA GPUs; shipped as an example to copy |
 
-**What is measured.** Every measurement of the TU profile in this README comes from one machine, an Apple M2 Pro with 16 GB
-(10.4 GB usable), macOS 26, Ollama 0.40.17 started with `LLAMA_ARG_CACHE_RAM=1024`, on AC power unless a line says "on
-battery"; the exceptions, named as such, are an M1 Max line and the example profile's four-question run. Figures called
-estimates (the crawl sizes and the "takes hours" the commands print) are not measurements. Each cell is one run.
+`rag doctor` picks the class that fits the machine; `rag up --card <name>` chooses a card. The embedder
+(`Snowflake/snowflake-arctic-embed-m-v2.0`) and the reranker (`BAAI/bge-reranker-v2-m3`) are the same for every class and
+pinned by revision. Every model is open-weight. A hosted card needs `GROQ_API_KEY` in the environment of `rag up`; only the
+answer call goes to the provider, and you should enter no personal matters while one is active (Groq's free-tier data
+terms have not been read in full). Cards, quirks and memory settings: [`handbook/models.md`](handbook/models.md).
 
-*Speed of the S cards* (M2 Pro, 16 GB): at the full 8K-token window the first token comes after 21 s
-(`s-qwen3-4b-instruct-2507`), 20 s (`s-qwen3.5-4b`) or 18 s (`s-gemma4-e4b`), and a 700-token answer ends after 41, 37 or 35 s;
-decoding runs at 36 to 42 tokens/s. On an M1 Max with 64 GB (Ollama 0.40.12) the default card reached the first token of a
-6K-token prompt after 16.4 s, decoding at 25 to 33 tokens/s. A whole answer of the default card takes 25 to 26 s at the
-median on the M2 Pro on AC (25.0, 25.9 and 26.3 s in three runs) and about 27 s in two runs on battery, mostly the prefill of the prompt; decoding a median answer (86 tokens) takes 2 to 3 s. The S cards'
-timeouts (`deadline_s` 150, `idle_s` 60, `llm_read_s` 60, `analysis_s` 40) are well above these cases because they also have
-to cover the retrieval's own waits (one `get_docs` call can be silent for about 57 s); a Mac much slower than this one may
-still need them raised. Ollama 0.40.17 answers HTTP 501 to a `response_format` for `qwen3.5:4b` and `gemma4:e4b`, so their
-cards ask for JSON in the prompt (`structured_output = "prompt"`); the default card's tag takes the schema.
+## Results
 
-*Answer quality of the S cards* (M2 Pro, 16 GB; `rag eval --smoke`: the 35 questions of `profiles/tu-informatik`, full index,
-generation 6):
+Everything here was measured on one machine: an Apple M2 Pro with 16 GB, Ollama 0.40.17, the default card, one run per
+number. The question set is the project's own 35 hand-written questions (32 with a gold source, 3 with no answer in the
+corpus by design).
 
-| Card | ok | fail | stale | Median answer time |
+| What | Result |
+|---|---|
+| Answers passing their checks (`rag eval --smoke`) | **32 of 35** (2 failed, 1 refused as out of scope) |
+| Whole answer, median | 26 s, mostly reading the 8K-token prompt; the first token after about 21 s at a full window |
+| Retrieval, median | about 2 s |
+| Gold source in the top 5 after reranking | 0.88 (0.72 without the filters and the fusion cut) |
+| Memory | the three model processes at 9.8 GB of the 10.4 GB a 16 GB Mac leaves usable (read in a retrieval-only run, not during answers) |
+| Core index | about 270 pages and 50 PDFs, 3,666 sections, 15,472 chunks; crawl 8 min, embedding and build 3 min 14 s |
+| Full index (`rag reindex --full`) | 1,487 pages, about 177 PDFs and 2 laws, 6,799 sections, 29,794 chunks |
+
+What each retrieval stage adds (`rag eval --retrieval-only --ablation`, full index, 32 golds):
+
+| Stage | hit@1 | hit@5 | MRR | Median latency |
 |---|---|---|---|---|
-| `s-qwen3-4b-instruct-2507` (default) | 32 | 2 | 1 | 26.3 s |
-| `s-qwen3.5-4b`, on battery, earlier code state | 26 | 7 | 2 | 28.9 s |
-| `s-gemma4-e4b`: not measured validly | (24) | (10) | (1) | (34.6 s, 35.8 s) |
+| no filters | 0.50 | 0.72 | 0.608 | 17.28 s |
+| + filters | 0.56 | 0.81 | 0.661 | 14.36 s |
+| + acronyms | 0.56 | 0.81 | 0.659 | 13.78 s |
+| + fusion cut | 0.59 | 0.88 | 0.702 | 2.04 s |
+| + whole parents | 0.59 | 0.88 | 0.694 | 2.28 s |
+| + reference hop (the product) | 0.59 | 0.88 | 0.694 | 2.28 s |
 
-`stale` is a fee or date answer whose content checks failed (here S35, which the model refused as out of scope); it stays in the denominator of 35.
-The `s-qwen3.5-4b` row was taken on battery and on an earlier code state, before the fix that reads grouped citations such as
-"[1, 2]"; the relevance floor was 0.0, as it is now, and qwen3 models write no grouped citations, so the fix changes nothing
-for that card. The default card is the winner of its class: it is six questions (0.17) ahead of `s-qwen3.5-4b`, the smallest download (2.5 GB)
-and not slower. `s-gemma4-e4b` has no valid run: two runs were void because the reranker timed out on one to two retrievals
-(swap 7 to 10 GB, the model takes 9.5 GB of the 10.4 GB usable). Their results, in brackets, only indicate that it does not
-beat 32 of 35.
+How far these numbers carry:
 
-*Memory on a 16 GB Mac.* With `LLAMA_ARG_CACHE_RAM=1024` and the reranker's batch of 4 pairs on MPS, the three model processes
-(embedder, reranker, Ollama) together used 9.8 GB at the busiest sample of a retrieval-only run, against about 10.4 GB
-usable, without the Colima VM (about 1.5 GB more). Ollama was nearly idle in that run, so this is not a measurement made
-during answers; in the last smoke run of the default card swap stood at 6.8 to 8.3 GB. A stack that has run several builds
-holds more (the reranker keeps 5 GB instead of 3 GB until it is restarted). Reranker batches of 2 and 1 were not measured.
+- One machine, one run per cell, 35 questions: one question is 0.03, a difference under 0.05 is noise.
+- The questions were revised after a first run on the same set, so it is not a blind test.
+- The filters and the fusion cut carry the gain. Acronyms, whole parents and the reference hop show none *on this set*
+  (the hop never added a section); they are design choices the set is too small to judge.
+- The M, L and XL cards have no measurements of any kind: they do not fit this machine or need an account. The XL card has
+  never been run.
+- The first three ablation rows rerank about 117 sections and ran with a longer reranker limit; their latencies describe
+  the ablation, not the product.
 
-**What is not measured.** The M, L and XL cards have no measurement of any kind, because they do not fit this machine or need
-an account: no speed, quality or memory numbers for them are given. Also unmeasured: `Qwen/Qwen3-Embedding-4B` and
-`Qwen/Qwen3-Reranker-4B` (neither fits this Mac beside the rest: the embedder's load alone pushed swap up by more than 4 GB),
-the Groq cards (no key; their structured-output behaviour is unknown), `s-gemma4-e4b` on a machine that holds it validly, and
-every number on a question set larger than 35. The M-class prompts are untested.
+The bake-offs behind the pinned embedder and reranker, the per-card speed and quality tables and every caveat are in
+[`handbook/evaluation.md`](handbook/evaluation.md) and [`handbook/models.md`](handbook/models.md).
 
-**vLLM (XL).** `deploy/compose.vllm.yaml` serves the card's model at a pinned revision and loads the weights offline from the
-host's Hugging Face cache (`~/.cache/huggingface`). Download that revision there first (the revision is in the `--revision`
-flag of `compose.vllm.yaml`, for example with `hf download Qwen/Qwen3-235B-A22B-Instruct-2507-FP8 --revision <revision>`); the
-container starts with `HF_HUB_OFFLINE=1` and downloads nothing itself. To serve another model, copy the card and change both
-together.
+<details>
+<summary>Index sizes in full</summary>
 
-**Hosted cards (Groq).** A `l-groq-...` card needs `GROQ_API_KEY` in the environment of `rag up`; the key goes to the backend
-process only and is never stored. Groq's free-tier data terms have not been read in full: enter no personal matters while a
-remote card is active. Only the generation call leaves the machine, to the card's endpoint.
+The default profile's core set (the department's study pages and regulations, the university-wide regulations, the residence
+pages and two laws) came to about 270 pages, about 50 PDFs, 3666 sections and 15472 chunks. On an M2 Pro with 16 GB the crawl and
+the PDF downloads took about 8 minutes and the embedding and build 3 minutes 14 seconds. (A re-crawl of the same set gave 3637
+sections and 15373 chunks, the index of the embedder bake-off.) The full set (`rag reindex --full`) adds the TU-wide study
+rules and the Landkreis pages: 6799 sections and 29794 chunks in the published index (the build's own `children` count is 29810)
+from 1487 pages (1213 on `www.tu-darmstadt.de`, 265 on the faculty host, 5 on `www.ladadi.de`, 3 on
+`digitales-rathaus.darmstadt.de`, 1 on `www.intern.tu-darmstadt.de`), about 177 PDFs and 2 laws, as they stand after
+a further build that applies the `exclude` list (about two minutes, everything from the cache). The two builds before it, which
+brought the index to 6972 sections, took about 42 minutes (30 + 12; the first sent 1750 requests) on top of a core index whose
+chunks were cached; a full build from nothing was not timed. The crawl sizes that `rag up`, `rag reindex` and `rag doctor` print and
+the "takes hours" of `rag reindex --help` are design estimates, not these measurements.
 
-## Evaluation
+</details>
 
-`uv run rag eval` runs the deploy smoke against the running stack: the fixed probes of the profile's `gate.yaml` (five in the example
-profile: about six requests, about two minutes). It checks the structure of the stream only, so a correct deploy does not fail on answer variance: no
-error frames, the time to first token, the sequence of status steps, and the `docs`, `chunk` and `citations` frames. The checks
-on the answers themselves (each `[n]` maps to a source, the language equals the question's, the PO-version line, "Sie" in
-German answers, the residence disclaimer) belong to the gate and probe runs of `apps/evals`, not to the smoke.
+## What it does not do
 
-`uv run rag eval --smoke` plays the profile's whole smoke set (`smoke/smoke_v1.json` of `profiles/tu-informatik`: hand-written
-questions, some asked with the page's degree, programme or PO chips) and applies the answer checks above to each answer. A
-question whose answer is a fee or a date (`retrieval.volatile` in `gate.yaml`) prints `stale` instead of `FAIL` when only its content checks fail. The
-quote of each question's gold source was copied from the crawl; `--retrieval-only` reports a gold whose quote is in no section of
-its url as stale and leaves it out of the scores. The answer results of the S cards are under [Models and classes](#models-and-classes).
+- **It is a single-user local tool, not a hosted service.** Every port binds `127.0.0.1`, access is one shared token, and
+  a local card answers one question at a time (a second one waits, then gets a "busy" message). There are no user
+  accounts, no sign-on and no TLS. A department that wants to serve many students needs a reverse proxy with TLS and
+  sign-on in front, and a model server that batches requests (the vLLM path, which is untested here).
+- **Only the small class is proven.** See [Results](#results).
+- **It knows three programmes.** B.Sc. Informatik, M.Sc. Informatik and M.Sc. Computer Science, the doctorate, the
+  university-wide rules and the residence pages. The department's other programmes are left out of the crawl.
+- **It ships no index.** TU Darmstadt's content may not be redistributed, so every installation crawls for itself.
+- **It is not fast on a laptop.** About 26 s per answer on a 16 GB Mac.
+- **It gets things wrong.** 3 of 35 on its own set, and fees and dates go stale between re-crawls. Treat an answer as a
+  pointer to the source.
+- **Platforms.** Native mode needs an Apple-silicon Mac; compose mode needs x86_64 Linux or WSL2 (the model servers' images
+  do not build on arm64 Linux). Your own folders (`rag add`) work in native mode only.
 
-`uv run rag eval --retrieval-only` scores retrieval alone: for each question of the gate's probe sets, the rank of its gold
-source after fusion and after reranking (hit@k and MRR). It runs against the native stack only. With `--ablation` it adds one
-row per retrieval stage turned on, cumulatively: no filters, + filters, + acronyms, + fusion cut, + whole parents, + reference
-hop.
+## Background
 
-### Results on the TU profile
+This project is inspired by work I did during an internship at a German municipality. With their permission, this
+repository is an abstracted version with a similar implementation, tailored to a public document collection: the study
+rules of TU Darmstadt's Fachbereich Informatik. The aim is that a student, or the department itself, can run it and ask
+questions about the university's and the department's rules and documents, and that the whole thing stays on open-weight
+models and on hardware you own.
 
-Machine for every table below: M2 Pro, 16 GB, macOS 26, Ollama 0.40.17 with `LLAMA_ARG_CACHE_RAM=1024`, AC power unless a line
-says otherwise; embedder `snowflake-arctic-embed-m-v2.0`, reranker `bge-reranker-v2-m3` (batch 4 on MPS), default card, unless the
-table varies them. The questions are the 35 of the smoke set: 32 have a gold source, 3 (S18 to S20) have no answer in
-the corpus by design; the embedder table has 27 golds (a 30-question version of the set, 3 without a gold).
+It is also meant to be read. The parts I would point a reviewer to: the fail-closed metadata and filters
+(`apps/indexer/src/indexer/crawl/metadata.py`, `packages/rag_core/src/rag_core/domain/filters.py`), the retrieval
+sequence over ports (`packages/rag_core/src/rag_core/services/retrieval.py`), index generations
+(`apps/indexer/src/indexer/index/generations.py`), the request guard that ends every request in bounded time
+(`apps/assistant_api/src/assistant_api/chat/guard.py`) and the retrieval eval (`apps/assistant_api/src/assistant_api/retrieval_eval.py`).
 
-**Embedder** (core index, 3637 sections, 27 golds; hit@k is the share of questions whose gold is in the first k):
+## Commands
 
-| Embedder | Stage | hit@1 | hit@3 | hit@5 | hit@10 | MRR |
-|---|---|---|---|---|---|---|
-| arctic-embed-m-v2.0 (768) | fusion | 0.63 | 0.78 | 0.81 | 0.93 | 0.715 |
-| | reranked | 0.59 | 0.81 | 0.81 | 0.81 | 0.679 |
-| arctic-embed-l-v2.0 (1024) | fusion | 0.67 | 0.78 | 0.85 | 0.89 | 0.747 |
-| | reranked | 0.56 | 0.85 | 0.85 | 0.85 | 0.679 |
+| Command | What it does |
+|---|---|
+| `uv run rag doctor` | checks the machine and picks a class; `--card` shows one card's download size and whether it fits |
+| `uv run rag up` | brings the stack up; `--card`, `--profile` (only a profile that exists), `--mode native\|compose`, `--model`, `--llm-url`, `--yes` |
+| `uv run rag ask "<question>"` | asks one question and streams the cited answer; `--degree`, `--programme`, `--po`, `--lang` |
+| `uv run rag reindex` | builds a new index generation from a re-crawl, swaps it in and restarts the backend; `--full`, `--resume` |
+| `uv run rag rollback` | makes the previous index generation live again and restarts the backend; refused when the index was built for another profile than the stack runs (to go back to a profile, use `rag up --profile <name>`) |
+| `uv run rag eval` | the deploy smoke (stream structure) against the running stack; `--smoke` plays the profile's smoke set with the answer checks; `--retrieval-only [--ablation]` scores retrieval alone, native mode only |
+| `uv run rag add <folder>` | registers a folder of your own documents (Markdown, text, PDF) as a source; then `rag reindex` |
+| `uv run rag down` | stops everything (safe to repeat; data stays); `--purge --yes` also deletes `.rag/crawl` and `.rag/snapshots`, and fails naming the path and the remedy when files stay behind (written as root by a container) |
 
-After reranking `l` is ahead by 0.04 in hit@5 (one question) and equal in MRR: noise. The tie goes to the smaller and faster
-`m`: its retrieval takes a median 3.25 s (max 4.85 s) against 3.50 s (7.56 s). **Winner: `snowflake-arctic-embed-m-v2.0`.**
-`Qwen3-Embedding-4B` did not load on this Mac and is not measured.
+`rag up` runs Postgres on `127.0.0.1:55432`, the embedding server on 8701, the reranker on 8702 and the backend on 8700 as
+processes of yours (pid files in `.rag/pids`, logs in `.rag/logs`). `--profile` defaults to the profile this folder was
+last started with, else `tu-informatik`; a name without a `profiles/<name>/profile.yaml` is refused before any step. For
+every profile but `example` the download prompt also names the docling layout and table models and the EasyOCR weights
+that the indexer fetches at the first PDF. The index counts as built for a profile when the indexer's stats name that
+profile and the database volume is older than the stats; otherwise `up` builds it, so switching profiles builds the other
+profile's index and a removed volume is rebuilt.
 
-**Reranker** (full index, 32 golds, on battery 79 % to 56 %; the whole retrieval including the reranker, median and max):
+## Make it yours: profiles and sources
 
-| Reranker | hit@1 | hit@3 | hit@5 | hit@10 | MRR | Retrieval median / max |
-|---|---|---|---|---|---|---|
-| none (the fused list) | 0.53 | 0.75 | 0.78 | 0.91 | 0.657 | |
-| bge-reranker-v2-m3 | 0.56 | 0.75 | 0.84 | 0.84 | 0.662 | 3.16 s / 4.47 s |
-| Qwen3-Reranker-0.6B | 0.56 | 0.66 | 0.81 | 0.88 | 0.646 | 8.92 s / 12.54 s |
+A profile is a folder under `profiles/` that holds everything specific to one document collection, so pointing the
+assistant at another department is configuration, not code.
 
-The Qwen reranker is 0.03 lower in hit@5 and 0.016 in MRR (noise), 2.8 times slower per retrieval (8.92 s against 3.16 s) and
-3.2 times slower for the reranker call alone (8.0 s against 2.5 s), and heavier (peak 7.2 to 7.9 GB against 5.9 to 6.5 GB); its yes/no scores sit near 1.0 even on questions without an answer.
-**Winner: `bge-reranker-v2-m3`.** `Qwen3-Reranker-4B` did not fit this Mac and is not measured.
+- `profile.yaml` holds the values that decide the index (chunking, extraction, the sources and their minimums, the embedding
+  model) and the assistant's answer-affecting values (identity, ranking, history, guard, generation); it is baked into the
+  indexer and assistant images, so an image tag fixes them. `messages.de.yaml` and `messages.en.yaml` hold the assistant's
+  texts and the origin labels of the sources, and `prompts/` its prompts.
+- `sources.yaml` is the crawler's host allow-list, `roles.yaml` names the programmes with their PO versions, and
+  `acronyms.yaml` the term groups.
+- `gate.yaml` holds the probe sets and thresholds `evals` measures a change against, and the fixed probes of the deploy smoke.
+- `deploy/env/<env>.yaml` holds the technical values of one environment (endpoints, hosts, paths); the assistant's own technical
+  values are `RAG__…` entries in the backend's compose environment (`deploy/compose.yaml`).
+- A source is a connector registered under the entry point group `rag_core.connectors` and named in the profile with
+  `connector:`. There are three: `folder` (Markdown, text and PDF files of a directory), `tuda_web` (the polite crawler over a
+  host allow-list) and `law_xml` (statutes from the official XML of gesetze-im-internet.de).
+- A new profile is a folder beside the existing ones, built into the indexer, assistant and evals images with
+  `--build-arg PROFILE=<folder>`.
 
-**Retrieval ablation** (`rag eval --retrieval-only --ablation`, full index, 32 golds, 210 retrievals, none with a failed
-rerank; each row adds one stage to the one above; the last row is the product):
-
-| Stage | hit@1 | hit@3 | hit@5 | hit@10 | MRR | Median latency |
-|---|---|---|---|---|---|---|
-| no filters | 0.50 | 0.66 | 0.72 | 0.81 | 0.608 | 17.28 s* |
-| + filters | 0.56 | 0.75 | 0.81 | 0.81 | 0.661 | 14.36 s* |
-| + acronyms | 0.56 | 0.72 | 0.81 | 0.81 | 0.659 | 13.78 s* |
-| + fusion cut | 0.59 | 0.81 | 0.88 | 0.88 | 0.702 | 2.04 s |
-| + whole parents | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
-| + reference hop | 0.59 | 0.78 | 0.88 | 0.88 | 0.694 | 2.28 s |
-
-\* The first three rows send about 117 sections to the reranker. Their retrieval takes a median 13.8 to 17.3 s (max 28.9 s); the
-first attempt, at the product's 15 s limit for the reranker, lost 53 reranks, so this run used a limit of 60 s. The product's
-retrieval is the last row, with the fusion cut, and takes about 2 s. The latencies of the first three rows describe the ablation, not the product. The ablation ran with a relevance floor of 0.1; the
-product's is 0.0. The floor changed no gold's rank, only the final list of two questions.
-
-Reading it: the filters and the fusion cut each raise hit@5 by 0.07 to 0.09 (two to three questions) but hit@1 by only 0.06 and
-0.03, below the 0.10 that counts as wide here; together they take hit@5 from 0.72 to 0.88, and the fusion cut also brings the
-latency under the limit. Whole parents, acronyms and the reference hop show no measurable gain on this set (the
-hop never added a section): the set cannot tell whether they help. Nothing reaches 1.00: from the fusion cut on, four golds
-(S05, S22, S26 and S30) are not in the final list, so the set is not too easy. (The example profile's four-question set, measured on an M1 Max with 64 GB, does
-reach 1.00 after reranking; it only shows that the eval runs.)
-
-**How far these numbers carry.**
-
-- One machine and one run per cell.
-- 35 questions, 32 with a gold source (27 in the embedder table). One question is 0.03 to 0.04; a difference under 0.05 is noise
-  and 0.10 is already wide. No two ablation rows differ by 0.10 except the first (no filters) against the last three.
-- The questions were revised after a first run on the same set, so the set is not a blind test.
-- The default card's runs: 27 of 30 (core index, the 30-question version of the set) and 31 of 35 (full index, on battery) failed S17, S26
-  and S30; 32 of 35 (full index, the run in the table) passed S17 with the same two sources. S17 flips between runs: model noise
-  of one question. A further 31 of 35 at a relevance floor of 0.1, no longer the setting, is left out.
-- Not answered by the default card: S26 and S30 fail, S35 is refused as out of scope and printed `stale`; it stays in the
-  denominator.
-- Whole parents, acronyms and the reference hop show no gain here. Reranking lowers hit@10 against the fused list (0.91
-  to 0.84 in the reranker table).
-- The embedder was decided on the core index only.
-- The reranker table and the ablation's last row differ (hit@5 0.84 and MRR 0.662 against 0.88 and 0.694) because the ablation's
-  set has a German twin named in two more golds: never put the two in one column.
-- The memory figure above comes from a retrieval-only run, not from answers; a stack aged by builds is larger until it is restarted.
+Two profiles ship: `tu-informatik` (the default) and `example`, ten German federal labour laws read by the `folder`
+connector, which CI uses and which needs no crawl. Your own documents: `rag add <folder>`, then `rag reindex`.
 
 ## Sources and rights
 
@@ -283,6 +298,8 @@ reach 1.00 after reranking; it only shows that the eval runs.)
   a file in the repository. `rag reindex` prints a note when it is not set.
 - README screenshots must come from the fixture mini-site, never from crawled pages; none is committed yet.
 
+More in [`handbook/sources.md`](handbook/sources.md).
+
 ## Warnings
 
 - **Not legal advice, not an official TU service.** The page footer says so too.
@@ -292,28 +309,20 @@ reach 1.00 after reranking; it only shows that the eval runs.)
 - **Remote cards.** Questions leave the machine only to the answer endpoint of a hosted card, and the page shows it. Groq's
   free-tier data terms are not fully read: no personal matters while a remote card is active.
 - **No telemetry.** Every host port binds `127.0.0.1`, `/api/*` needs a Bearer token, and the backend's HTTP access log is off
-  (the question is a GET parameter).
+  (the question is a GET parameter). Tracing to a Langfuse server of your own is off unless you configure it.
 
 ## Operations
 
 Keep the index current with `rag reindex`, on a schedule. It needs Docker and the stack's Postgres running (a first `rag up`
 done), and it crawls again, so schedule it rarely. `rag reindex --resume` continues an interrupted crawl; `rag reindex --full`
-adds the full source set: about 42 minutes on the M2 Pro in two builds (30 + 12; they brought the index to 6972 sections) on top of a core index whose chunks were cached
-(the first sent 1750 requests at one per second per host); a full build from nothing was not timed. The indexer's size check compares a build only with the last build of the same
-profile and source set (core or full, plus your folders). `rag rollback` makes the previous generation live again, and it
-stops when the index was built for another profile than the stack runs: after switching profiles, go back with
-`rag up --profile <name>`, not with `rag rollback`.
+adds the full source set. The indexer's size check compares a build only with the last build of the same profile and source
+set (core or full, plus your folders). `rag rollback` makes the previous generation live again, and it stops when the index
+was built for another profile than the stack runs: after switching profiles, go back with `rag up --profile <name>`, not with
+`rag rollback`. `uv run rag down` stops the stack and keeps the data. More in
+[`handbook/operations.md`](handbook/operations.md).
 
-The retention job removes conversations older than 90 days and Langfuse traces older than 30 days; without `--apply` it
-only reports. In compose mode, from the repository root:
-
-```sh
-docker compose --env-file .env -f deploy/compose.yaml exec -T backend python -m assistant_api.retention --apply
-```
-
-Natively, with the environment `rag up` gives the backend (the profile, the card and the secrets folder):
-`uv run --frozen --package assistant-api python -m assistant_api.retention --apply`. A run without tracing configured skips
-the trace step and still exits 0 when the other steps worked.
+<details>
+<summary>Scheduling the reindex (cron, launchd) and the retention job</summary>
 
 A scheduled job has a bare environment. It needs `docker` and `uv` on its `PATH`, and with a hosted (`l-groq-...`) card the
 backend restart fails unless `GROQ_API_KEY` is in the job's environment too; `RAG__CRAWL__CONTACT` is optional (`rag reindex`
@@ -351,8 +360,18 @@ One launchd example for the Mac, `~/Library/LaunchAgents/rag-tuda.reindex.plist`
 </dict></plist>
 ```
 
-Your own folders (`rag add <folder>`, then `rag reindex`) work in native mode only; compose mode prints a note on reindex and
-rollback when folders are registered. `uv run rag down` stops the stack and keeps the data.
+The retention job removes conversations older than 90 days and Langfuse traces older than 30 days; without `--apply` it
+only reports. In compose mode, from the repository root:
+
+```sh
+docker compose --env-file .env -f deploy/compose.yaml exec -T backend python -m assistant_api.retention --apply
+```
+
+Natively, with the environment `rag up` gives the backend (the profile, the card and the secrets folder):
+`uv run --frozen --package assistant-api python -m assistant_api.retention --apply`. A run without tracing configured skips
+the trace step and still exits 0 when the other steps worked.
+
+</details>
 
 ## Compose mode (x86_64 Linux or WSL2)
 
@@ -363,11 +382,16 @@ do not build on an arm64 Linux host.
 
 The stack needs Docker with compose. `deploy/compose.yaml` runs on the CPU with Ollama; add `-f deploy/compose.nvidia.yaml` for
 NVIDIA GPUs on the model servers, and `-f deploy/compose.vllm.yaml` (named last) to serve the language model with vLLM
-instead of Ollama. The compose file names the project `rag-tuda`, so containers are `rag-tuda-<service>-1` and volumes
-`rag-tuda_<name>`. By hand, a fresh clone downloads the two model snapshots, builds, then migrates:
+instead of Ollama. The compose file publishes one host port, the backend's `127.0.0.1:8700`, and names the project
+`rag-tuda`, so containers are `rag-tuda-<service>-1` and volumes `rag-tuda_<name>`.
+
+<details>
+<summary>The same steps by hand, and vLLM</summary>
+
+A fresh clone downloads the two model snapshots, builds, then migrates:
 
 ```sh
-git clone <this repository> rag-tuda; cd rag-tuda
+git clone https://github.com/ritvikmaini/rag-tuda.git rag-tuda; cd rag-tuda
 mkdir -p .rag; echo '{}' > .rag/indexer-overlay.yaml    # the TU profile has no folder sources; the default overlay names the example's law texts
 cp .env_example .env    # then set BACKEND_REFRESH_TOKEN, RAG_PROFILE=tu-informatik (the default there is example) and RAG_INDEXER_OVERLAY=../.rag/indexer-overlay.yaml
 uv run python -m rag_tuda.state init    # the secret files under secrets/ (0644 inside a 0700 folder: the containers do not run as root)
@@ -389,22 +413,33 @@ Then build the first index: `docker compose --env-file .env -f deploy/compose.ya
 The backend reports healthy (`/readyz`) only once an index is published. Every compose command names the file and the root
 `.env`; a missing `--env-file` leaves `BACKEND_REFRESH_TOKEN` unset, and the backend then refuses every `/api` request.
 
+**vLLM (XL).** `deploy/compose.vllm.yaml` serves the card's model at a pinned revision and loads the weights offline from the
+host's Hugging Face cache (`~/.cache/huggingface`). Download that revision there first (the revision is in the `--revision`
+flag of `compose.vllm.yaml`, for example with `hf download Qwen/Qwen3-235B-A22B-Instruct-2507-FP8 --revision <revision>`); the
+container starts with `HF_HUB_OFFLINE=1` and downloads nothing itself. To serve another model, copy the card and change both
+together. This path is documented but has not been run.
+
+</details>
+
 ## Repository layout
 
 | Folder | What it holds |
 |---|---|
 | `src/rag_tuda/` | the command line (`doctor`, `up`, `down`, `reindex`, `rollback`, `eval`, `ask`, `add`) and the `.rag/` state (the token, the database role passwords, one secret folder per native process, pid files, logs); standard library only |
+| `apps/assistant_api/` | the backend: the FastAPI app and runtime, the LangGraph graph, the request guard, the turn store and its migrations, the stream's frames, the retrieval eval, the retention job |
+| `apps/indexer/` | the connectors (found by entry point), the crawler, PDF extraction and OCR, structure-aware chunking, index generations, the one-shot `indexer build` command with its status, housekeep, rollback and compare commands |
+| `apps/evals/` | the probe runner, the answer checks, the gate, stats, compare, rescore and the deploy smoke; its own job image |
+| `packages/rag_core/` | the shared code in layers: `domain` (pure functions: filters, fusion, ranking, citations, references, the context budget), `ports`, `services` (analysis, retrieval, prompts), `adapters` (Postgres, the model servers, the chat model, Langfuse) and `settings` (profile, model card) |
+| `packages/rag_testing/` | the harness fakes (LLM, embedder, reranker) and the fixture mini-site that stands in for the university's hosts; never in a service image |
+| `model_servers/` | the embedding and reranker servers: each its own uv project and lock, outside the workspace |
 | `models/cards/` | one TOML file per model card |
-| `apps/` | `assistant_api` (the backend: FastAPI app and runtime, settings, the LangGraph graph, the retrieval eval, its own image); `indexer` (settings, connectors found by entry point, the crawler, generations, the one-shot `indexer build` command and its status, housekeep, rollback and compare commands); `evals` (probe runner, gate, stats, compare, rescore, smoke; its own job image) |
-| `packages/` | `rag_core` (shared code: settings, domain, ports, services, adapters) and `rag_testing` (the harness fakes and the fixture mini-site; never in a service image), workspace members |
-| `profiles/` | `tu-informatik/` (profile, messages, prompts, roles, acronyms, sources) and `example/` (profile, messages, prompts, `gate.yaml` with the smoke probes in `probes/`, and the law texts in `documents/`) |
-| `model_servers/` | the two model servers, `embedding/` and `reranker/`: each its own uv project and lock, outside the workspace |
-| `deploy/` | `compose.yaml` (the stack, project `rag-tuda`), `compose.native.yaml` (Postgres alone on `127.0.0.1:55432`, for the native stack), `pgvector/` (settings, client authentication, init scripts, role names), `env/` (the overlays), the harness (`compose.ci.yaml`, `ci/`, `fakes/`) |
+| `profiles/` | `tu-informatik/` (profile, messages, prompts, roles, acronyms, sources, gate and smoke set) and `example/` (the same, with its law texts in `documents/`) |
+| `deploy/` | `compose.yaml` (the stack), `compose.native.yaml` (Postgres alone, for the native stack), the NVIDIA and vLLM overlays, `pgvector/` (settings, client authentication, init scripts, roles), `env/` (the overlays), the harness (`compose.ci*.yaml`, `fakes/`) |
 | `web/page/` | the chat client: static files, the vendored libraries, its unit and browser tests |
 | `handbook/` | architecture, operations, evaluation, sources, models and design decisions |
 | `tests/` | unit, contract (`contracts/`), harness (`integration/`) and repository tests |
-| `secrets/` | credential files, never in git |
-| `data/` | runtime data, not in git |
+
+`.rag/`, `secrets/` and `data/` hold runtime state and credentials and are never in git.
 
 ## Checks: just ci
 
@@ -428,25 +463,9 @@ the harness network that stand in for the faculty's and the university's hosts) 
 indexer's overlay routing those two hosts to the services, and the questions are asked of the index it builds. Nothing is
 fetched from the internet.
 
-## Profiles and sources
-
-A profile holds what is specific to one deployment.
-
-- `profile.yaml` holds the values that decide the index (chunking, extraction, the sources and their minimums, the embedding
-  model) and the assistant's answer-affecting values (identity, ranking, history, guard, generation); it is baked into the
-  indexer and assistant images, so an image tag fixes them. `messages.de.yaml` holds the assistant's German texts, under `labels`
-  the origin labels of the sources, and `prompts/` its prompts, read by the backend from the image.
-- `gate.yaml` (the example profile) holds the probe sets and thresholds `evals` measures a change against, and the fixed probes
-  of `evals smoke`.
-- `deploy/env/<env>.yaml` holds the technical values of one environment (endpoints, hosts, paths); the assistant's own technical
-  values are `RAG__…` entries in the backend's compose environment (`deploy/compose.yaml`).
-- A source is a connector registered under the entry point group `rag_core.connectors` and named in the profile with
-  `connector:`. Today there are three, in the indexer: `folder` (Markdown, text and PDF files of a directory), `tuda_web` (the
-  polite crawler over a host allow-list) and `law_xml` (statutes from the official XML).
-- A new profile is a folder beside the existing ones under `profiles/`, built into the indexer, assistant and evals images with
-  `--build-arg PROFILE=<folder>` (the other images carry no profile).
-
 ## Licence
 
-All rights reserved; see [`LICENSE`](LICENSE). Third-party models, vendored libraries and data sources are listed in
-[`NOTICE`](NOTICE).
+MIT; see [`LICENSE`](LICENSE). Third-party models, vendored libraries and data sources keep their own licences and terms and
+are listed in [`NOTICE`](NOTICE). The crawled content of the university's and the authorities' sites is not part of this
+repository and not covered by its licence; the short quotes from those sites in the profile and its smoke set remain their
+publishers'.
