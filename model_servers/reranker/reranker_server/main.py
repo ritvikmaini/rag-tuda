@@ -4,7 +4,7 @@ POST /v2/rerank {"queries": [str], "documents": [str]} -> {"scores": [float]} al
 over the queries (multi-query). One job on the GPU at a time: a waiting request gets 503 after MULTI_QUERY_WAIT_S, and a job
 stops between queries when its client has left. GET /info (model, revision, max_length, dtype, device, mode), /readyz (the
 start-up reference pair, from reference.<device>.json when it exists, else reference.json), /healthz. The settings come
-from the environment the Dockerfile sets (RERANKER_PREDICT_BATCH_SIZE pairs per batch, unset: 4 on MPS, 32 elsewhere;
+from the environment (RERANKER_PREDICT_BATCH_SIZE pairs per batch, unset: 4 on MPS, 32 elsewhere;
 MAX_LENGTH tokens per pair; RERANK_MODE cross_encoder, or qwen_yes_no for a Qwen3-Reranker scored by the probability of
 "yes"); the model loads in the lifespan from its pinned snapshot, never from the
 network; nothing happens at import. The device is RAG_DEVICE (cuda, mps or cpu; unset: the first available in that order),
