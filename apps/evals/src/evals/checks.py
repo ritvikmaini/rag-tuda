@@ -299,7 +299,7 @@ def looks_english(text):
     """True when English words outweigh German ones. Text in round brackets (the German names the English variant gives
     after its translation), the [n] markers and table rules are left out; one English word is enough for a short answer."""
     body = re.sub(r"\([^)]*\)", " ", text or "")
-    body = re.sub(r"\[\d+(?:\s*,\s*\d+)*\]|^\s*\|[\s:|-]+\|\s*$", " ", body, flags=re.MULTILINE)
+    body = re.sub(CITATION_GROUP.pattern + r"|^\s*\|[\s:|-]+\|\s*$", " ", body, flags=re.MULTILINE)
     english = len(ENGLISH_WORDS.findall(body))
     return english >= 1 and english > len(GERMAN_WORDS.findall(body))
 

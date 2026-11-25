@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from rag_core.domain.language import LANGUAGES, detect, looks_english_question
+from rag_core.domain.source_meta import CITATION_GROUP
 
 FORMATS_VERSION = "v1"
 SHAPES = ("text", "table", "checklist", "steps", "mindmap")
@@ -86,7 +87,6 @@ TASK = re.compile(r"^[ \t]*[-*][ \t]+\[[ xX]\][ \t]+\S")
 STEP = re.compile(r"^[ \t]*\d{1,2}[.)][ \t]+\S")
 ITEM = re.compile(r"^[ \t]*[-*][ \t]+\S")
 MINDMAP = re.compile(r"```mindmap[ \t]*\n(.*?)(?:\n[ \t]*```|\Z)", re.S)
-CITE = re.compile(r"\[\d{1,2}(?:\s*,\s*\d{1,2})*\]")
 
 
 def _lines(text):
@@ -138,7 +138,7 @@ def structure_lines(text, shape):
 def cited_share(text, shape):
     """(structure lines with a citation, structure lines)."""
     lines = structure_lines(text, shape)
-    return sum(1 for line in lines if CITE.search(line)), len(lines)
+    return sum(1 for line in lines if CITATION_GROUP.search(line)), len(lines)
 
 
 def shape_log_line(requested, generation, variant=None) -> str:
