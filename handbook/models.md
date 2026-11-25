@@ -61,13 +61,13 @@ On the M2 Pro with 16 GB (Ollama 0.40.17, `LLAMA_ARG_CACHE_RAM=1024`, AC power u
 | `s-gemma4-e4b`: not measured validly | (24) | (10) | (1) | (34.6 s, 35.8 s) |
 
 The default card fails S26 and S30 and refuses S35 (printed `stale`, it stays in the denominator). Its runs: 27 of 30 (core index,
-the 30-question version of the set) and 31 of 35 (full index) failed S17, S26 and S30; 32 of 35 (full index, the run in the table)
+the 30-question version of the set) and 31 of 35 (full index, on battery) failed S17, S26 and S30; 32 of 35 (full index, the run in the table)
 passed S17 with the same sources, so S17 flips between runs: the model's noise is one question. The `s-qwen3.5-4b` row was taken
 on battery and on an earlier code state, before the fix that reads grouped citations such as "[1, 2]" (the relevance floor was 0.0,
 as it is now; qwen3 models write no grouped citations, so the fix changes nothing for that card). `s-qwen3.5-4b` is six questions behind (an invalid citation in S16, a wrong date in S14, S27 wrongly "not listed"); the
 default card is also the smallest download and not slower, so it is the class's default. `s-gemma4-e4b` has no valid run: in both
 runs the reranker timed out on one to two retrievals (swap 7 to 10 GB; the model takes 9.5 GB of the 10.4 GB usable), and the
-brackets only say it does not beat 32 of 35. A whole answer takes about 25 to 27 s at the median on this Mac, mostly the prompt's
+brackets only say it does not beat 32 of 35. A whole answer takes 25 to 26 s at the median on this Mac on AC (25.0, 25.9 and 26.3 s in three runs) and about 27 s in two runs on battery, mostly the prompt's
 prefill (a median answer of 86 tokens decodes in 2 to 3 s). One machine, one run per cell; one question is 0.03.
 
 ## Embedder and reranker
@@ -100,7 +100,7 @@ hit@10 against the fused list (0.91 to 0.84), and the embedder was decided on th
 ## A 16 GB Mac
 
 The S stack (Postgres in the Colima VM, the embedder, the reranker, Ollama with the default card at the full 8000-token window)
-shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, AC power), footprints from `footprint -p <pid>`:
+shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26), footprints from `footprint -p <pid>`; the reranker-alone rows and the default-Ollama `llama-server` row were taken on battery, the embedder-alone row's power source was not recorded, the other rows are on AC:
 
 | Part | Alone | In the stack, 27 retrievals (retrieval only; Ollama nearly idle) |
 |---|---|---|
@@ -119,7 +119,7 @@ shares the 10.4 GB a 16 GB Mac leaves usable. Measured on an M2 Pro (macOS 26, A
   answer prompts it fills the Mac's memory and sends it into swap, which times out the reranker and the semantic search. Start Ollama
   with `LLAMA_ARG_CACHE_RAM=1024 ollama serve`. The cost: the analysis prompt's shared prefix is then kept only part of the time, so an
   analysis takes 1 to 3 s when it is found and about 12 s when it is not (on 20 synthetic prompts, 17 of them answered: mean 6.9 s with
-  1024, 3.2 s with the default, 10.2 s with 0, which holds `llama-server` at 1.4 GB; the other 3 were over the 8000-token window and
+  1024, 3.2 s with the default (a run on battery; the other two on AC), 10.2 s with 0, which holds `llama-server` at 1.4 GB; the other 3 were over the 8000-token window and
   got HTTP 400). The answer's time does not change (median 20.4 s, about 20 s for these prompts). `rag up` does not start or
   configure Ollama, so the setting belongs to whoever starts it. With the macOS app, run `launchctl setenv LLAMA_ARG_CACHE_RAM 1024`
   and restart the app.

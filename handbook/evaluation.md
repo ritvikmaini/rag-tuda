@@ -14,7 +14,7 @@ shape) and `rule`, `any` (twins of one page) or `all` (several documents). `chip
 sent with the question. A question with no answer in the corpus has no gold. The fees and dates are listed as `retrieval.volatile` in
 `gate.yaml`. A gold whose quote is no longer found in any section of its url is reported **stale**, not failed, by
 `rag eval --retrieval-only` (and a failed volatile answer is `stale` in `rag eval --smoke` when only content checks failed). The test `test_gold_present_in_latest_snapshot`
-(marker `local_crawl`, run on request and not by default: `uv run --frozen --all-packages pytest -m local_crawl tests/profiles`) checks the quotes against the crawl of the live generation of a local build; it needs a full-set build for S31 to S35. The set holds 35 questions: S01 to S30 on the core set and S31 to S35 on the full
+(marker `local_crawl`, run on request and not by default: `uv run --frozen --all-packages pytest -m local_crawl tests/profiles`; another `-m` expression on the command line replaces the default one, so `pytest -m <something>` can run it too) checks the quotes against the crawl of the live generation of a local build; it needs a full-set build for S31 to S35. The set holds 35 questions: S01 to S30 on the core set and S31 to S35 on the full
 set's sources (the TU-wide study pages, the Landkreis pages); 32 have a gold source and S18 to S20 have none. The example profile has its own probes in `profiles/example/probes/`.
 
 ## The deploy smoke

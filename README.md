@@ -50,10 +50,11 @@ the PDF downloads took about 8 minutes and the embedding and build 3 minutes 14 
 sections and 15373 chunks, the index of the embedder table below.) The full set (`rag reindex --full`) adds the TU-wide study
 rules and the Landkreis pages: 6799 sections and 29794 chunks in the published index (the build's own `children` count is 29810)
 from 1487 pages (1213 on `www.tu-darmstadt.de`, 265 on the faculty host, 5 on `www.ladadi.de`, 3 on
-`digitales-rathaus.darmstadt.de`, 1 on `www.intern.tu-darmstadt.de`), about 177 PDFs and 2 laws. It took about 42 minutes in two
-builds (30 + 12; the first sent 1750 requests) on top of a core index whose chunks were cached; a full build from nothing was
-not timed. The crawl sizes and the "takes hours" that `rag up`, `rag doctor` and `rag reindex --help` print are design estimates, not
-these measurements.
+`digitales-rathaus.darmstadt.de`, 1 on `www.intern.tu-darmstadt.de`), about 177 PDFs and 2 laws, as they stand after
+a further build that applies the `exclude` list (about two minutes, everything from the cache). The two builds before it, which
+brought the index to 6972 sections, took about 42 minutes (30 + 12; the first sent 1750 requests) on top of a core index whose
+chunks were cached; a full build from nothing was not timed. The crawl sizes that `rag up`, `rag reindex` and `rag doctor` print and
+the "takes hours" of `rag reindex --help` are design estimates, not these measurements.
 
 The commands:
 
@@ -123,13 +124,13 @@ A model card (`models/cards/*.toml`) names the answer model, its endpoint, its w
 **What is measured.** Every measurement of the TU profile in this README comes from one machine, an Apple M2 Pro with 16 GB
 (10.4 GB usable), macOS 26, Ollama 0.40.17 started with `LLAMA_ARG_CACHE_RAM=1024`, on AC power unless a line says "on
 battery"; the exceptions, named as such, are an M1 Max line and the example profile's four-question run. Figures called
-estimates (the time of `just ci`, the crawl sizes the commands print) are not measurements. Each cell is one run.
+estimates (the crawl sizes and the "takes hours" the commands print) are not measurements. Each cell is one run.
 
 *Speed of the S cards* (M2 Pro, 16 GB): at the full 8K-token window the first token comes after 21 s
 (`s-qwen3-4b-instruct-2507`), 20 s (`s-qwen3.5-4b`) or 18 s (`s-gemma4-e4b`), and a 700-token answer ends after 41, 37 or 35 s;
 decoding runs at 36 to 42 tokens/s. On an M1 Max with 64 GB (Ollama 0.40.12) the default card reached the first token of a
-6K-token prompt after 16.4 s, decoding at 25 to 33 tokens/s. A whole answer of the default card takes about 25 to 27 s at the
-median on the M2 Pro, mostly the prefill of the prompt; decoding a median answer (86 tokens) takes 2 to 3 s. The S cards'
+6K-token prompt after 16.4 s, decoding at 25 to 33 tokens/s. A whole answer of the default card takes 25 to 26 s at the
+median on the M2 Pro on AC (25.0, 25.9 and 26.3 s in three runs) and about 27 s in two runs on battery, mostly the prefill of the prompt; decoding a median answer (86 tokens) takes 2 to 3 s. The S cards'
 timeouts (`deadline_s` 150, `idle_s` 60, `llm_read_s` 60, `analysis_s` 40) are well above these cases because they also have
 to cover the retrieval's own waits (one `get_docs` call can be silent for about 57 s); a Mac much slower than this one may
 still need them raised. Ollama 0.40.17 answers HTTP 501 to a `response_format` for `qwen3.5:4b` and `gemma4:e4b`, so their
@@ -255,7 +256,7 @@ reach 1.00 after reranking; it only shows that the eval runs.)
 - 35 questions, 32 with a gold source (27 in the embedder table). One question is 0.03 to 0.04; a difference under 0.05 is noise
   and 0.10 is already wide. No two ablation rows differ by 0.10 except the first (no filters) against the last three.
 - The questions were revised after a first run on the same set, so the set is not a blind test.
-- The default card's runs: 27 of 30 (core index, the 30-question version of the set) and 31 of 35 (full index) failed S17, S26
+- The default card's runs: 27 of 30 (core index, the 30-question version of the set) and 31 of 35 (full index, on battery) failed S17, S26
   and S30; 32 of 35 (full index, the run in the table) passed S17 with the same two sources. S17 flips between runs: model noise
   of one question. A further 31 of 35 at a relevance floor of 0.1, no longer the setting, is left out.
 - Not answered by the default card: S26 and S30 fail, S35 is refused as out of scope and printed `stale`; it stays in the
@@ -297,7 +298,7 @@ reach 1.00 after reranking; it only shows that the eval runs.)
 
 Keep the index current with `rag reindex`, on a schedule. It needs Docker and the stack's Postgres running (a first `rag up`
 done), and it crawls again, so schedule it rarely. `rag reindex --resume` continues an interrupted crawl; `rag reindex --full`
-adds the full source set: about 42 minutes on the M2 Pro in two builds (30 + 12) on top of a core index whose chunks were cached
+adds the full source set: about 42 minutes on the M2 Pro in two builds (30 + 12; they brought the index to 6972 sections) on top of a core index whose chunks were cached
 (the first sent 1750 requests at one per second per host); a full build from nothing was not timed. The indexer's size check compares a build only with the last build of the same
 profile and source set (core or full, plus your folders). `rag rollback` makes the previous generation live again, and it
 stops when the index was built for another profile than the stack runs: after switching profiles, go back with

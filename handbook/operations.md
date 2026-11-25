@@ -32,9 +32,9 @@ uv run rag reindex --resume   # continue an interrupted crawl
 uv run rag rollback           # the previous generation is live again
 ```
 
-Both need Docker and the stack's Postgres to be up, which a first `rag up` does. The full set took about 42 minutes on an M2 Pro
-in two builds (30 + 12) on top of a core index whose chunks were cached; a full build from nothing was not timed, and the
-"takes hours" that `rag reindex --help` and `rag up` print is a design estimate. The crawl is polite (about one request per second per host), so schedule `rag reindex` rarely; the README has one
+Both need Docker and the stack's Postgres to be up, which a first `rag up` does. The two builds that brought the full set's index to 6972 sections took about 42 minutes on an M2 Pro
+(30 + 12) on top of a core index whose chunks were cached; a full build from nothing was not timed, and the
+"takes hours" of `rag reindex --help` and the crawl sizes that `rag up`, `rag reindex` and `rag doctor` print are design estimates. The crawl is polite (about one request per second per host), so schedule `rag reindex` rarely; the README has one
 cron line and one launchd example. `RAG__CRAWL__CONTACT` in the environment adds a contact to the crawler's user agent.
 
 The indexer refuses a build that shrank against the last build, and compares only with a build of the same profile and source
