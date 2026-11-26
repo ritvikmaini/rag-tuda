@@ -26,6 +26,11 @@ A card whose answer provider is remote must name its own analysis block, so that
 refuses otherwise. The XL card is shipped as an example to copy and has not been run.
 
 `rag doctor` lists the cards that fit the machine; `rag up` without `--card` takes the default card of the class that fits.
+Every class also downloads the embedder (1.2 GB) and the reranker (2.3 GB), and a profile that reads PDFs the docling models
+(0.5 GB), so a first `rag up --profile example` with the default card downloads about 6 GB; `rag doctor`'s total also counts
+the docling models, 6.5 GB (the sizes come from `FIXED_MODELS` in `src/rag_tuda/classes.py`; the real download can be larger,
+see [`known-issues.md`](known-issues.md)). On a Mac, about 65 % of the memory counts as usable for models; from 24 GB usable
+`rag doctor` picks class M, below it class S (`src/rag_tuda/classes.py`).
 
 ## What the S cards were measured at
 

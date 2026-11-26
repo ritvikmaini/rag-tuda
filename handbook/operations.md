@@ -34,8 +34,8 @@ uv run rag rollback           # the previous generation is live again
 
 Both need Docker and the stack's Postgres to be up, which a first `rag up` does. The two builds that brought the full set's index to 6972 sections took about 42 minutes on an M2 Pro
 (30 + 12) on top of a core index whose chunks were cached; a full build from nothing was not timed, and the
-"takes hours" of `rag reindex --help` and the crawl sizes that `rag up`, `rag reindex` and `rag doctor` print are design estimates. The crawl is polite (about one request per second per host), so schedule `rag reindex` rarely; the README has one
-cron line and one launchd example. `RAG__CRAWL__CONTACT` in the environment adds a contact to the crawler's user agent.
+"takes hours" of `rag reindex --help` and the crawl sizes that `rag up`, `rag reindex` and `rag doctor` print are design estimates. The crawl is polite (about one request per second per host), so schedule `rag reindex` rarely
+(see [Scheduling the reindex](#scheduling-the-reindex)). `RAG__CRAWL__CONTACT` in the environment adds a contact to the crawler's user agent.
 
 The indexer refuses a build that shrank against the last build, and compares only with a build of the same profile and source
 set (core or full, plus registered folders); a build of another profile or source set is not compared and says so. It also
@@ -48,6 +48,44 @@ is checked again. A snapshot manifest the build cannot read (`.rag/snapshots/<ge
 to go on. `rag rollback`
 re-records the stats of the generation it makes live, and it stops when the index was built for another profile than the stack
 runs. After a profile switch, go back with `rag up --profile <name>`, not with `rag rollback`.
+
+## Scheduling the reindex
+
+A scheduled job has a bare environment. It needs `docker` and `uv` on its `PATH`, and with a hosted (`l-groq-...`) card the
+backend restart fails unless `GROQ_API_KEY` is in the job's environment too; `RAG__CRAWL__CONTACT` is optional (`rag reindex`
+only prints a note when it is unset).
+
+One cron line, with a `PATH` (use the full path of `uv`, from `command -v uv`, and of the repository; add `GROQ_API_KEY=...` and
+`RAG__CRAWL__CONTACT=...` lines beside `PATH` when you need them):
+
+```text
+PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin
+17 3 * * 0  cd /path/to/rag-tuda && /path/to/uv run rag reindex >> .rag/logs/reindex.log 2>&1
+```
+
+One launchd example for the Mac, `~/Library/LaunchAgents/rag-tuda.reindex.plist`, loaded with
+`launchctl load ~/Library/LaunchAgents/rag-tuda.reindex.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>rag-tuda.reindex</string>
+  <key>WorkingDirectory</key><string>/path/to/rag-tuda</string>
+  <key>ProgramArguments</key><array>
+    <string>/path/to/uv</string><string>run</string><string>rag</string><string>reindex</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <!-- with a hosted card also: <key>GROQ_API_KEY</key><string>...</string> -->
+  </dict>
+  <key>StartCalendarInterval</key><dict>
+    <key>Weekday</key><integer>0</integer><key>Hour</key><integer>3</integer><key>Minute</key><integer>17</integer>
+  </dict>
+  <key>StandardOutPath</key><string>/path/to/rag-tuda/.rag/logs/reindex.log</string>
+  <key>StandardErrorPath</key><string>/path/to/rag-tuda/.rag/logs/reindex.log</string>
+</dict></plist>
+```
 
 ## Retention
 
@@ -84,9 +122,22 @@ names the path and the remedy: `sudo rm -rf <path>`, or a one-off container that
 
 ## Development checks
 
-`just ci` is the gate; `just pre-push` is the part without Docker. A single harness leg: `just harness example` or
+`just ci` is the gate; `just pre-push` is the part without Docker and runs before every push. A single harness leg: `just harness example` or
 `just harness tu` (the TU leg crawls a fixture mini-site, never the real hosts). `just ci` takes about 20 minutes on an M1 Max (an estimate) and needs
 Docker (on macOS `colima start --cpu 6 --memory 12`), Node and a first-run download of Chromium.
+
+`just ci` runs, identically on a development machine and in CI: `lint` (ruff, deptry, gitleaks, the three locks), `types`
+(basedpyright), `imports` (import-linter), `unit` (pytest, the coverage ratchet), `cli` (the command line's tests in an
+environment holding the root project alone), `db-tests` (the tests that need a migrated pgvector), `contracts` (shared
+fixtures, the stream schema, the profile's data), `model-servers` (each model server's tests in its own environment, with fake
+models), `images`, `harness` (the real backend and indexer images against fake model servers) and `page` (the page's Node
+tests, then its browser suite in Chromium against streams recorded from the TU leg).
+
+`just harness example` indexes the ten law texts of `profiles/example` and queries them through the real images. `just harness
+tu` runs the TU profile's leg: the crawler reads the fixture mini-site (`packages/rag_testing`, two services of the harness
+network that stand in for the faculty's and the university's hosts) under the profile's own host names, with the indexer's
+overlay routing those two hosts to the services, and the questions are asked of the index it builds. Nothing is fetched from
+the internet.
 
 ## Troubleshooting
 

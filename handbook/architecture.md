@@ -1,7 +1,7 @@
 # Architecture
 
 rag-tuda answers questions from an index of documents, with numbered citations, on open-weight models. This page follows a
-document from the crawl to an answer. [`../README.md`](../README.md) has the diagram.
+document from the crawl to an answer. [`../README.md`](../README.md#how-it-works) has the diagrams.
 
 ## Parts
 
