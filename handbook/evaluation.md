@@ -6,7 +6,7 @@ probes (the deploy smoke), `rag eval --smoke` plays its smoke set (the set `smok
 
 ## The TU question set
 
-The TU question set is `profiles/tu-informatik/smoke/smoke_v1.json`: hand-written questions in the evals runner's probe format
+The TU question set is `profiles/tu-informatik/smoke/smoke_v1.json`: the project's own questions in the evals runner's probe format
 (`{"version", "conversations": [{"id", "set", "kind", "turns": [{"q", "chips", "gold", "expect"}]}]}`). `expect` holds the checks
 of the expected facts. `gold` is the source: `{url, heading | page, quote, po_version}`, the quote one sentence of one section,
 whitespace-normalised, copied from the extracted text for a PDF; a gold of several sources adds `also` (more sources of the same

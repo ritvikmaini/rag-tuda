@@ -4,7 +4,7 @@ The TU profile's crawl configuration is `profiles/tu-informatik/sources.yaml`. A
 
 | Set | Host | What |
 |---|---|---|
-| core | `www.informatik.tu-darmstadt.de` | the whole study area (`/studium_fb20/`: programme pages, FAQ, knowledge base, found through the sitemap, less the other programmes' hubs and pages), including the Ordnungen hubs of B.Sc. Informatik, M.Sc. Informatik and M.Sc. Computer Science and the Studienbüro pages; the promotion page; and the PDFs they link (PO, Modulhandbuch, Studien- und Prüfungsplan: one media folder per programme, and the promotion documents) |
+| core | `www.informatik.tu-darmstadt.de` | the whole study area (`/studium_fb20/`: programme pages and FAQ, found through the sitemap; the knowledge-base articles redirect to hosts outside the allow-list and are not indexed; less the other programmes' hubs and pages), including the Ordnungen hubs of B.Sc. Informatik, M.Sc. Informatik and M.Sc. Computer Science and the Studienbüro pages; the promotion page; and the PDFs they link (PO, Modulhandbuch, Studien- und Prüfungsplan: one media folder per programme, and the promotion documents) |
 | core | `www.intern.tu-darmstadt.de` | the university-wide regulations (APB, Einschreibeordnung, Promotionsordnung) with their English information versions; login-gated paragraphs are skipped |
 | core | `www.tu-darmstadt.de` | listed pages: semester dates, re-registration and fee, the residence pages for international students |
 | core | `digitales-rathaus.darmstadt.de` | listed pages: the residence permit for studying, the foreigners' office, registration |

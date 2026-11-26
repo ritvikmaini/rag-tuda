@@ -26,12 +26,12 @@ Answer models named by the model cards in models/cards/ (pulled by Ollama or ser
   Qwen3.6 35B-A3B, Qwen3.8 27B, Gemma 4 31B, gpt-oss 120B, and the vLLM example's Qwen3-235B-A22B
   Instruct 2507 FP8
                                              licence not read here (not downloaded on this machine);
-                                             check before publishing
+                                             check the model's own licence before you use it
   Models reached through Groq are also bound by Groq's terms for its hosted service.
 
 OCR weights fetched by docling[easyocr] at first use (not shipped here)
   EasyOCR detection and recognition models   licence not read here (the downloaded weights in ~/.EasyOCR/model/ come
-                                             without a licence file); check before publishing
+                                             without a licence file); check it before you use it
 
 Libraries vendored in web/page/vendor/ (versions, sources and integrity hashes in web/page/vendor.json)
   showdown 2.1.0         MIT
