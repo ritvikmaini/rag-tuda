@@ -8,8 +8,6 @@ data/*
 # local files
 *.log
 *.backup
-/req.json
-/tok*.json
 .hypothesis/
 # uv workspace and tool caches
 .venv/
@@ -27,5 +25,3 @@ deploy/ci/.generated/
 secrets/*
 /.env.*
 CLAUDE.local.md
-# a private reference, not for the repository
-/BRIEF.md
